@@ -1,0 +1,115 @@
+spring:
+  application:
+    name: goldcast-backend
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/goldcast}
+    username: ${SPRING_DATASOURCE_USERNAME:goldcast}
+    password: ${SPRING_DATASOURCE_PASSWORD:goldcast}
+    hikari:
+      maximum-pool-size: 10
+      connection-timeout: 20000
+
+  jpa:
+    # Flyway owns the schema. Hibernate never touches DDL.
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+          batch_size: 100
+        order_inserts: true
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+  threads:
+    virtual:
+      enabled: true
+
+server:
+  port: 8080
+  error:
+    include-message: always
+    include-binding-errors: always
+  compression:
+    enabled: true
+    mime-types: application/json
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: alpha
+  api-docs:
+    path: /v3/api-docs
+
+logging:
+  level:
+    root: INFO
+    vn.goldcast: INFO
+    org.hibernate.SQL: WARN
+
+app:
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000}
+
+  ingest:
+    enabled: ${APP_INGEST_ENABLED:true}
+    # Generate a deterministic synthetic history when a series is empty and no
+    # provider could be reached, so the app is demoable offline. Never in production.
+    seed-on-empty: ${APP_INGEST_SEED_ON_EMPTY:true}
+    # Hourly at :07 — dealer quotes change intraday, world spot daily.
+    cron: ${APP_INGEST_CRON:0 7 * * * *}
+    # Run once shortly after boot so a fresh database is not empty.
+    run-on-startup: true
+    history-days: 1200
+    timeout-seconds: 20
+
+  providers:
+    stooq:
+      enabled: true
+      base-url: https://stooq.com/q/d/l/
+    sjc:
+      enabled: true
+      # SJC publishes an XML rate feed. If the endpoint moves, change it here —
+      # the parser is selected per provider, not hard-wired into the ingest service.
+      url: https://sjc.com.vn/xml/tygiavang.xml
+
+  forecast:
+    default-horizon: 14
+    max-horizon: 90
+    # Below this many observations a forecast is not worth showing.
+    min-history: 30
+    backtest-min-train: 60
+    backtest-max-origins: 120
+    # Cap how much history feeds a single fit; very old regime data hurts more than helps.
+    max-train-window: 750
+
+---
+spring:
+  config:
+    activate:
+      on-profile: dev
+logging:
+  level:
+    vn.goldcast: DEBUG

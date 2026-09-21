@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * Colour tokens are declared once here and consumed through Tailwind's semantic
+ * names. Dark mode redefines the same tokens rather than duplicating every class.
+ */
+:root {
+  --surface: 250 250 249;
+  --surface-raised: 255 255 255;
+  --border: 231 229 228;
+  --ink: 28 25 23;
+  --ink-muted: 87 83 78;
+  --ink-subtle: 120 113 108;
+
+  --gold: 180 132 19;
+  --gold-deep: 133 96 10;
+
+  --up: 21 128 61;
+  --down: 185 28 28;
+  --warn: 180 83 9;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: 12 12 14;
+    --surface-raised: 24 24 27;
+    --border: 45 45 50;
+    --ink: 244 244 245;
+    --ink-muted: 168 162 158;
+    --ink-subtle: 120 113 108;
+
+    --gold: 234 179 8;
+    --gold-deep: 202 138 4;
+
+    --up: 74 222 128;
+    --down: 248 113 113;
+    --warn: 251 191 36;
+  }
+}
+
+html {
+  color-scheme: light dark;
+}
+
+body {
+  background-color: rgb(var(--surface));
+  color: rgb(var(--ink));
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular figures keep price columns from jittering as digits change. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@layer components {
+  .card {
+    @apply rounded-card border border-border bg-surface-raised;
+  }
+
+  .card-pad {
+    @apply p-4 sm:p-5;
+  }
+
+  .label {
+    @apply text-xs font-medium uppercase tracking-wide text-ink-subtle;
+  }
+
+  .btn {
+    @apply inline-flex items-center justify-center rounded-lg border border-border px-3 py-1.5
+           text-sm font-medium text-ink-muted transition-colors
+           hover:border-gold/60 hover:text-ink focus:outline-none focus-visible:ring-2
+           focus-visible:ring-gold/60;
+  }
+
+  .btn-active {
+    @apply border-gold/70 bg-gold/10 text-ink;
+  }
+}

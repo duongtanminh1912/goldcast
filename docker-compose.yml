@@ -1,0 +1,67 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: goldcast-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-goldcast}
+      POSTGRES_USER: ${POSTGRES_USER:-goldcast}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-goldcast}
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - goldcast-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-goldcast} -d ${POSTGRES_DB:-goldcast}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: goldcast-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-goldcast}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-goldcast}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-goldcast}
+      APP_INGEST_ENABLED: ${APP_INGEST_ENABLED:-true}
+      APP_INGEST_SEED_ON_EMPTY: ${APP_INGEST_SEED_ON_EMPTY:-true}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+    container_name: goldcast-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      # Server-side calls run inside the compose network; browser calls use the public URL.
+      API_BASE_URL_INTERNAL: http://backend:8080
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    restart: unless-stopped
+
+volumes:
+  goldcast-pgdata:

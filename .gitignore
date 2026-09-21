@@ -1,0 +1,27 @@
+# env
+.env
+*.local
+
+# java
+backend/target/
+*.class
+*.jar
+!**/maven-wrapper.jar
+.mvn/wrapper/maven-wrapper.jar
+
+# node
+node_modules/
+frontend/.next/
+frontend/out/
+frontend/next-env.d.ts
+npm-debug.log*
+yarn-error.log*
+
+# ide
+.idea/
+.vscode/
+*.iml
+
+# os
+.DS_Store
+Thumbs.db
