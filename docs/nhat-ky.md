@@ -94,3 +94,74 @@ phải làm lại mỗi lần.
 3. **Đọc sai số liệu ở lần đo đầu.** Ban đầu lấy "Total duration" (75s so với
    22s) và kết luận cache giúp nhanh hơn 3,4 lần. Mở chi tiết từng step mới thấy
    phần lớn chênh lệch là thời gian chờ máy ảo. Con số đúng là 38%.
+
+## Tuần 4 — Jenkins, CI tự vận hành
+
+**Mục tiêu:** Dựng một hệ thống CI thứ hai chạy trên hạ tầng tự quản lý, để so
+sánh với mô hình CI được quản lý của tuần 3.
+
+### Đã làm
+
+- Dọn Docker: gỡ container Jenkins cũ và ba container của dự án khác đang chiếm
+  cổng 8081; xoá volume `jenkins_jenkins_home` để bắt đầu sạch.
+- Dựng Jenkins bằng Docker, cổng 8081, dữ liệu trong volume `jenkins_home`.
+- Viết `jenkins/Dockerfile`: multi-stage build, lấy Maven từ image
+  `maven:3.9-eclipse-temurin-21` sang image Jenkins chính thức.
+- Viết `Jenkinsfile`: một stage `Test backend` chạy `mvn -B test` trong `backend`.
+- Tạo job `goldcast-ci` kiểu Pipeline, đọc pipeline từ SCM, nhánh `*/main`.
+- Cấu hình trigger Poll SCM với lịch `H/5 * * * *`.
+
+### Số đo
+
+| Lần chạy | Trạng thái | Build duration | Maven `Total time` |
+| --- | --- | --- | --- |
+| #2 (nguội) | SUCCESS | 46s | ... |
+| #3 (nóng) | SUCCESS | 5.2s | 1,693 s |
+
+Hai cột thời gian đo hai thứ khác nhau. `Total time` của Maven chỉ tính lệnh
+`mvn -B test`; build duration của Jenkins tính cả clone repo và chuẩn bị
+workspace. Khi so sánh với GitHub Actions phải dùng build duration.
+
+### Nhận xét
+
+Jenkins dùng lại cùng một workspace giữa các lần build, nên lần chạy thứ hai
+
+không phải tải thư viện và không phải biên dịch lại — Maven chỉ mất 1,7 giây.
+GitHub Actions cấp một máy ảo mới mỗi lần, nên dù có cache Maven thì vẫn phải
+biên dịch lại, mất 19-23 giây ở mọi lần chạy.
+
+Đổi lại, workspace dùng lại giữ nguyên kết quả của lần build trước, tạo ra rủi
+ro build thành công nhờ tàn dư cũ chứ không nhờ mã nguồn hiện tại.
+
+### Vấn đề gặp phải
+
+1. **Năm plugin Pipeline cài hỏng, nguyên nhân chỉ là một.** Log cho thấy
+   `pipeline-groovy-lib` timeout sau 65 giây từ một máy gương ở Romania; bốn
+   plugin còn lại tải về bình thường nhưng từ chối khởi động vì thiếu nó. Cài
+   riêng plugin gốc trước, rồi cài gói `Pipeline` — xong. Hai plugin phụ vẫn lỗi
+   được bỏ qua có chủ ý vì không cần cho phạm vi đồ án.
+
+2. **Image Jenkins chính thức không có Maven.** Khác hẳn GitHub Actions, nơi
+   runner có sẵn hàng chục bộ công cụ. Xử lý bằng Dockerfile riêng thay vì cấu
+   hình trong giao diện, để môi trường CI nằm trong Git và dựng lại được.
+
+3. **Build đầu tiên chết sau 1,6 giây.** Nguyên nhân: `main` chưa có
+   `Jenkinsfile` vì hai pull request chưa được merge. Sai lầm dẫn tới: `git
+   branch -d` cho phép xoá nhánh cục bộ nên tưởng đã merge, nhưng lệnh đó chỉ
+   kiểm tra commit còn tồn tại ở remote chứ không kiểm tra đã vào `main` chưa.
+
+4. **Pull request suýt merge nhầm nhánh.** Ô `base` mặc định là nhánh xem gần
+   nhất chứ không phải `main`.
+
+5. **`README.md` bị xoá nhầm trên nhánh.** Phát hiện nhờ dòng tổng kết của pull
+   request: 21 dòng thêm nhưng 265 dòng xoá. Khôi phục bằng
+   `git restore --source=origin/main`. Đáng chú ý: CI vẫn xanh với thay đổi này
+   vì xoá tài liệu không làm hỏng test nào. Kiểm thử tự động và việc đọc diff
+   bắt hai loại lỗi khác nhau, không thay thế cho nhau.
+
+
+6. **Yêu cầu review chặn merge.** Branch protection được bật kèm "Require
+   approvals", mà GitHub không cho tác giả tự duyệt pull request của mình. Với
+   đồ án một người, đây là bế tắc. Đã tắt yêu cầu review, giữ lại yêu cầu CI
+   xanh — tức giữ phần kiểm soát tự động và bỏ phần kiểm soát bởi con người vốn
+   không áp dụng được cho một người.
