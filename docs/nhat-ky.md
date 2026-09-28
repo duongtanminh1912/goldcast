@@ -165,3 +165,23 @@ ro build thành công nhờ tàn dư cũ chứ không nhờ mã nguồn hiện t
    đồ án một người, đây là bế tắc. Đã tắt yêu cầu review, giữ lại yêu cầu CI
    xanh — tức giữ phần kiểm soát tự động và bỏ phần kiểm soát bởi con người vốn
    không áp dụng được cho một người.
+
+### Kiểm chứng tự kích hoạt
+
+Phép thử: cấu hình Poll SCM trước, sau đó merge một pull request vào `main`, rồi
+không thao tác gì trên Jenkins.
+
+Kết quả: build #4 tự chạy sau dưới 5 phút, ghi rõ **Started by an SCM change**
+thay vì *Started by user*, và liệt kê đúng commit đã kích hoạt nó. Thời gian
+chạy 6,1 giây, khớp với build nóng bấm tay (5,2 giây).
+
+Lần thử đầu không có build nào chạy. Nguyên nhân: ô **Poll SCM** đã được tích
+nhưng ô **Schedule** để trống, nên Jenkins bật cơ chế mà không có lịch đi hỏi.
+Jenkins có ghi cảnh báo ngay dưới ô nhập — *"No schedules so will only run due
+to SCM changes if triggered by a post-commit hook"* — nhưng bằng chữ xám nhỏ.
+Dấu hiệu nhận biết cấu hình đã có hiệu lực là mục **Polling Log** xuất hiện
+trong giao diện job.
+
+Lưu ý khi đọc mốc thời gian: giờ hiển thị cạnh commit là lúc commit được tạo
+trên máy cá nhân, không phải lúc nó vào nhánh `main`. Độ trễ của polling phải đo
+từ thời điểm merge, không phải từ thời điểm commit.
