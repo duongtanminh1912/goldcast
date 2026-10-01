@@ -1,6 +1,17 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
+import { Be_Vietnam_Pro } from "next/font/google";
 import "./globals.css";
 import { SiteHeader } from "@/components/SiteHeader";
+import { SiteFooter } from "@/components/SiteFooter";
+import { THEME_INIT_SCRIPT } from "@/components/ThemeToggle";
+
+// Be Vietnam Pro was drawn for Vietnamese diacritics, which system fonts often stack badly.
+const sans = Be_Vietnam_Pro({
+  subsets: ["latin", "vietnamese"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-sans",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: {
@@ -11,21 +22,26 @@ export const metadata: Metadata = {
     "Theo dõi giá vàng thế giới, tỷ giá USD/VND và giá vàng miếng trong nước, kèm dự báo thống kê có backtest và khoảng tin cậy đo từ sai số thực tế.",
 };
 
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#faf8f4" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0b0d" },
+  ],
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="vi">
-      <body className="min-h-dvh antialiased">
+    <html lang="vi" className={sans.variable} suppressHydrationWarning>
+      <head>
+        {/* Runs before paint so a pinned theme never flashes the OS one first. */}
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body className="page-glow flex min-h-dvh flex-col antialiased">
         <SiteHeader />
-        <main className="mx-auto w-full max-w-6xl px-4 py-6 sm:py-8">{children}</main>
-        <footer className="mx-auto w-full max-w-6xl px-4 pb-10 pt-4">
-          <p className="border-t border-border pt-4 text-xs leading-relaxed text-ink-subtle">
-            goldcast tổng hợp dữ liệu từ nguồn công khai và chạy các mô hình thống kê trên
-            chính dữ liệu đó. Mọi con số ở đây chỉ mang tính tham khảo, không phải khuyến
-            nghị mua bán, và không thay thế cho giá niêm yết chính thức tại quầy.
-          </p>
-        </footer>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:py-10">{children}</main>
+        <SiteFooter />
       </body>
     </html>
   );
