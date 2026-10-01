@@ -6,6 +6,7 @@ import {
   ComposedChart,
   Legend,
   Line,
+  ReferenceArea,
   ReferenceLine,
   ResponsiveContainer,
   Tooltip,
@@ -48,8 +49,8 @@ function ChartTooltip({
   }
 
   return (
-    <div className="rounded-lg border border-border bg-surface-raised px-3 py-2 text-xs shadow-lg">
-      <p className="mb-1 font-medium text-ink">{formatDate(String(label))}</p>
+    <div className="min-w-[180px] rounded-xl border border-border bg-surface-raised/95 px-3 py-2.5 text-xs shadow-xl backdrop-blur">
+      <p className="mb-1.5 border-b border-border pb-1.5 font-semibold text-ink">{formatDate(String(label))}</p>
       <ul className="space-y-0.5">
         {payload.map((entry, index) => {
           const value = entry.value;
@@ -90,9 +91,18 @@ function tickFormatter(scale: number) {
   };
 }
 
+/** "2026-09-21" → "21/09": day-first, the way Vietnamese readers write dates. */
+function shortDate(value: string): string {
+  const [, month, day] = value.split("-");
+  return month && day ? `${day}/${month}` : value;
+}
+
+const CURSOR = { stroke: "currentColor", strokeOpacity: 0.35, strokeDasharray: "3 3" };
+
 const AXIS_PROPS = {
   stroke: "currentColor",
-  strokeOpacity: 0.35,
+  strokeOpacity: 0.25,
+  axisLine: false,
   tick: { fill: "currentColor", fontSize: 11 },
   tickLine: false,
 } as const;
@@ -116,12 +126,12 @@ export function PriceHistoryChart({
     <div className="text-ink-subtle" style={{ width: "100%", height }}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-          <CartesianGrid stroke="currentColor" strokeOpacity={0.15} vertical={false} />
+          <CartesianGrid stroke="currentColor" strokeOpacity={0.1} vertical={false} />
           <XAxis
             dataKey="date"
             {...AXIS_PROPS}
             minTickGap={40}
-            tickFormatter={(value: string) => value.slice(5)}
+            tickFormatter={shortDate}
           />
           <YAxis
             {...AXIS_PROPS}
@@ -129,14 +139,22 @@ export function PriceHistoryChart({
             domain={["auto", "auto"]}
             tickFormatter={tickFormatter(scale)}
           />
-          <Tooltip content={<ChartTooltip scale={scale} />} />
-          <Line
+          <Tooltip content={<ChartTooltip scale={scale} />} cursor={CURSOR} />
+          <defs>
+            <linearGradient id="price-fill" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={GOLD} stopOpacity={0.28} />
+              <stop offset="100%" stopColor={GOLD} stopOpacity={0} />
+            </linearGradient>
+          </defs>
+          <Area
             type="monotone"
             dataKey="close"
             name="Giá đóng cửa"
             stroke={GOLD}
             strokeWidth={2}
+            fill="url(#price-fill)"
             dot={false}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: "#fff", fill: GOLD }}
             isAnimationActive={false}
           />
           {data.some((row) => row.buy !== undefined) && (
@@ -209,12 +227,12 @@ export function ForecastChart({
     <div className="text-ink-subtle" style={{ width: "100%", height }}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-          <CartesianGrid stroke="currentColor" strokeOpacity={0.15} vertical={false} />
+          <CartesianGrid stroke="currentColor" strokeOpacity={0.1} vertical={false} />
           <XAxis
             dataKey="date"
             {...AXIS_PROPS}
             minTickGap={40}
-            tickFormatter={(value: string) => value.slice(5)}
+            tickFormatter={shortDate}
           />
           <YAxis
             {...AXIS_PROPS}
@@ -222,7 +240,7 @@ export function ForecastChart({
             domain={["auto", "auto"]}
             tickFormatter={tickFormatter(scale)}
           />
-          <Tooltip content={<ChartTooltip scale={scale} />} />
+          <Tooltip content={<ChartTooltip scale={scale} />} cursor={CURSOR} />
           <Legend
             wrapperStyle={{ fontSize: 11, paddingTop: 8 }}
             iconType="plainline"
@@ -246,14 +264,24 @@ export function ForecastChart({
             isAnimationActive={false}
             connectNulls
           />
+          {/* Tints the future so the eye separates "measured" from "projected" before reading the legend. */}
+          {forecast.points.length > 0 && (
+            <ReferenceArea
+              x1={forecast.lastCloseOn}
+              x2={forecast.points[forecast.points.length - 1].date}
+              fill="currentColor"
+              fillOpacity={0.05}
+              ifOverflow="extendDomain"
+            />
+          )}
           <ReferenceLine
             x={forecast.lastCloseOn}
             stroke="currentColor"
             strokeOpacity={0.5}
             strokeDasharray="3 3"
             label={{
-              value: "hôm nay",
-              position: "insideTopRight",
+              value: "dự báo →",
+              position: "insideTopLeft",
               fill: "currentColor",
               fontSize: 10,
             }}
@@ -265,6 +293,7 @@ export function ForecastChart({
             stroke={GOLD}
             strokeWidth={2}
             dot={false}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: "#fff", fill: GOLD }}
             isAnimationActive={false}
           />
           <Line
@@ -272,9 +301,10 @@ export function ForecastChart({
             dataKey="forecast"
             name="Dự báo"
             stroke={VIOLET}
-            strokeWidth={2}
+            strokeWidth={2.25}
             strokeDasharray="5 4"
             dot={false}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: "#fff", fill: VIOLET }}
             isAnimationActive={false}
             connectNulls
           />
@@ -311,12 +341,12 @@ export function IndicatorChart({
     <div className="text-ink-subtle" style={{ width: "100%", height }}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-          <CartesianGrid stroke="currentColor" strokeOpacity={0.15} vertical={false} />
+          <CartesianGrid stroke="currentColor" strokeOpacity={0.1} vertical={false} />
           <XAxis
             dataKey="date"
             {...AXIS_PROPS}
             minTickGap={40}
-            tickFormatter={(value: string) => value.slice(5)}
+            tickFormatter={shortDate}
           />
           <YAxis
             {...AXIS_PROPS}
@@ -324,7 +354,7 @@ export function IndicatorChart({
             domain={["auto", "auto"]}
             tickFormatter={tickFormatter(scale)}
           />
-          <Tooltip content={<ChartTooltip scale={scale} />} />
+          <Tooltip content={<ChartTooltip scale={scale} />} cursor={CURSOR} />
           <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} iconType="plainline" iconSize={14} />
           <Area
             dataKey="band"
@@ -386,15 +416,15 @@ export function RsiChart({
     <div className="text-ink-subtle" style={{ width: "100%", height }}>
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={rows} margin={{ top: 8, right: 8, bottom: 0, left: 8 }}>
-          <CartesianGrid stroke="currentColor" strokeOpacity={0.15} vertical={false} />
+          <CartesianGrid stroke="currentColor" strokeOpacity={0.1} vertical={false} />
           <XAxis
             dataKey="date"
             {...AXIS_PROPS}
             minTickGap={40}
-            tickFormatter={(value: string) => value.slice(5)}
+            tickFormatter={shortDate}
           />
           <YAxis {...AXIS_PROPS} width={34} domain={[0, 100]} ticks={[0, 30, 50, 70, 100]} />
-          <Tooltip content={<ChartTooltip scale={1} />} />
+          <Tooltip content={<ChartTooltip scale={1} />} cursor={CURSOR} />
           <ReferenceLine y={70} stroke="currentColor" strokeOpacity={0.4} strokeDasharray="3 3" />
           <ReferenceLine y={30} stroke="currentColor" strokeOpacity={0.4} strokeDasharray="3 3" />
           <Line

@@ -12,7 +12,8 @@ import {
   rsiLabel,
   trendLabel,
 } from "@/lib/format";
-import type { Indicators, Series } from "@/lib/types";
+import type { Indicators, Instrument, Series } from "@/lib/types";
+import { InstrumentTabs } from "@/components/InstrumentTabs";
 
 export const revalidate = 60;
 
@@ -75,16 +76,26 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
         : "Chưa tính được chỉ báo kỹ thuật cho chuỗi này.";
   }
 
+  let instruments: Instrument[] = [];
+  try {
+    instruments = await api.instruments();
+  } catch {
+    // The switcher is a convenience; the page stands on its own without it.
+  }
+
   const { instrument } = series;
   const latest = series.points.length > 0 ? series.points[series.points.length - 1] : null;
 
   return (
     <div className="space-y-6">
+      <InstrumentTabs instruments={instruments} current={instrument.code} basePath="/instruments" />
+
       <SectionHeading
+        eyebrow={`${instrument.code} · ${instrument.unitLabel}`}
         title={instrument.name}
         description={
           <>
-            {instrument.code} · đơn vị {instrument.unitLabel} · nguồn{" "}
+            Nguồn{" "}
             {series.sources.join(", ") || instrument.source}
             {series.from && series.to && (
               <>
@@ -96,8 +107,9 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
           </>
         }
         right={
-          <Link href={`/forecast/${instrument.code}`} className="btn">
-            Xem dự báo →
+          <Link href={`/forecast/${instrument.code}`} className="btn-primary">
+            Xem dự báo
+            <span aria-hidden="true">→</span>
           </Link>
         }
       />
@@ -121,8 +133,12 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
         </Card>
         <Card>
           <StatTile
-            label={`Thay đổi trong ${selected.label.toLowerCase()}`}
-            value={formatPercent(series.changePercent)}
+            label={`Thay đổi ${selected.label.toLowerCase()}`}
+            value={
+              <span className={changeColor(series.changePercent)}>
+                {formatPercent(series.changePercent)}
+              </span>
+            }
             hint={
               series.changeAbsolute != null
                 ? `${series.changeAbsolute > 0 ? "+" : ""}${formatPrice(
@@ -158,12 +174,13 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
       <Card
         title="Lịch sử giá"
         action={
-          <div className="flex flex-wrap gap-1">
+          <div className="segmented">
             {RANGES.map((option) => (
               <Link
                 key={option.key}
                 href={`/instruments/${instrument.code}?range=${option.key}`}
-                className={`btn ${option.key === selected.key ? "btn-active" : ""}`}
+                aria-current={option.key === selected.key ? "true" : undefined}
+                className={`segment ${option.key === selected.key ? "segment-active" : ""}`}
               >
                 {option.label}
               </Link>
@@ -174,7 +191,7 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
         {series.points.length === 0 ? (
           <p className="text-xs text-ink-muted">Chưa có quan sát nào trong khoảng này.</p>
         ) : (
-          <PriceHistoryChart points={series.points} scale={instrument.displayScale} />
+          <PriceHistoryChart points={series.points} scale={instrument.displayScale} height={360} />
         )}
       </Card>
 

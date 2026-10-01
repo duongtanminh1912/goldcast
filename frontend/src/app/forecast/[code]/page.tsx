@@ -11,7 +11,8 @@ import {
   formatPercent,
   formatPrice,
 } from "@/lib/format";
-import type { Forecast, Series } from "@/lib/types";
+import type { Forecast, Instrument, Series } from "@/lib/types";
+import { InstrumentTabs } from "@/components/InstrumentTabs";
 
 export const revalidate = 300;
 
@@ -92,12 +93,27 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
     history = null;
   }
 
+  let instruments: Instrument[] = [];
+  try {
+    instruments = await api.instruments();
+  } catch {
+    // The switcher is a convenience; the page stands on its own without it.
+  }
+
   const { instrument, accuracy } = forecast;
   const finalStep = forecast.points[forecast.points.length - 1];
 
   return (
     <div className="space-y-6">
+      <InstrumentTabs
+        instruments={instruments}
+        current={instrument.code}
+        basePath="/forecast"
+        query={`?model=${model}&horizon=${horizon}`}
+      />
+
       <SectionHeading
+        eyebrow={`Dự báo ${horizon} bước · ${forecast.modelLabel}`}
         title={`Dự báo — ${instrument.name}`}
         description={
           <>
@@ -118,12 +134,12 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="label">Mô hình</p>
-            <div className="mt-1.5 flex flex-wrap gap-1">
+            <div className="segmented mt-2">
               {MODELS.map((option) => (
                 <Link
                   key={option.key}
                   href={`/forecast/${instrument.code}?model=${option.key}&horizon=${horizon}`}
-                  className={`btn ${option.key === model ? "btn-active" : ""}`}
+                  className={`segment ${option.key === model ? "segment-active" : ""}`}
                 >
                   {option.label}
                 </Link>
@@ -132,12 +148,12 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
           </div>
           <div>
             <p className="label">Số ngày dự báo</p>
-            <div className="mt-1.5 flex flex-wrap gap-1">
+            <div className="segmented mt-2">
               {HORIZONS.map((option) => (
                 <Link
                   key={option}
                   href={`/forecast/${instrument.code}?model=${model}&horizon=${option}`}
-                  className={`btn ${option === horizon ? "btn-active" : ""}`}
+                  className={`segment ${option === horizon ? "segment-active" : ""}`}
                 >
                   {option}
                 </Link>
@@ -209,6 +225,7 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
           history={history?.points ?? []}
           forecast={forecast}
           scale={instrument.displayScale}
+          height={400}
         />
       </Card>
 
@@ -258,11 +275,11 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
               <table className="w-full border-collapse text-sm">
                 <thead className="sticky top-0 bg-surface-raised">
                   <tr className="border-b border-border text-left">
-                    <th className="py-2 pr-2 font-medium text-ink-subtle">Bước</th>
-                    <th className="py-2 pr-2 text-right font-medium text-ink-subtle">MAE</th>
-                    <th className="py-2 pr-2 text-right font-medium text-ink-subtle">RMSE</th>
-                    <th className="py-2 pr-2 text-right font-medium text-ink-subtle">MAPE</th>
-                    <th className="py-2 text-right font-medium text-ink-subtle">Mẫu</th>
+                    <th className="py-2 pr-2 table-head">Bước</th>
+                    <th className="py-2 pr-2 text-right table-head">MAE</th>
+                    <th className="py-2 pr-2 text-right table-head">RMSE</th>
+                    <th className="py-2 pr-2 text-right table-head">MAPE</th>
+                    <th className="py-2 text-right table-head">Mẫu</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -299,10 +316,10 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
             <table className="w-full min-w-[520px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border text-left">
-                  <th className="px-4 py-2 font-medium text-ink-subtle sm:px-2">Mô hình</th>
-                  <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">MASE</th>
-                  <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">RMSE</th>
-                  <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">MAPE</th>
+                  <th className="px-4 py-2 table-head sm:px-2">Mô hình</th>
+                  <th className="px-4 py-2 text-right table-head sm:px-2">MASE</th>
+                  <th className="px-4 py-2 text-right table-head sm:px-2">RMSE</th>
+                  <th className="px-4 py-2 text-right table-head sm:px-2">MAPE</th>
                 </tr>
               </thead>
               <tbody>
@@ -341,17 +358,17 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
           <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left">
-                <th className="px-4 py-2 font-medium text-ink-subtle sm:px-2">Ngày</th>
-                <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">
+                <th className="px-4 py-2 table-head sm:px-2">Ngày</th>
+                <th className="px-4 py-2 text-right table-head sm:px-2">
                   Dự báo
                 </th>
-                <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">
+                <th className="px-4 py-2 text-right table-head sm:px-2">
                   So với hiện tại
                 </th>
-                <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">
+                <th className="px-4 py-2 text-right table-head sm:px-2">
                   Khoảng 80%
                 </th>
-                <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">
+                <th className="px-4 py-2 text-right table-head sm:px-2">
                   Khoảng 95%
                 </th>
               </tr>

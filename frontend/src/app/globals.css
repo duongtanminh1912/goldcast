@@ -5,40 +5,69 @@
 /*
  * Colour tokens are declared once here and consumed through Tailwind's semantic
  * names. Dark mode redefines the same tokens rather than duplicating every class.
+ *
+ * The theme follows the OS by default; the header toggle pins it by setting
+ * data-theme on <html>, which is why each palette appears under two selectors.
  */
 :root {
-  --surface: 250 250 249;
+  --surface: 250 248 244;
   --surface-raised: 255 255 255;
-  --border: 231 229 228;
+  --surface-sunken: 244 241 235;
+  --border: 230 225 216;
   --ink: 28 25 23;
-  --ink-muted: 87 83 78;
+  --ink-muted: 82 76 70;
   --ink-subtle: 120 113 108;
 
-  --gold: 180 132 19;
+  --gold: 183 135 22;
   --gold-deep: 133 96 10;
+  --gold-soft: 250 237 200;
 
-  --up: 21 128 61;
-  --down: 185 28 28;
+  --up: 22 128 61;
+  --down: 196 40 40;
   --warn: 180 83 9;
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --shadow-color: 60 45 20;
+}
+
+:root[data-theme="dark"] {
+  --surface: 11 11 13;
+  --surface-raised: 22 22 25;
+  --surface-sunken: 16 16 18;
+  --border: 44 43 47;
+  --ink: 244 243 240;
+  --ink-muted: 176 170 162;
+  --ink-subtle: 128 122 116;
+
+  --gold: 230 180 40;
+  --gold-deep: 202 138 4;
+  --gold-soft: 60 45 10;
+
+  --up: 74 222 128;
+  --down: 248 113 113;
+  --warn: 251 191 36;
+
+  --shadow-color: 0 0 0;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --surface: 12 12 14;
-    --surface-raised: 24 24 27;
-    --border: 45 45 50;
-    --ink: 244 244 245;
-    --ink-muted: 168 162 158;
-    --ink-subtle: 120 113 108;
+  :root:not([data-theme="light"]) {
+    --surface: 11 11 13;
+    --surface-raised: 22 22 25;
+    --surface-sunken: 16 16 18;
+    --border: 44 43 47;
+    --ink: 244 243 240;
+    --ink-muted: 176 170 162;
+    --ink-subtle: 128 122 116;
 
-    --gold: 234 179 8;
+    --gold: 230 180 40;
     --gold-deep: 202 138 4;
+    --gold-soft: 60 45 10;
 
     --up: 74 222 128;
     --down: 248 113 113;
     --warn: 251 191 36;
+
+    --shadow-color: 0 0 0;
   }
 }
 
@@ -46,11 +75,26 @@ html {
   color-scheme: light dark;
 }
 
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
 body {
   background-color: rgb(var(--surface));
   color: rgb(var(--ink));
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+}
+
+/* A faint gold wash behind the top of every page, so the header does not float on flat grey. */
+.page-glow {
+  background:
+    radial-gradient(60rem 22rem at 15% -6rem, rgb(var(--gold) / 0.13), transparent 70%),
+    radial-gradient(40rem 18rem at 95% -4rem, rgb(var(--gold) / 0.07), transparent 70%);
 }
 
 /* Tabular figures keep price columns from jittering as digits change. */
@@ -59,27 +103,64 @@ body {
   font-feature-settings: "tnum";
 }
 
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 @layer components {
   .card {
-    @apply rounded-card border border-border bg-surface-raised;
+    @apply rounded-card border border-border bg-surface-raised shadow-card;
   }
 
   .card-pad {
-    @apply p-4 sm:p-5;
+    @apply p-4 sm:p-6;
   }
 
   .label {
-    @apply text-xs font-medium uppercase tracking-wide text-ink-subtle;
+    @apply text-[11px] font-semibold uppercase tracking-wider text-ink-subtle;
   }
 
   .btn {
-    @apply inline-flex items-center justify-center rounded-lg border border-border px-3 py-1.5
-           text-sm font-medium text-ink-muted transition-colors
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg border border-border
+           bg-surface-raised px-3 py-1.5 text-sm font-medium text-ink-muted transition
            hover:border-gold/60 hover:text-ink focus:outline-none focus-visible:ring-2
            focus-visible:ring-gold/60;
   }
 
   .btn-active {
     @apply border-gold/70 bg-gold/10 text-ink;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-1.5 rounded-lg bg-gradient-to-b
+           from-gold to-gold-deep px-3.5 py-1.5 text-sm font-semibold text-white shadow-sm
+           transition hover:brightness-110 focus:outline-none focus-visible:ring-2
+           focus-visible:ring-gold/60 focus-visible:ring-offset-2 focus-visible:ring-offset-surface;
+  }
+
+  /* Segmented control: a row of options sharing one track. */
+  .segmented {
+    @apply inline-flex flex-wrap gap-0.5 rounded-lg border border-border bg-surface-sunken p-0.5;
+  }
+
+  .segment {
+    @apply rounded-md px-2.5 py-1 text-xs font-medium text-ink-muted transition
+           hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-gold/60;
+  }
+
+  .segment-active {
+    @apply bg-surface-raised text-ink shadow-sm ring-1 ring-border;
+  }
+
+  .skeleton {
+    @apply animate-pulse rounded-md bg-border/60;
+  }
+
+  .table-head {
+    @apply text-[11px] font-semibold uppercase tracking-wider text-ink-subtle;
   }
 }
