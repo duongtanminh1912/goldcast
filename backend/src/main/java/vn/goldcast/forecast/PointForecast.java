@@ -1,5 +1,6 @@
 package vn.goldcast.forecast;
 
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -13,7 +14,10 @@ public record PointForecast(ForecastModel model, double[] values, Map<String, Do
         if (values == null || values.length == 0) {
             throw new IllegalArgumentException("Forecast rỗng");
         }
-        params = params == null ? Map.of() : Map.copyOf(params);
+        // Insertion order is kept so the API lists parameters the way the model reports them.
+        params = params == null
+                ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(params));
         values = values.clone();
     }
 
