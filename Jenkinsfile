@@ -9,5 +9,11 @@ pipeline {
                 }
             }
         }
+
+        stage('Build image') {
+            steps {
+                sh 'docker build -t goldcast-backend:${BUILD_NUMBER} -t goldcast-backend:latest backend/'
+            }
+        }
     }
 }
