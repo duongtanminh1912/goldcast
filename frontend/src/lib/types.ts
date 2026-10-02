@@ -102,6 +102,8 @@ export type ForecastModelId =
   | "SMA"
   | "HOLT_DAMPED"
   | "AR_DIFF"
+  | "RIDGE"
+  | "GBM"
   | "AUTO";
 
 export interface ForecastStep {

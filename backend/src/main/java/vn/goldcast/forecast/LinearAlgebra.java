@@ -47,6 +47,31 @@ final class LinearAlgebra {
         return gaussianSolve(xtx, xty);
     }
 
+    /**
+     * Ridge solve {@code (XᵀX + λI) β = Xᵀy} with an explicit penalty, for callers that
+     * have already centred and scaled their data and want λ to mean something.
+     *
+     * @return the coefficient vector, or {@code null} if the system is singular
+     */
+    static double[] solveRidge(double[][] x, double[] y, double lambda) {
+        int cols = x[0].length;
+        double[][] xtx = new double[cols][cols];
+        double[] xty = new double[cols];
+        for (int r = 0; r < x.length; r++) {
+            double[] row = x[r];
+            for (int i = 0; i < cols; i++) {
+                xty[i] += row[i] * y[r];
+                for (int j = 0; j < cols; j++) {
+                    xtx[i][j] += row[i] * row[j];
+                }
+            }
+        }
+        for (int i = 0; i < cols; i++) {
+            xtx[i][i] += lambda;
+        }
+        return gaussianSolve(xtx, xty);
+    }
+
     private static double[] gaussianSolve(double[][] a, double[] b) {
         int n = b.length;
         double[][] m = new double[n][n + 1];

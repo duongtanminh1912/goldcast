@@ -88,7 +88,7 @@ dựng context, và thay được bằng implementation ML sau này mà không �
 | GET | `/api/v1/admin/providers` | Trạng thái các nguồn dữ liệu |
 
 Mã chuỗi mặc định: `XAUUSD`, `USDVND`, `SJC_HCM`, `SJC_HN`, `SJC_RING`.
-Mô hình: `AUTO` (mặc định), `NAIVE`, `DRIFT`, `SMA`, `HOLT_DAMPED`, `AR_DIFF`.
+Mô hình: `AUTO` (mặc định), `NAIVE`, `DRIFT`, `SMA`, `HOLT_DAMPED`, `AR_DIFF`, `RIDGE`, `GBM`.
 
 Lỗi trả về theo RFC 7807. Đáng chú ý là **422 `insufficient-history`**: khi chuỗi chưa đủ dữ
 liệu, API từ chối dự báo thay vì trả một con số kèm khoảng tin cậy rộng. Một dự báo khớp trên
@@ -138,7 +138,7 @@ Tắt trong môi trường thật: `APP_INGEST_SEED_ON_EMPTY=false`.
 
 ## Dự báo
 
-Sáu lựa chọn, trong đó `AUTO` backtest tất cả rồi chọn mô hình có MASE thấp nhất (hoà thì mô
+Tám lựa chọn — năm mô hình thống kê, hai mô hình học máy và `AUTO`. `AUTO` backtest tất cả rồi chọn mô hình có MASE thấp nhất (hoà thì mô
 hình đơn giản hơn thắng):
 
 | Mô hình | Cách hoạt động |
@@ -148,6 +148,28 @@ hình đơn giản hơn thắng):
 | `SMA` | Dự báo phẳng bằng trung bình k phiên gần nhất. |
 | `HOLT_DAMPED` | San mũ có xu hướng tắt dần (φ < 1), grid search α/β/φ theo SSE một bước. |
 | `AR_DIFF` | AR(p) trên sai phân bậc 1 — ARIMA(p,1,0) khớp bằng OLS. |
+| `RIDGE` | **ML tuyến tính.** Hồi quy Ridge dự đoán lợi suất log ngày kế tiếp từ 12 đặc trưng; λ chọn trên 20% dữ liệu mới nhất. |
+| `GBM` | **ML phi tuyến.** Gradient boosting cây hồi quy (độ sâu 3, η = 0,05, subsample 0,8, histogram 32 bin), số cây chọn bằng early stopping. |
+
+### Mô hình học máy
+
+Hai mô hình ML nằm trong `forecast/` cùng các mô hình thống kê (`RidgeForecaster`,
+`GradientBoostingForecaster`, đặc trưng ở `MlFeatures`), viết bằng Java thuần, không thêm thư
+viện. Chúng cài cùng interface `Forecaster`, nên backtest, khoảng tin cậy và chọn mô hình của
+`AUTO` áp dụng y hệt — không có đường tắt nào cho ML.
+
+- **Mục tiêu học** là lợi suất log ngày kế tiếp, không phải mức giá — giá không dừng, lợi suất
+  thì xấp xỉ dừng.
+- **12 đặc trưng**, tính chỉ từ dữ liệu tới ngày t: lợi suất 5 phiên gần nhất, lợi suất trung
+  bình 5/10/20 phiên, độ biến động 10/20 phiên, khoảng cách log tới SMA20, RSI 14.
+- **Siêu tham số** (λ của Ridge, số cây của GBM) chọn trên khối validation là 20% dữ liệu
+  *mới nhất*, không xáo trộn, rồi khớp lại trên toàn bộ.
+- **Dự báo nhiều bước** đệ quy, mỗi bước chặn ở ±3σ lợi suất lịch sử.
+- **Giải thích được:** API trả về hệ số chuẩn hoá (Ridge) hoặc độ quan trọng đặc trưng (GBM)
+  trong `params`, trang dự báo vẽ chúng thành biểu đồ.
+- GBM dùng seed cố định nên cùng một lịch sử luôn cho cùng một dự báo.
+
+Trên dữ liệu bước đi ngẫu nhiên, ML không vượt được naive — và giao diện sẽ nói đúng như vậy.
 
 Hai chi tiết thiết kế đáng nói:
 
@@ -228,6 +250,8 @@ Bộ test tập trung vào phần toán và phần parse — hai nơi lỗi âm 
 - `ForecasterTest` — từng mô hình trên chuỗi đã biết đáp án; AR(p) được kiểm bằng cách khôi
   phục hệ số của một quá trình AR(1) sinh sẵn
 - `BacktesterTest` — Drift phải có sai số 0 trên đường thẳng, sai số phải tăng theo bước
+- `MlForecasterTest` — đặc trưng không rò rỉ tương lai; Ridge học được tự tương quan lợi suất;
+  GBM học được quy luật phi tuyến mà Ridge bỏ sót; kết quả tất định; giá luôn dương ở tầm 90 ngày
 - `IntervalEstimatorTest` — 95% rộng hơn 80%, nở theo √h, cận dưới không âm
 - `MetricsTest` — MAE/RMSE/MAPE/MASE đối chiếu tính tay
 - `IndicatorsTest` — RSI bão hoà ở 0 và 100, Bollinger co về đường giữa khi giá phẳng

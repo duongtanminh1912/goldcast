@@ -67,7 +67,7 @@ VNĐ/lượng = USD/oz ÷ 31,1034768 × 37,5 × tỷ giá USD/VND`}
         </div>
       </Card>
 
-      <Card title="3. Các mô hình dự báo">
+      <Card title="3. Các mô hình thống kê">
         <div className="space-y-3 text-sm leading-relaxed text-ink-muted">
           <ul className="space-y-2">
             <li>
@@ -95,14 +95,72 @@ VNĐ/lượng = USD/oz ÷ 31,1034768 × 37,5 × tỷ giá USD/VND`}
               mức thay đổi ngày-qua-ngày thì xấp xỉ dừng.
             </li>
             <li>
-              <strong className="text-ink">Auto</strong> — backtest tất cả mô hình trên chính
-              chuỗi đó rồi chọn mô hình có MASE thấp nhất. Khi hoà, mô hình đơn giản hơn thắng.
+              <strong className="text-ink">Auto</strong> — backtest tất cả mô hình, kể cả hai mô
+              hình học máy ở mục 4, trên chính chuỗi đó rồi chọn mô hình có MASE thấp nhất. Khi
+              hoà, mô hình đơn giản hơn thắng.
             </li>
           </ul>
         </div>
       </Card>
 
-      <Card title="4. Đo sai số bằng backtest rolling-origin">
+      <Card title="4. Các mô hình học máy (machine learning)">
+        <div className="space-y-3 text-sm leading-relaxed text-ink-muted">
+          <p>
+            Hai mô hình học máy được viết trực tiếp trong backend (Java thuần, không phụ thuộc
+            thư viện ngoài) và đi qua đúng quy trình backtest như các mô hình thống kê. Chúng
+            không dự đoán mức giá mà dự đoán <strong className="text-ink">lợi suất log của
+            ngày kế tiếp</strong>, vì chuỗi giá có xu hướng nên không dừng, còn lợi suất thì
+            xấp xỉ dừng và so sánh được trên toàn bộ cửa sổ huấn luyện.
+          </p>
+          <p>
+            <strong className="text-ink">Đặc trưng (feature engineering).</strong> Mỗi ngày được
+            mô tả bằng 12 đặc trưng, tất cả chỉ tính từ dữ liệu tới chính ngày đó để không rò
+            rỉ thông tin tương lai:
+          </p>
+          <ul className="grid gap-1.5 sm:grid-cols-2">
+            <li>• Lợi suất của 5 phiên gần nhất</li>
+            <li>• Lợi suất trung bình 5, 10, 20 phiên (động lượng)</li>
+            <li>• Độ biến động 10 và 20 phiên</li>
+            <li>• Khoảng cách log giữa giá và SMA20</li>
+            <li>• RSI 14 phiên, chuẩn hoá về [−1, 1]</li>
+          </ul>
+          <ul className="space-y-2">
+            <li>
+              <strong className="text-ink">Ridge regression</strong> — hồi quy tuyến tính có
+              phạt L2 trên đặc trưng đã chuẩn hoá. Hệ số phạt λ là siêu tham số, nên được chọn
+              trên <em>20% dữ liệu gần nhất</em> mà mô hình không được huấn luyện, rồi khớp lại
+              trên toàn bộ dữ liệu với λ thắng.
+            </li>
+            <li>
+              <strong className="text-ink">Gradient boosting</strong> — tập hợp cây hồi quy độ
+              sâu 3, mỗi cây học phần sai số còn lại của các cây trước (cùng họ thuật toán với
+              XGBoost/LightGBM). Chống quá khớp bằng learning rate 0,05, lấy mẫu 80% số dòng
+              cho mỗi cây, lá tối thiểu 15 mẫu, và <em>early stopping</em>: số cây được chọn
+              tại điểm sai số trên tập validation ngừng giảm. Mỗi đặc trưng được chia thành 32
+              khoảng phân vị (kỹ thuật histogram của LightGBM) để huấn luyện đủ nhanh cho việc
+              khớp lại ở mọi điểm gốc backtest.
+            </li>
+          </ul>
+          <p>
+            Tập validation luôn là <strong className="text-ink">khối dữ liệu mới nhất theo thời
+            gian</strong>, không bao giờ xáo trộn ngẫu nhiên — chia ngẫu nhiên sẽ cho mô hình
+            học trên những ngày nằm sau ngày nó bị chấm điểm.
+          </p>
+          <p>
+            Dự báo nhiều bước được tạo đệ quy: dự đoán lợi suất ngày mai, nối mức giá suy ra
+            vào chuỗi, tính lại đặc trưng rồi lặp lại. Mỗi bước bị chặn trong ±3 độ lệch chuẩn
+            lợi suất lịch sử để một bước sai không khuếch đại thành cả một quỹ đạo vô lý.
+          </p>
+          <p className="rounded-lg border border-border bg-surface-sunken p-3 text-xs">
+            Học máy không tự động tốt hơn. Trên giá vàng theo ngày — gần với bước đi ngẫu nhiên
+            — mô hình ML thường chỉ ngang naive. Đó là lý do chúng được backtest và so MASE
+            cùng một thước đo với mọi mô hình khác, thay vì được trình bày như một lợi thế
+            mặc nhiên.
+          </p>
+        </div>
+      </Card>
+
+      <Card title="5. Đo sai số bằng backtest rolling-origin">
         <div className="space-y-3 text-sm leading-relaxed text-ink-muted">
           <p>
             Tại mỗi điểm gốc trong lịch sử, mô hình được <em>khớp lại từ đầu</em> chỉ với dữ
@@ -136,7 +194,7 @@ VNĐ/lượng = USD/oz ÷ 31,1034768 × 37,5 × tỷ giá USD/VND`}
         </div>
       </Card>
 
-      <Card title="5. Khoảng tin cậy được tính thế nào">
+      <Card title="6. Khoảng tin cậy được tính thế nào">
         <div className="space-y-3 text-sm leading-relaxed text-ink-muted">
           <p>
             Khoảng tin cậy được suy ra từ <strong className="text-ink">RMSE out-of-sample đo
@@ -155,7 +213,7 @@ VNĐ/lượng = USD/oz ÷ 31,1034768 × 37,5 × tỷ giá USD/VND`}
         </div>
       </Card>
 
-      <Card title="6. Những gì hệ thống này không làm">
+      <Card title="7. Những gì hệ thống này không làm">
         <div className="space-y-3 text-sm leading-relaxed text-ink-muted">
           <p>
             Tất cả mô hình ở đây đều là <strong className="text-ink">ngoại suy thống kê từ
