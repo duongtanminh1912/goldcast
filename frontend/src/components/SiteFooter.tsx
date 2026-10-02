@@ -22,7 +22,7 @@ export function SiteFooter() {
           links={[
             { href: "/instruments/XAUUSD", label: "Vàng thế giới" },
             { href: "/instruments/SJC_HCM", label: "Vàng miếng SJC" },
-            { href: "/instruments/SJC_RING", label: "Vàng nhẫn SJC" },
+            { href: "/instruments/PNJ_RING", label: "Nhẫn trơn PNJ" },
             { href: "/instruments/USDVND", label: "Tỷ giá USD/VND" },
           ]}
         />

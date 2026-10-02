@@ -86,13 +86,25 @@ app:
     timeout-seconds: 20
 
   providers:
+    # Official REST API, free tier at https://twelvedata.com. Without a key the provider
+    # stays off and empty series fall back to synthetic data.
+    twelve-data:
+      enabled: ${APP_TWELVEDATA_ENABLED:true}
+      base-url: https://api.twelvedata.com
+      api-key: ${TWELVEDATA_API_KEY:}
+    # Stooq's CSV endpoint now answers with a JavaScript browser check, so no instrument
+    # uses it any more (see V3 migration). Kept for anyone who can still reach it.
     stooq:
-      enabled: true
+      enabled: false
       base-url: https://stooq.com/q/d/l/
-    sjc:
+    # Domestic quotes (SJC bars by city, PNJ plain ring) from the endpoint behind pnj.com.vn.
+    pnj:
       enabled: true
-      # SJC publishes an XML rate feed. If the endpoint moves, change it here —
-      # the parser is selected per provider, not hard-wired into the ingest service.
+      url: https://edge-api.pnj.io/ecom-frontend/v1/get-gold-price
+    # SJC's XML feed now returns 404 and the site is behind a Cloudflare challenge, so no
+    # instrument uses it any more (see V4 migration). Kept in case the feed comes back.
+    sjc:
+      enabled: false
       url: https://sjc.com.vn/xml/tygiavang.xml
 
   forecast:

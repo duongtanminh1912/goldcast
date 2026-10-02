@@ -31,11 +31,16 @@ public record AppProperties(Cors cors, Ingest ingest, Providers providers, Forec
             @Min(30) int historyDays,
             @Min(1) int timeoutSeconds) {}
 
-    public record Providers(Stooq stooq, Sjc sjc) {
+    public record Providers(Stooq stooq, Sjc sjc, TwelveData twelveData, Pnj pnj) {
 
         public record Stooq(boolean enabled, @NotBlank String baseUrl) {}
 
+        /** apiKey may be blank: the provider then reports itself disabled instead of failing boot. */
+        public record TwelveData(boolean enabled, @NotBlank String baseUrl, String apiKey) {}
+
         public record Sjc(boolean enabled, @NotBlank String url) {}
+
+        public record Pnj(boolean enabled, @NotBlank String url) {}
     }
 
     public record Forecast(

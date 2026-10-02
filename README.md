@@ -55,7 +55,7 @@ goldcast/
 │   └── src/main/java/vn/goldcast/
 │       ├── domain/      Instrument, PricePoint, ForecastRun, ForecastPoint
 │       ├── repository/  Spring Data JPA
-│       ├── ingest/      PriceProvider + Stooq/SJC + parser + scheduler
+│       ├── ingest/      PriceProvider + Twelve Data/PNJ + parser + scheduler
 │       ├── forecast/    Engine dự báo, backtest, khoảng tin cậy  ← không phụ thuộc Spring
 │       ├── analytics/   Chỉ báo kỹ thuật                          ← không phụ thuộc Spring
 │       ├── market/      Quy đổi đơn vị, lịch giao dịch, tổng hợp thị trường
@@ -87,7 +87,7 @@ dựng context, và thay được bằng implementation ML sau này mà không �
 | POST | `/api/v1/admin/ingest` | Chạy ingest ngay |
 | GET | `/api/v1/admin/providers` | Trạng thái các nguồn dữ liệu |
 
-Mã chuỗi mặc định: `XAUUSD`, `USDVND`, `SJC_HCM`, `SJC_HN`, `SJC_RING`.
+Mã chuỗi mặc định: `XAUUSD`, `USDVND`, `SJC_HCM`, `SJC_HN`, `PNJ_RING`.
 Mô hình: `AUTO` (mặc định), `NAIVE`, `DRIFT`, `SMA`, `HOLT_DAMPED`, `AR_DIFF`, `RIDGE`, `GBM`.
 
 Lỗi trả về theo RFC 7807. Đáng chú ý là **422 `insufficient-history`**: khi chuỗi chưa đủ dữ
@@ -104,10 +104,25 @@ curl "http://localhost:8080/api/v1/forecast/XAUUSD?model=AUTO&horizon=14" | jq
 
 | Chuỗi | Nguồn | Lịch sử |
 |-------|-------|---------|
-| XAU/USD, USD/VND | Stooq (CSV) | Nhiều năm, một request lấy cả chuỗi |
-| Vàng miếng SJC | Feed XML công khai của SJC | **Chỉ có giá ngày hiện tại** |
+| XAU/USD, USD/VND | [Twelve Data](https://twelvedata.com) (REST API chính thức, cần API key miễn phí) | Nhiều năm, một request lấy cả chuỗi |
+| Vàng miếng SJC (TP.HCM, Hà Nội), nhẫn trơn PNJ | Bảng giá công khai của PNJ theo khu vực (`edge-api.pnj.io`) | **Chỉ có giá ngày hiện tại** |
 
-Giới hạn thứ hai là thật và đáng biết trước: SJC không có endpoint lịch sử, nên chuỗi trong
+**API key Twelve Data:** đăng ký miễn phí tại https://twelvedata.com/register rồi đặt
+`TWELVEDATA_API_KEY=...` trong `.env`. Gói miễn phí cho 800 request/ngày, 8 request/phút;
+ingest mỗi giờ cho hai mã dùng 48 request/ngày. Không có key thì provider tự tắt và các chuỗi
+rỗng dùng dữ liệu mô phỏng như trước. Trước đây hai chuỗi này lấy từ Stooq, nhưng endpoint CSV
+của Stooq giờ trả về trang kiểm tra trình duyệt bằng JavaScript thay vì dữ liệu.
+
+Khi một nguồn thật trả dữ liệu cho một chuỗi đang chứa dữ liệu mô phỏng, toàn bộ phần mô phỏng
+của chuỗi đó bị xoá trước khi ghi, để biểu đồ không bao giờ nửa thật nửa giả.
+
+Giá trong nước trước đây lấy từ feed XML của SJC, nhưng feed đó giờ trả 404 và trang SJC bị
+Cloudflare chặn. PNJ niêm yết giá vàng miếng SJC theo từng khu vực, đơn vị nghìn đồng/chỉ;
+parser quy đổi tường minh ×10 000 sang đồng/lượng. Vì PNJ không bán nhẫn SJC, chuỗi `SJC_RING`
+được ngưng (migration V4) và thay bằng `PNJ_RING` (nhẫn trơn PNJ 999.9) thay vì âm thầm đổi
+nghĩa một mã cũ.
+
+Giới hạn thứ hai là thật và đáng biết trước: nguồn trong nước không có endpoint lịch sử, nên chuỗi trong
 nước dày lên dần kể từ lúc hệ thống bắt đầu chạy. Dự báo cho vàng trong nước cần thời gian
 tích luỹ dữ liệu; đến lúc đó API trả 422 chứ không đoán bừa.
 
@@ -256,7 +271,7 @@ Bộ test tập trung vào phần toán và phần parse — hai nơi lỗi âm 
 - `MetricsTest` — MAE/RMSE/MAPE/MASE đối chiếu tính tay
 - `IndicatorsTest` — RSI bão hoà ở 0 và 100, Bollinger co về đường giữa khi giá phẳng
 - `GoldUnitsTest`, `TradingCalendarTest` — quy đổi khối lượng, lịch cuối tuần theo loại chuỗi
-- `StooqCsvParserTest`, `SjcXmlParserTest`, `DateParsingTest` — CSV có dòng `N/D`, XML hỏng,
+- `TwelveDataParserTest`, `PnjGoldParserTest`, `StooqCsvParserTest`, `SjcXmlParserTest`, `DateParsingTest` — CSV có dòng `N/D`, XML hỏng,
   trang HTML lỗi trả về thay XML, số kiểu `78.500` vs `1,5`, giá trị sai đơn vị
 
 ---

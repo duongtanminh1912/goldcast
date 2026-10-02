@@ -90,6 +90,7 @@ public class IngestService {
                 continue;
             }
 
+            dropSyntheticWhereRealArrived(quotes, byCode);
             WriteResult result = write(quotes, byCode, provider.id());
             totalInserted.addAndGet(result.inserted());
             totalUpdated.addAndGet(result.updated());
@@ -136,6 +137,31 @@ public class IngestService {
         WriteResult result = write(synthetic, byCode, SyntheticSeedGenerator.SOURCE);
         totalInserted.addAndGet(result.inserted());
         return empty.size();
+    }
+
+    /**
+     * Removes the synthetic placeholder history of every instrument this batch has real
+     * quotes for.
+     *
+     * <p>The seed only ever fills an empty series, but a provider that was down on first
+     * boot can come back later. Writing real rows on top would leave a chart that is half
+     * invented and half real, so the placeholder goes first and the series restarts clean.
+     */
+    private void dropSyntheticWhereRealArrived(List<ProviderQuote> quotes,
+                                               Map<String, Instrument> byCode) {
+        Set<String> codes = new HashSet<>();
+        for (ProviderQuote quote : quotes) {
+            codes.add(quote.instrumentCode().toUpperCase());
+        }
+        for (String code : codes) {
+            Instrument instrument = byCode.get(code);
+            if (instrument == null
+                    || !prices.existsByInstrumentIdAndSource(instrument.getId(), SyntheticSeedGenerator.SOURCE)) {
+                continue;
+            }
+            int removed = prices.deleteByInstrumentIdAndSource(instrument.getId(), SyntheticSeedGenerator.SOURCE);
+            log.info("Đã có dữ liệu thật cho {}: xoá {} dòng mô phỏng", code, removed);
+        }
     }
 
     private WriteResult write(List<ProviderQuote> quotes, Map<String, Instrument> byCode, String source) {

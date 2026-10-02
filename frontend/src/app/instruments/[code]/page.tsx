@@ -190,6 +190,11 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
       >
         {series.points.length === 0 ? (
           <p className="text-xs text-ink-muted">Chưa có quan sát nào trong khoảng này.</p>
+        ) : series.points.length < 2 ? (
+          <p className="rounded-lg bg-surface-sunken px-4 py-10 text-center text-sm text-ink-muted">
+            Mới có {series.points.length} quan sát. Nguồn này chỉ công bố giá của ngày hiện tại,
+            nên biểu đồ sẽ hiện ra khi lịch sử tích luỹ thêm sau mỗi lượt thu thập.
+          </p>
         ) : (
           <PriceHistoryChart points={series.points} scale={instrument.displayScale} height={360} />
         )}

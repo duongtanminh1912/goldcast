@@ -20,12 +20,14 @@ export default function MethodologyPage() {
         <div className="space-y-3 text-sm leading-relaxed text-ink-muted">
           <p>
             <strong className="text-ink">Vàng thế giới (XAU/USD) và tỷ giá USD/VND</strong> lấy
-            từ Stooq dưới dạng CSV lịch sử theo ngày. Một lần gọi trả về toàn bộ chuỗi, nên
-            việc nạp lại nhiều năm dữ liệu chỉ tốn hai request.
+            từ API chính thức của Twelve Data, dạng chuỗi lịch sử theo ngày. Một lần gọi trả về
+            toàn bộ chuỗi, nên việc nạp lại nhiều năm dữ liệu chỉ tốn hai request.
           </p>
           <p>
-            <strong className="text-ink">Vàng miếng trong nước</strong> lấy từ feed XML công
-            khai của SJC. Feed này chỉ có giá của ngày hiện tại — không có endpoint lịch sử —
+            <strong className="text-ink">Vàng miếng trong nước</strong> lấy từ bảng giá công
+            khai của PNJ theo khu vực: vàng miếng SJC tại TP.HCM và Hà Nội, cùng nhẫn trơn PNJ
+            999.9. Đây là giá SJC <em>do PNJ niêm yết</em>, có thể lệch nhẹ so với giá tại quầy
+            của chính SJC. Bảng giá chỉ có giá của ngày hiện tại — không có endpoint lịch sử —
             nên chuỗi trong nước dày lên dần kể từ lúc hệ thống bắt đầu chạy. Đây là giới hạn
             thật của nguồn dữ liệu, và hệ quả của nó là dự báo cho vàng trong nước cần thời
             gian tích luỹ trước khi có ý nghĩa.

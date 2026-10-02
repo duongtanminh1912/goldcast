@@ -2,6 +2,7 @@ package vn.goldcast.repository;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import vn.goldcast.domain.PricePoint;
@@ -37,4 +38,12 @@ public interface PricePointRepository extends JpaRepository<PricePoint, Long> {
             + "and p.observedOn >= :from")
     List<LocalDate> findObservedDatesSince(@Param("instrumentId") Long instrumentId,
                                            @Param("from") LocalDate from);
+
+    boolean existsByInstrumentIdAndSource(Long instrumentId, String source);
+
+    /** Bulk delete by source — used to drop a synthetic placeholder once real data arrives. */
+    @Modifying
+    @Query("delete from PricePoint p where p.instrument.id = :instrumentId and p.source = :source")
+    int deleteByInstrumentIdAndSource(@Param("instrumentId") Long instrumentId,
+                                      @Param("source") String source);
 }
