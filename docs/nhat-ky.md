@@ -185,3 +185,105 @@ trong giao diện job.
 Lưu ý khi đọc mốc thời gian: giờ hiển thị cạnh commit là lúc commit được tạo
 trên máy cá nhân, không phải lúc nó vào nhánh `main`. Độ trễ của polling phải đo
 từ thời điểm merge, không phải từ thời điểm commit.
+
+## Tuần 5 — Pipeline sinh ra artifact
+
+**Mục tiêu:** Pipeline không chỉ kiểm tra mã nguồn mà còn tạo ra Docker image —
+thứ đem đi triển khai được. Đây là ranh giới giữa CI và CD.
+
+### Đã làm
+
+- Thêm lệnh `docker` vào image Jenkins bằng multi-stage build từ `docker:27-cli`.
+- Gắn `/var/run/docker.sock` để Jenkins điều khiển được Docker daemon của máy chủ.
+- Thêm stage `Build backend image` và `Build frontend image`, đặt sau stage kiểm
+  thử: không đóng gói thứ chưa qua kiểm thử.
+- Mỗi image mang hai tag: số build (`${BUILD_NUMBER}`) và `latest`.
+- Phát hiện Jenkins dùng builder cũ, bổ sung plugin buildx để chuyển sang BuildKit.
+
+### Số đo
+
+| Build | Pipeline | Builder | Trạng thái cache | Thời gian |
+| --- | --- | --- | --- | --- |
+| #5 | test + backend | legacy | - | 2 ph 35 s |
+| #6 | test + backend + frontend | legacy | tải mới image nền frontend | 4 ph 05 s |
+| #7 | test + backend + frontend | BuildKit | cache BuildKit còn trống | 1 ph 16 s |
+| #8 | test + backend + frontend | BuildKit | ấm hoàn toàn | 6,5 s |
+
+Thời gian ở trạng thái ổn định, khi mã nguồn không đổi: **6,5 giây** cho toàn bộ
+pipeline gồm 93 unit test và hai lần dựng image.
+
+**Không kết luận được "BuildKit nhanh hơn legacy bao nhiêu lần"** từ bảng này.
+Giữa #6 và #7 có hai biến cùng thay đổi: builder, và trạng thái cache. Cache của
+legacy builder không dùng chung với BuildKit, nên #7 phải dựng lại từ đầu. Muốn
+so sạch thì cần đo legacy ở trạng thái ấm, mà dữ liệu này không có.
+
+
+### Điều tra tính tái lập của build
+
+Quan sát ban đầu: cùng một commit nhưng mỗi lần build lại cho ra mã image khác
+nhau trong `docker images`. Nếu đúng, điều này sẽ phá vỡ khả năng kiểm chứng
+"bản đang chạy chính là bản đã test".
+
+Lần lượt loại trừ từng nguyên nhân:
+
+| Cặp so sánh | Khác biệt thật | Nguyên nhân |
+| --- | --- | --- |
+| Tuần 2 với #5 | có | Máy cá nhân dùng BuildKit, Jenkins dùng legacy builder |
+| #5 với #6 | có | Nhãn `node:22-alpine` đã trỏ sang bản mới (log ghi `Downloaded newer image`) |
+| #7 với #8 | **không** | Nội dung image giống hệt |
+
+Với cặp #7/#8 — cùng commit, cùng builder, cùng mã băm image nền — đã kiểm bằng
+`docker image inspect`:
+
+- Danh sách mã băm các lớp: giống hệt
+- Trường `Created`: giống tới nano giây
+- Các trường `Config`, `History`, `RootFS`: không có khác biệt
+- Chỉ khác ở `LastTagTime` và `Metadata.Ref` — là sổ sách của phiên build, không
+  phải nội dung image
+
+Kết luận: **nội dung image tái lập được**, với điều kiện cố định công cụ build và
+image nền. Mã `Id` hiển thị trong `docker images` được tính từ lớp bọc mang thông
+tin phiên build, nên hai mã khác nhau không có nghĩa là hai image khác nhau.
+
+Hệ quả cho quy trình: artifact vẫn phải được giữ và luân chuyển thay vì build lại
+ở từng môi trường — không phải vì Docker bất định, mà vì hai phụ thuộc nằm ngoài
+mã nguồn có thể trôi mà người viết code không hay biết: nhãn image nền trỏ sang
+bản mới, và môi trường CI có thể dùng builder khác máy cá nhân. Giải pháp triệt
+
+để là ghim mã băm image nền trong Dockerfile, đổi lại là không còn nhận bản vá
+bảo mật tự động cho image nền.
+
+### Hạn chế đã nhận diện, chưa xử lý
+
+1. **Image tích tụ.** Mỗi build sinh một image mang số riêng và không tự xoá. Cách
+   xử lý: `docker image prune` theo lịch, hoặc registry có chính sách lưu giữ.
+
+2. **Địa chỉ API bị cố định vào image frontend.** `docker build` không truyền
+   `NEXT_PUBLIC_API_BASE_URL`, nên image mang giá trị mặc định. Một biến thuộc về
+   môi trường lại nằm cứng trong artifact. Sẽ xử lý khi triển khai lên máy chủ.
+
+3. **Pipeline không tự dựng lại được chính nó.** `jenkins/Dockerfile` nằm trong
+   repo và đi qua pull request, nhưng việc dựng image và thay container phải làm
+   thủ công — Jenkins không thể thay thế chính mình trong lúc đang chạy.
+
+4. **Quyền của Jenkins trên máy chủ.** Gắn `docker.sock` cho phép Jenkins điều
+   khiển Docker daemon, tức có quyền tương đương root trên máy. Dùng
+   `--group-add 0` thay vì `--user root` theo nguyên tắc đặc quyền tối thiểu,
+   nhưng về bản chất mức quyền không khác nhau đáng kể. Chấp nhận được vì Jenkins
+   chạy cục bộ trên máy cá nhân; không chấp nhận được trên máy chủ dùng chung.
+
+### Bài học phương pháp
+
+Trong tuần này và các tuần trước, đã bốn lần rút ra kết luận sai vì so sánh nhầm
+đại lượng:
+
+1. Tuần 3: lấy "Total duration" của GitHub Actions, trong đó 41 trên 75 giây là
+   thời gian chờ cấp máy ảo, không liên quan đến cache.
+2. Tuần 4: lấy "Total time" của Maven làm thời gian build Jenkins.
+3. Tuần 5: so #6 với #7 để đánh giá builder, trong khi trạng thái cache cũng khác.
+4. Tuần 5: so cột `IMAGE ID` để kết luận hai image khác nhau, trong khi cột đó
+
+   không phải mã băm của nội dung image.
+
+Cả bốn lần đều phát hiện được bằng cùng một cách: khi con số không khớp với dự
+đoán, mở ra xem đại lượng đó thật sự đo cái gì, thay vì giữ nguyên kết luận.
