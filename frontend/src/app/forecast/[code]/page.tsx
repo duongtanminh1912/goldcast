@@ -11,17 +11,21 @@ import {
   formatPercent,
   formatPrice,
 } from "@/lib/format";
-import type { Forecast, Series } from "@/lib/types";
+import type { Forecast, Instrument, Series } from "@/lib/types";
+import { InstrumentTabs } from "@/components/InstrumentTabs";
+import { FeatureWeights } from "@/components/FeatureWeights";
 
 export const revalidate = 300;
 
-const MODELS = [
+const MODELS: { key: string; label: string; ml?: boolean }[] = [
   { key: "AUTO", label: "Tự chọn" },
   { key: "NAIVE", label: "Naive" },
   { key: "DRIFT", label: "Drift" },
   { key: "SMA", label: "SMA" },
   { key: "HOLT_DAMPED", label: "Holt" },
   { key: "AR_DIFF", label: "AR(p)" },
+  { key: "RIDGE", label: "Ridge", ml: true },
+  { key: "GBM", label: "Gradient Boosting", ml: true },
 ];
 
 const HORIZONS = [7, 14, 30, 60, 90];
@@ -92,12 +96,31 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
     history = null;
   }
 
+  let instruments: Instrument[] = [];
+  try {
+    instruments = await api.instruments();
+  } catch {
+    // The switcher is a convenience; the page stands on its own without it.
+  }
+
   const { instrument, accuracy } = forecast;
+  // Per-feature weights get their own chart; the grid keeps only the scalar parameters.
+  const hyperparams = Object.entries(forecast.params).filter(
+    ([key]) => !key.startsWith("importance.") && !key.startsWith("beta."),
+  );
   const finalStep = forecast.points[forecast.points.length - 1];
 
   return (
     <div className="space-y-6">
+      <InstrumentTabs
+        instruments={instruments}
+        current={instrument.code}
+        basePath="/forecast"
+        query={`?model=${model}&horizon=${horizon}`}
+      />
+
       <SectionHeading
+        eyebrow={`Dự báo ${horizon} bước · ${forecast.modelLabel}`}
         title={`Dự báo — ${instrument.name}`}
         description={
           <>
@@ -118,26 +141,31 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <p className="label">Mô hình</p>
-            <div className="mt-1.5 flex flex-wrap gap-1">
+            <div className="segmented mt-2">
               {MODELS.map((option) => (
                 <Link
                   key={option.key}
                   href={`/forecast/${instrument.code}?model=${option.key}&horizon=${horizon}`}
-                  className={`btn ${option.key === model ? "btn-active" : ""}`}
+                  className={`segment ${option.key === model ? "segment-active" : ""}`}
                 >
                   {option.label}
+                  {option.ml && (
+                    <span className="ml-1 rounded bg-gold/15 px-1 py-px text-[9px] font-bold text-gold-deep">
+                      ML
+                    </span>
+                  )}
                 </Link>
               ))}
             </div>
           </div>
           <div>
             <p className="label">Số ngày dự báo</p>
-            <div className="mt-1.5 flex flex-wrap gap-1">
+            <div className="segmented mt-2">
               {HORIZONS.map((option) => (
                 <Link
                   key={option}
                   href={`/forecast/${instrument.code}?model=${model}&horizon=${option}`}
-                  className={`btn ${option === horizon ? "btn-active" : ""}`}
+                  className={`segment ${option === horizon ? "segment-active" : ""}`}
                 >
                   {option}
                 </Link>
@@ -209,6 +237,7 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
           history={history?.points ?? []}
           forecast={forecast}
           scale={instrument.displayScale}
+          height={400}
         />
       </Card>
 
@@ -258,11 +287,11 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
               <table className="w-full border-collapse text-sm">
                 <thead className="sticky top-0 bg-surface-raised">
                   <tr className="border-b border-border text-left">
-                    <th className="py-2 pr-2 font-medium text-ink-subtle">Bước</th>
-                    <th className="py-2 pr-2 text-right font-medium text-ink-subtle">MAE</th>
-                    <th className="py-2 pr-2 text-right font-medium text-ink-subtle">RMSE</th>
-                    <th className="py-2 pr-2 text-right font-medium text-ink-subtle">MAPE</th>
-                    <th className="py-2 text-right font-medium text-ink-subtle">Mẫu</th>
+                    <th className="py-2 pr-2 table-head">Bước</th>
+                    <th className="py-2 pr-2 text-right table-head">MAE</th>
+                    <th className="py-2 pr-2 text-right table-head">RMSE</th>
+                    <th className="py-2 pr-2 text-right table-head">MAPE</th>
+                    <th className="py-2 text-right table-head">Mẫu</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -299,10 +328,10 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
             <table className="w-full min-w-[520px] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border text-left">
-                  <th className="px-4 py-2 font-medium text-ink-subtle sm:px-2">Mô hình</th>
-                  <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">MASE</th>
-                  <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">RMSE</th>
-                  <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">MAPE</th>
+                  <th className="px-4 py-2 table-head sm:px-2">Mô hình</th>
+                  <th className="px-4 py-2 text-right table-head sm:px-2">MASE</th>
+                  <th className="px-4 py-2 text-right table-head sm:px-2">RMSE</th>
+                  <th className="px-4 py-2 text-right table-head sm:px-2">MAPE</th>
                 </tr>
               </thead>
               <tbody>
@@ -341,17 +370,17 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
           <table className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
               <tr className="border-b border-border text-left">
-                <th className="px-4 py-2 font-medium text-ink-subtle sm:px-2">Ngày</th>
-                <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">
+                <th className="px-4 py-2 table-head sm:px-2">Ngày</th>
+                <th className="px-4 py-2 text-right table-head sm:px-2">
                   Dự báo
                 </th>
-                <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">
+                <th className="px-4 py-2 text-right table-head sm:px-2">
                   So với hiện tại
                 </th>
-                <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">
+                <th className="px-4 py-2 text-right table-head sm:px-2">
                   Khoảng 80%
                 </th>
-                <th className="px-4 py-2 text-right font-medium text-ink-subtle sm:px-2">
+                <th className="px-4 py-2 text-right table-head sm:px-2">
                   Khoảng 95%
                 </th>
               </tr>
@@ -383,13 +412,15 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
         </div>
       </Card>
 
-      {Object.keys(forecast.params).length > 0 && (
+      <FeatureWeights params={forecast.params} />
+
+      {hyperparams.length > 0 && (
         <Card
           title="Tham số mô hình đã khớp"
           subtitle="Công khai để kết quả có thể kiểm chứng lại, thay vì phải tin vào một hộp đen."
         >
           <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-            {Object.entries(forecast.params).map(([key, value]) => (
+            {hyperparams.map(([key, value]) => (
               <div key={key}>
                 <dt className="font-mono text-ink-subtle">{key}</dt>
                 <dd className="tabular mt-0.5 font-medium">{formatNumber(value, 4)}</dd>
