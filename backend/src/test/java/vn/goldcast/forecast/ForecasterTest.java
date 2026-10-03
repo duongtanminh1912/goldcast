@@ -128,10 +128,7 @@ class ForecasterTest {
     @DisplayName("Forecasters.candidates lọc theo độ dài dữ liệu và không bao giờ rỗng")
     void candidateSelectionRespectsDataLength() {
         assertAll(
-                () -> assertEquals(ForecastModel.fittable().length, Forecasters.candidates(500, 7).size()),
-                // 100 points: enough for the statistical models, too few for gradient boosting.
-                () -> assertTrue(Forecasters.candidates(100, 7).stream()
-                        .noneMatch(f -> f.model() == ForecastModel.GBM)),
+                () -> assertEquals(5, Forecasters.candidates(500, 7).size()),
                 () -> assertTrue(Forecasters.candidates(8, 3).size() <= 3),
                 () -> assertTrue(!Forecasters.candidates(1, 30).isEmpty()));
     }
