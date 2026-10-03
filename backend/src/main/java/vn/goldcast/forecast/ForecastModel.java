@@ -23,18 +23,6 @@ public enum ForecastModel {
     /** Autoregression on first differences — an ARIMA(p,1,0) fitted by ordinary least squares. */
     AR_DIFF("AR(p) on differences", "Hồi quy tự tương quan trên sai phân bậc 1, tương đương ARIMA(p,1,0)."),
 
-    /** Machine learning, linear: ridge regression on engineered features, λ tuned on a hold-out. */
-    RIDGE("Ridge regression (ML)",
-            "Học máy tuyến tính: hồi quy Ridge dự đoán lợi suất ngày kế tiếp từ 12 đặc trưng "
-                    + "(lợi suất trễ, trung bình động, độ biến động, khoảng cách SMA20, RSI). "
-                    + "Hệ số phạt λ được chọn trên tập validation theo thời gian."),
-
-    /** Machine learning, non-linear: gradient-boosted regression trees with early stopping. */
-    GBM("Gradient boosting (ML)",
-            "Học máy phi tuyến: tập hợp cây hồi quy tăng cường theo gradient (cùng họ với "
-                    + "XGBoost/LightGBM) trên cùng 12 đặc trưng. Số cây được chọn bằng early "
-                    + "stopping trên tập validation theo thời gian."),
-
     /** Pick whichever of the above scores best in a rolling-origin backtest. */
     AUTO("Auto (chọn theo backtest)", "Chạy backtest mọi mô hình và chọn mô hình có MASE thấp nhất.");
 
@@ -56,6 +44,6 @@ public enum ForecastModel {
 
     /** Models that can actually be fitted, i.e. everything except {@link #AUTO}. */
     public static ForecastModel[] fittable() {
-        return new ForecastModel[] {NAIVE, DRIFT, SMA, HOLT_DAMPED, AR_DIFF, RIDGE, GBM};
+        return new ForecastModel[] {NAIVE, DRIFT, SMA, HOLT_DAMPED, AR_DIFF};
     }
 }
