@@ -13,19 +13,16 @@ import {
 } from "@/lib/format";
 import type { Forecast, Instrument, Series } from "@/lib/types";
 import { InstrumentTabs } from "@/components/InstrumentTabs";
-import { FeatureWeights } from "@/components/FeatureWeights";
 
 export const revalidate = 300;
 
-const MODELS: { key: string; label: string; ml?: boolean }[] = [
+const MODELS = [
   { key: "AUTO", label: "Tự chọn" },
   { key: "NAIVE", label: "Naive" },
   { key: "DRIFT", label: "Drift" },
   { key: "SMA", label: "SMA" },
   { key: "HOLT_DAMPED", label: "Holt" },
   { key: "AR_DIFF", label: "AR(p)" },
-  { key: "RIDGE", label: "Ridge", ml: true },
-  { key: "GBM", label: "Gradient Boosting", ml: true },
 ];
 
 const HORIZONS = [7, 14, 30, 60, 90];
@@ -104,10 +101,6 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
   }
 
   const { instrument, accuracy } = forecast;
-  // Per-feature weights get their own chart; the grid keeps only the scalar parameters.
-  const hyperparams = Object.entries(forecast.params).filter(
-    ([key]) => !key.startsWith("importance.") && !key.startsWith("beta."),
-  );
   const finalStep = forecast.points[forecast.points.length - 1];
 
   return (
@@ -149,11 +142,6 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
                   className={`segment ${option.key === model ? "segment-active" : ""}`}
                 >
                   {option.label}
-                  {option.ml && (
-                    <span className="ml-1 rounded bg-gold/15 px-1 py-px text-[9px] font-bold text-gold-deep">
-                      ML
-                    </span>
-                  )}
                 </Link>
               ))}
             </div>
@@ -412,15 +400,13 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
         </div>
       </Card>
 
-      <FeatureWeights params={forecast.params} />
-
-      {hyperparams.length > 0 && (
+      {Object.keys(forecast.params).length > 0 && (
         <Card
           title="Tham số mô hình đã khớp"
           subtitle="Công khai để kết quả có thể kiểm chứng lại, thay vì phải tin vào một hộp đen."
         >
           <dl className="grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
-            {hyperparams.map(([key, value]) => (
+            {Object.entries(forecast.params).map(([key, value]) => (
               <div key={key}>
                 <dt className="font-mono text-ink-subtle">{key}</dt>
                 <dd className="tabular mt-0.5 font-medium">{formatNumber(value, 4)}</dd>

@@ -22,8 +22,6 @@ public final class Forecasters {
             case SMA -> new MovingAverageForecaster(smaWindow);
             case HOLT_DAMPED -> new HoltDampedForecaster();
             case AR_DIFF -> new ArDiffForecaster(arOrder);
-            case RIDGE -> new RidgeForecaster();
-            case GBM -> new GradientBoostingForecaster();
             case AUTO -> throw new IllegalArgumentException(
                     "AUTO không phải một mô hình cụ thể — dùng Forecasters.candidates()");
         };
