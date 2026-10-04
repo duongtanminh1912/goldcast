@@ -43,7 +43,7 @@ qua được test thì không vào được nhánh chính.
 
 ### Số đo — ảnh hưởng của cache Maven
 
-Cùng một commit (`8501278`), chạy lại 4 lần bằng "Re-run all jobs".
+Cùng một commit (`20e414b`), chạy lại 4 lần bằng "Re-run all jobs".
 
 | Lần chạy | Cache | Job `backend-test` | Total duration |
 | --- | --- | --- | --- |
