@@ -287,3 +287,121 @@ Trong tuần này và các tuần trước, đã bốn lần rút ra kết luậ
 
 Cả bốn lần đều phát hiện được bằng cùng một cách: khi con số không khớp với dự
 đoán, mở ra xem đại lượng đó thật sự đo cái gì, thay vì giữ nguyên kết luận.
+
+## Tuần 6 — Cổng hợp đồng API (G1)
+
+### Lỗ hổng không ai gác
+
+Backend trả JSON, frontend khai báo interface TypeScript mô tả JSON đó. Nhưng kiểu
+TypeScript bị xoá lúc biên dịch — không có gì đối chiếu chúng với JSON thật lúc chạy.
+
+Nên nếu backend đổi tên một trường, `mvn test` vẫn xanh, `tsc` vẫn xanh, và người dùng
+thấy ô giá trống. Hai bên đều tự tin là mình đúng; chỗ hai bên gặp nhau thì không ai gác.
+
+Cổng G1 sinh ra cho đúng chỗ đó.
+
+### Vị trí của cổng, và vì sao
+
+G1 nằm **bên trong `mvn test`**, không phải một stage Jenkins. Lý do là hệ quả trực tiếp
+của kiến trúc đã dựng ở tuần 3–4: Jenkins chỉ poll nhánh `main` nên không bao giờ nhìn
+thấy pull request. Chỉ GitHub Actions mới chặn được merge, mà GitHub Actions chạy
+`mvn test`. Đặt sai chỗ thì cổng chỉ báo động sau khi hỏng đã vào `main`.
+
+Hệ quả phụ: từ nay một PR chỉ sửa frontend vẫn phải chạy test backend và vẫn có thể bị
+backend chặn. Đó là sợi dây đầu tiên nối hai nửa của dự án.
+
+### Chứng minh cổng biết chặn
+
+Xanh ngay lần đầu không chứng minh được gì. Đổi `export interface Series` thành `SeriesX`
+trong `frontend/src/lib/types.ts`, chạy lại `mvn test`: một test **Java ở backend** đỏ vì
+một file **TypeScript ở frontend**.
+
+Log còn in `Nothing to compile — all classes are up to date`, nghĩa là giữa lần đỏ và lần
+
+xanh không một dòng Java nào được biên dịch lại. Cổng đọc `types.ts` lúc **chạy test**,
+không phải lúc biên dịch.
+
+### Ba lần thiết kế bị dữ liệu thật sửa
+
+Thiết kế ban đầu chỉ có hai nhánh: record thì đệ quy, kiểu lá thì dừng. Dữ liệu thật sửa
+nó ba lần:
+
+1. **Enum.** Khi gỡ mô hình ML, phát hiện `ForecastModelId` phía TypeScript là union type
+   chứ không phải interface — một mặt của hợp đồng mà thiết kế không hề phủ.
+2. **Kiểu lạ.** Thêm nhánh "gặp kiểu chưa lường thì cổng đỏ". Lần này lỗ hổng được phát
+   hiện nhờ may mắn; nhánh này làm lần sau cổng tự báo.
+3. **Quy ước tên.** Quy ước "record lồng nhau dùng tên đơn" được rút ra từ `MarketSummaryDto`
+   — file DTO duy nhất được đọc kỹ lúc thiết kế. Khi cổng chạy thật trên cả bảy DTO, ba
+   trên bốn record lồng nhau không theo quy ước đó. Bảng ngoại lệ từ hai dòng thành bốn.
+
+Bài học chung: một quy tắc rút ra từ một mẫu trên bảy không phải là quy tắc, dù nó đẹp.
+
+### Những thứ cổng tìm ra mà không ai đi tìm
+
+**Tầng DTO đã xoá sạch enum.** `InstrumentDto.kind` là `String`, không phải
+`InstrumentKind`; hàm `from()` gọi `.name()` ngay tại biên. Nên hợp đồng enum ↔ union tuy
+tồn tại thật trong JSON nhưng **vô hình với phép duyệt kiểu**, phải khai bằng tay. Đó là
+cái giá của mẫu DTO: được tách biệt, mất thông tin kiểu ở biên.
+
+**Model Java có chỗ trùng lặp.** `ForecastDto.HorizonAccuracy` và `BacktestDto.HorizonRow`
+giống hệt nhau từng trường, chỉ khác tên. TypeScript đã nhận ra và dùng chung một interface.
+Phía Java mới là phía dư thừa. Việc gộp để sau, nhưng cổng tìm ra nó mà không ai đi tìm.
+
+### Chống xanh rỗng
+
+Nếu phép quét thư mục DTO trả về rỗng, cả ba test đều xanh — không có gì để kiểm thì không
+
+có gì sai. Đó là kiểu hỏng tệ nhất của một cổng: nó không chết, nó chỉ ngừng làm việc và
+vẫn gật đầu.
+
+Thêm test thứ tư chốt số lượng: ít nhất 7 DTO, 19 interface, 2 union. Khi có thay đổi hợp
+lệ làm giảm những con số đó, cổng sẽ đỏ và buộc một con người sửa con số bằng tay — tức là
+xác nhận việc giảm là có chủ ý. Cùng triết lý với bảng ngoại lệ: chỗ nào máy không quyết
+được thì bắt người quyết, và lưu quyết định đó trong mã nguồn.
+
+### Sáu giới hạn, ghi ngay trong file
+
+Cổng là phép kiểm dựa trên **tên**, nên luôn có hai loại sai: báo nhầm và bỏ sót. Không khử
+được, chỉ ghi rõ. Sáu giới hạn nằm trong javadoc đầu `ApiContractTest.java`, không nằm rải
+rác trong tài liệu riêng — người sửa file sau sẽ đọc được mà không cần hỏi ai.
+
+Ví dụ sống của loại "báo nhầm" gặp ngay trong tuần: lệnh `grep "ridge"` để tìm dấu vết mô
+hình Ridge regression lại khớp bốn dòng trong `LinearAlgebra.java`, nơi `ridge` là thủ thuật
+cộng λ vào đường chéo ma trận cho khỏi suy biến — hoàn toàn không liên quan.
+
+### Hai bài học về quy trình
+
+**Scope của Maven.** Đặt nhầm test vào `src/main/java` làm build chết vì JUnit khai báo
+`<scope>test</scope>`. Nếu Maven cho qua thì JUnit bị đóng gói vào image backend, và tệ hơn,
+Surefire sẽ không bao giờ chạy test đó — xanh mà chẳng kiểm gì.
+
+**`git status` bắt được thứ CI không bắt được.** Lệnh `mv` chuyển file trên đĩa nhưng không
+động tới index, mà index sống qua cả `git switch`. Suýt commit một file ở `src/main` có
+trong Git nhưng không có trên đĩa. Đây là lần thứ hai việc đọc kỹ cái gì đang được đưa vào
+cứu được một lỗi — lần đầu là tuần 4, khi `README.md` bị xoá 265 dòng mà CI vẫn xanh.
+CI kiểm nội dung code; con người kiểm cái gì đang được đưa vào. Hai câu hỏi khác nhau.
+
+### Gỡ mô hình học máy
+
+
+Mô hình Ridge và Gradient Boosting đã merge vào `main` ở tuần trước được gỡ bằng
+`git revert`, qua PR #10, không viết lại lịch sử. Lý do gỡ là phạm vi: đồ án nghiên cứu quy
+trình DevOps, không đánh giá chất lượng dự báo.
+
+Điểm đáng ghi: việc **gỡ** một tính năng đi qua đúng cổng CI như việc **thêm**, không cần
+quy trình riêng. Loại thay đổi không quan trọng; đường đi thì giống nhau. Và chính việc gỡ
+này phơi ra lỗ hổng enum trong thiết kế cổng.
+
+### Số liệu
+
+| Chỉ số | Giá trị |
+|---|---|
+| Thời gian chạy cổng | 0,029 giây |
+| Số test backend | 93 → 97 |
+| Số DTO được đối chiếu | 7 cấp cao, cộng record lồng nhau |
+| Interface TypeScript | 19 |
+| Union type TypeScript | 2 |
+| Dòng trong bảng ngoại lệ tên | 4 |
+| Jenkins build | #14 |
+
+Cổng chạy ở hai nơi: GitHub Actions chặn merge, Jenkins chặn việc đóng gói image.
