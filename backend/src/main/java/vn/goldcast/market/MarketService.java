@@ -110,6 +110,11 @@ public class MarketService {
                 latest.getSource());
     }
 
+    /** Dinh dang so kieu Viet Nam: dau phay thay cho dau cham thap phan. */
+    private static String so(double giaTri) {
+        return String.valueOf(giaTri).replace('.', ',');
+    }
+
     private MarketSummaryDto.Conversion buildConversion(BigDecimal usdPerOunce, BigDecimal vndPerUsd) {
         double perTael = GoldUnits.worldToVndPerTael(usdPerOunce.doubleValue(), vndPerUsd.doubleValue());
         return new MarketSummaryDto.Conversion(
@@ -118,7 +123,8 @@ public class MarketService {
                 Amounts.of(GoldUnits.taelToGram(perTael), 0),
                 GoldUnits.TAEL_IN_GRAMS,
                 GoldUnits.TROY_OUNCE_IN_GRAMS,
-                "VNĐ/lượng = USD/oz ÷ 31,1034768 × 37,5 × tỷ giá USD/VND");
+                "VNĐ/lượng = USD/oz ÷ " + so(GoldUnits.TROY_OUNCE_IN_GRAMS)
+                        + " × " + so(GoldUnits.TAEL_IN_GRAMS) + " × tỷ giá USD/VND");
     }
 
     /**

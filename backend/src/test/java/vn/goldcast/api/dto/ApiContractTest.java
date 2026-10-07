@@ -58,7 +58,6 @@ class ApiContractTest {
     private static final Map<String, String> NGOAI_LE = Map.of(
             "Step", "ForecastStep",
             "ModelResult", "BacktestModelResult",
-            "HorizonRow", "HorizonAccuracy",
             "Summary", "IndicatorSummary");
 
     /** Enum di qua bien API duoi dang chuoi. Phai khai tay, xem gioi han so 5. */
@@ -267,7 +266,7 @@ class ApiContractTest {
         int soInterface = docInterface().size();
         int soUnion = docUnion().size();
 
-        assertTrue(soDto >= 7, "Chi quet duoc " + soDto + " DTO, truoc day la 7");
+        assertTrue(soDto >= 8, "Chi quet duoc " + soDto + " DTO, truoc day la 8");
         assertTrue(soInterface >= 19, "Chi doc duoc " + soInterface + " interface, truoc day la 19");
         assertTrue(soUnion >= 2, "Chi doc duoc " + soUnion + " union, truoc day la 2");
     }

@@ -29,7 +29,5 @@ public record BacktestDto(
             int sampleSize,
             int origins,
             boolean beatsNaive,
-            List<HorizonRow> byHorizon) {}
-
-    public record HorizonRow(int step, Double mae, Double rmse, Double mape, int sampleSize) {}
+            List<HorizonAccuracyDto> byHorizon) {}
 }

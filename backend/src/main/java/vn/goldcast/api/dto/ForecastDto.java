@@ -27,7 +27,7 @@ public record ForecastDto(
         OffsetDateTime generatedAt,
         List<Step> points,
         Accuracy accuracy,
-        List<HorizonAccuracy> accuracyByHorizon,
+        List<HorizonAccuracyDto> accuracyByHorizon,
         List<ModelScore> modelScores,
         Map<String, Double> params,
         List<String> warnings,
@@ -63,9 +63,6 @@ public record ForecastDto(
             int sampleSize,
             int origins,
             boolean beatsNaive) {}
-
-    /** Accuracy at one specific number of steps ahead; error grows with distance. */
-    public record HorizonAccuracy(int step, Double mae, Double rmse, Double mape, int sampleSize) {}
 
     /**
      * How every candidate model scored during model selection.
