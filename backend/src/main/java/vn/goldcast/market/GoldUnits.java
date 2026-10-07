@@ -24,7 +24,7 @@ public final class GoldUnits {
     public static final double TAEL_IN_GRAMS = 37.5;
 
     /** One chỉ in grams: a tenth of a lượng. */
-    public static final double CHI_IN_GRAMS = 3.75;
+    public static final double CHI_IN_GRAMS = TAEL_IN_GRAMS / 10.0;
 
     /** Grams per lượng ÷ grams per troy ounce: how many ounces one lượng weighs. */
     public static final double TAEL_IN_TROY_OUNCES = TAEL_IN_GRAMS / TROY_OUNCE_IN_GRAMS;

@@ -9,6 +9,7 @@ import org.springframework.transaction.annotation.Transactional;
 import vn.goldcast.api.InsufficientHistoryException;
 import vn.goldcast.api.dto.BacktestDto;
 import vn.goldcast.api.dto.ForecastDto;
+import vn.goldcast.api.dto.HorizonAccuracyDto;
 import vn.goldcast.api.dto.InstrumentDto;
 import vn.goldcast.config.AppProperties;
 import vn.goldcast.domain.ForecastPoint;
@@ -151,8 +152,8 @@ public class ForecastService {
                 continue;
             }
 
-            List<BacktestDto.HorizonRow> rows = result.byHorizon().stream()
-                    .map(accuracy -> new BacktestDto.HorizonRow(
+            List<HorizonAccuracyDto> rows = result.byHorizon().stream()
+                    .map(accuracy -> new HorizonAccuracyDto(
                             accuracy.step(),
                             Amounts.nullIfNotFinite(accuracy.metrics().mae()),
                             Amounts.nullIfNotFinite(accuracy.metrics().rmse()),
@@ -326,12 +327,12 @@ public class ForecastService {
                 overall.beatsNaive());
     }
 
-    private static List<ForecastDto.HorizonAccuracy> toHorizonAccuracy(BacktestResult result) {
+    private static List<HorizonAccuracyDto> toHorizonAccuracy(BacktestResult result) {
         if (result == null || !result.hasData()) {
             return List.of();
         }
         return result.byHorizon().stream()
-                .map(accuracy -> new ForecastDto.HorizonAccuracy(
+                .map(accuracy -> new HorizonAccuracyDto(
                         accuracy.step(),
                         Amounts.nullIfNotFinite(accuracy.metrics().mae()),
                         Amounts.nullIfNotFinite(accuracy.metrics().rmse()),
