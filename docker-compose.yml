@@ -33,6 +33,7 @@ services:
       APP_INGEST_ENABLED: ${APP_INGEST_ENABLED:-true}
       APP_INGEST_SEED_ON_EMPTY: ${APP_INGEST_SEED_ON_EMPTY:-true}
       APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      APP_ADMIN_TOKEN: ${APP_ADMIN_TOKEN:-}
       TZ: Asia/Ho_Chi_Minh
     ports:
       - "${BACKEND_PORT:-8080}:8080"
