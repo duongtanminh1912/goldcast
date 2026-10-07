@@ -80,7 +80,8 @@ Jenkins chạy ba stage, GitHub Actions chỉ chạy test.
 |---|---|---|
 | GitHub Actions, job `backend-test`, cache rỗng | 40 s | run #3, job view |
 | GitHub Actions, step `Chay test backend`, cache rỗng | 33 s | run #3, step view |
-| GitHub Actions, cache ấm | 19–23 s | ghi ở tuần 3, **cần xác nhận lại là job hay step** |
+| GitHub Actions, job `backend-test`, cache ấm | 21 s | run của PR `feat(security)` |
+| GitHub Actions, step `Chay test backend`, cache ấm | 13 s | cùng run |
 | Jenkins, stage `Test backend`, không đổi mã | 2 s | #16 |
 | Jenkins, stage `Test backend`, mã đổi | 4 s | #17 |
 
@@ -196,7 +197,49 @@ Phát biểu đúng:
 
 > đích, vì nó mang theo lịch sử của chính lần build đó.**
 
-## Còn thiếu
+## Con số thuần khiết nhất: Maven tự đo chính nó
 
-- Xác nhận lại mốc "cache ấm 19–23 s" của GitHub Actions là **job** hay **step**
-- Thời lượng job `backend-test` ở lần chạy có 102 test (PR `feat(security)`)
+Mọi con số ở trên đều lẫn chi phí của hệ thống CI. Nhưng Maven in ra thời gian
+của chính nó ở cuối mỗi lần chạy, và con số đó loại sạch mọi thứ khác: không
+dựng runner, không checkout, không cài JDK, không chi phí Jenkins.
+
+Cùng 102 test, cùng lệnh `mvn -B test`:
+
+| Môi trường | Maven báo `Total time` |
+|---|---|
+| GitHub Actions, runner sạch, cache Maven ấm | **9,017 s** |
+| Jenkins, workspace bền vững | **1,705 s** |
+
+Chênh **5,3 lần**, và toàn bộ nằm ở một nguyên nhân: trên runner GitHub thư mục
+`target/` rỗng, nên Maven phải biên dịch lại toàn bộ mã nguồn cộng 1.106 dòng
+test trước khi chạy được test nào. Trên Jenkins nó mở `target/` ra, thấy mọi thứ
+
+còn nguyên và chưa đổi, rồi chỉ chạy test.
+
+Đây là con số nên đưa vào báo cáo khi muốn nói "cùng một công việc", vì nó là
+con số duy nhất không ai bắt lỗi được về tính so sánh được.
+
+## Bóc tách 21 giây của GitHub Actions
+
+| Phần | Thời lượng |
+|---|---|
+| Dựng runner, checkout, cài JDK, phục hồi cache | ~7 s |
+| Chi phí của step (shell, đổi thư mục, ghi log) | ~4 s |
+| **Maven làm việc thật** | **9 s** |
+| Post actions | ~1 s |
+| Tổng job | 21 s |
+
+So với Jenkins build #17:
+
+| Phần | Thời lượng |
+|---|---|
+| Chi phí cố định của Jenkins | 3,7 s |
+| Checkout SCM | 1 s |
+| **Maven làm việc thật** | **1,7 s** |
+| Hai stage build image | 10,3 s |
+| Tổng build | 19 s |
+
+Hai bảng này cho thấy điều đáng nói nhất: **Jenkins làm nhiều việc hơn trong
+thời gian ngắn hơn** — nó còn đóng gói hai Docker image mà GitHub Actions không
+làm. Nhưng nó làm được vậy nhờ tái dùng trạng thái của lần trước, tức là nó
+**không kiểm chứng được** điều mà runner sạch kiểm chứng được.
