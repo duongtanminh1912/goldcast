@@ -1,9 +1,24 @@
-# goldcast
+# GoldCast
+
+[![CI](https://github.com/duongtanminh1912/goldcast/actions/workflows/ci.yml/badge.svg)](https://github.com/duongtanminh1912/goldcast/actions/workflows/ci.yml)
+
+**Đây là một đồ án về quy trình DevOps.** Ứng dụng theo dõi giá vàng bên dưới là
+*đối tượng* mà quy trình xây dựng, kiểm thử, đóng gói và triển khai — không phải
+mục tiêu của đồ án.
+
+Nếu bạn tới đây để xem cách dựng một pipeline CI/CD từ con số không, phần đáng đọc là
+[Quy trình DevOps](#quy-trình-devops) và [nhật ký từng tuần](docs/nhat-ky.md).
+
+> **Giá vàng ở đây là dữ liệu tổng hợp, không phải giá thật.**
+> Hệ thống tự sinh chuỗi giá mô phỏng khi database rỗng. Đừng dùng con số nào trong
+> này để ra quyết định tài chính.
+
+## Ứng dụng làm gì
 
 Theo dõi giá vàng thế giới (XAU/USD), tỷ giá USD/VND và giá vàng miếng trong nước, kèm dự
 báo thống kê **có backtest** và khoảng tin cậy ước lượng từ sai số out-of-sample thực đo.
 
-Nguyên tắc xuyên suốt dự án: **mỗi con số dự báo luôn đi kèm sai số đo được của chính nó.**
+Nguyên tắc xuyên suốt: **mỗi con số dự báo luôn đi kèm sai số đo được của chính nó.**
 Nếu mô hình không vượt được baseline naive, giao diện nói thẳng điều đó thay vì giấu đi.
 
 ```
@@ -14,7 +29,48 @@ Spring Boot 3.3 · Java 21
 PostgreSQL 16
 ```
 
----
+## Quy trình DevOps
+
+Hai công cụ, hai vai trò khác nhau — không phải hai lựa chọn thay thế nhau:
+
+| | GitHub Actions | Jenkins |
+|---|---|---|
+| Thấy pull request | **có**, nên chặn được merge | không, chỉ theo dõi `main` |
+| Môi trường | sạch mỗi lần | bền vững, chạy test nhanh hơn 5–20 lần |
+| Sản phẩm | tín hiệu xanh hoặc đỏ | **image Docker gắn tag theo số build** |
+
+Jenkins chạy sau router gia đình nên không nhận được webhook, phải poll `main` mỗi 5
+phút — mà poll thì chỉ theo dõi được nhánh, không đánh giá được pull request. Cách phân
+vai trên là hệ quả của ràng buộc kỹ thuật đó, không phải lựa chọn tuỳ ý.
+
+### Hai cổng tự phát triển
+
+**G1 — hợp đồng API.** Đối chiếu DTO Java với khai báo TypeScript của frontend. Kiểu
+TypeScript bị xoá lúc biên dịch nên không gì đối chiếu chúng với JSON thật: đổi tên một
+trường ở backend thì `mvn test` xanh, `tsc` xanh, còn người dùng thấy ô trống. Cổng nằm
+trong `mvn test` nên GitHub Actions chặn được merge. Chạy mất 0,029 giây.
+
+→ [`ApiContractTest.java`](backend/src/test/java/vn/goldcast/api/dto/ApiContractTest.java)
+
+**G2 — nội dung API.** Script độc lập nhận `BASE_URL`, gọi API thật và kiểm **bất biến**
+thay vì giá trị, vì dữ liệu là tổng hợp. Ví dụ: `worldVndPerGram × troyOunceInGrams` phải
+bằng `usdPerOunce × vndPerUsd` — nối ba trường ở ba khối khác nhau của cùng một phản hồi,
+nên công thức quy đổi sai là lộ ngay. *Đã viết và kiểm chứng, chưa nối vào pipeline.*
+
+→ [`scripts/smoke.mjs`](scripts/smoke.mjs)
+
+### Số liệu đo được
+
+Thời lượng build biến thiên gần 50 lần (5 đến 245 giây) trên cùng một pipeline. Biến giải
+thích không phải số lượng test, mà là **build context của Docker có thay đổi hay không**.
+Mô hình bốn bậc rút ra từ đó đã đoán đúng bốn lần liên tiếp, ghi trước khi đo.
+
+Chi tiết kèm nguồn của từng con số: [`docs/so-lieu-chuong-3.md`](docs/so-lieu-chuong-3.md)
+
+### Triển khai
+
+Máy chủ dựng bằng script chạy lại được, không gõ tay — để việc xoá và dựng lại từ đầu
+là chuyện vài phút: [`deploy/`](deploy/)
 
 ## Chạy thử
 
