@@ -1,0 +1,589 @@
+% =============================================================================
+%  Ghi chú dựng báo cáo DevOps — goldcast
+%
+%  Biên dịch bằng XeLaTeX (Overleaf: Menu → Compiler → XeLaTeX).
+%
+%  Nguyên tắc của file này: chỉ ghi những gì có thật trong repo.
+%    - Mọi đoạn code lấy nguyên văn từ file trong Git, kèm mã commit.
+%    - Mốc thời gian lấy từ `git log` và lịch sử pull request trên GitHub.
+%    - Số đo lấy từ docs/nhat-ky.md và docs/logs/.
+%    - Chỗ nào repo chưa có số liệu thì để \canbosung{...} màu đỏ,
+%      không điền số ước đoán.
+%
+%  Phạm vi: quy trình DevOps tuần 2–5 (tới commit 3037e69, 01/10/2026).
+%  Không gồm phần mô hình học máy (PR #8) và phần giao diện (PR #7).
+% =============================================================================
+\documentclass[12pt,a4paper]{article}
+
+\usepackage{fontspec}
+\usepackage[vietnamese]{babel}
+\setmainfont{TeX Gyre Termes}
+\setmonofont{DejaVu Sans Mono}[Scale=0.85]
+
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=blue!50!black, urlcolor=blue!50!black}
+
+% Chỗ còn thiếu số liệu — tìm "canbosung" để rà trước khi nộp.
+\newcommand{\canbosung}[1]{\textcolor{red}{[CẦN BỔ SUNG: #1]}}
+\newcommand{\commit}[1]{\texttt{#1}}
+
+% ---------------------------------------------------------------- listings ---
+\definecolor{codebg}{RGB}{248,248,246}
+\definecolor{codekw}{RGB}{0,72,140}
+\definecolor{codecm}{RGB}{110,110,110}
+\definecolor{codestr}{RGB}{150,60,0}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{codebg},
+  frame=single, rulecolor=\color{black!20},
+  numbers=left, numberstyle=\tiny\color{black!45}, numbersep=6pt,
+  breaklines=true, columns=fullflexible, keepspaces=true,
+  showstringspaces=false, extendedchars=true,
+  keywordstyle=\color{codekw}\bfseries,
+  commentstyle=\color{codecm}\itshape,
+  stringstyle=\color{codestr},
+  captionpos=b, aboveskip=1em, belowskip=1em,
+}
+
+\lstdefinelanguage{Dockerfile}{
+  morekeywords={FROM,AS,RUN,COPY,WORKDIR,USER,ENV,ARG,EXPOSE,ENTRYPOINT,CMD},
+  sensitive=true, morecomment=[l]{\#}, morestring=[b]",
+}
+\lstdefinelanguage{YAML}{
+  morekeywords={true,false},
+  sensitive=false, morecomment=[l]{\#}, morestring=[b]", morestring=[b]',
+}
+\lstdefinelanguage{Jenkinsfile}{
+  morekeywords={pipeline,agent,any,stages,stage,steps,dir,sh},
+  sensitive=true, morecomment=[l]{//}, morestring=[b]', morestring=[b]",
+}
+\lstdefinelanguage{Env}{
+  sensitive=true, morecomment=[l]{\#},
+}
+
+\title{Ghi chú báo cáo đồ án DevOps\\\large goldcast — theo dõi và dự báo giá vàng}
+\author{\canbosung{Họ tên, MSSV, lớp}}
+\date{Cập nhật theo repo tại commit \commit{3037e69} (01/10/2026)}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+% =============================================================================
+\section{Tổng quan hệ thống}
+% =============================================================================
+
+goldcast gồm ba dịch vụ, chạy bằng Docker Compose:
+
+\begin{center}
+\begin{tabularx}{\linewidth}{lXl}
+\toprule
+Dịch vụ & Công nghệ & Image nền \\
+\midrule
+\texttt{frontend} & Next.js 15 (App Router, TypeScript, Tailwind) & \texttt{node:22-alpine} \\
+\texttt{backend}  & Spring Boot 3.3, Java 21, Flyway             & \texttt{eclipse-temurin:21-jre-alpine} \\
+\texttt{db}       & PostgreSQL 16                                & \texttt{postgres:16-alpine} \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Hạ tầng CI/CD đã dựng trong đồ án:
+
+\begin{itemize}
+  \item \textbf{GitHub Actions} — CI được quản lý: chạy test backend cho mỗi pull
+        request và mỗi lần push vào \texttt{main}.
+  \item \textbf{Branch protection} trên \texttt{main}: bắt buộc pull request và
+        check \texttt{backend-test} xanh, không cho admin vượt rào.
+  \item \textbf{Jenkins} tự vận hành trong Docker (cổng 8081): chạy test, rồi dựng
+        Docker image backend và frontend.
+\end{itemize}
+
+% =============================================================================
+\section{Dòng thời gian thực tế}
+% =============================================================================
+
+Lấy từ \texttt{git log main} và lịch sử pull request.
+
+\begin{center}
+\small
+\begin{tabularx}{\linewidth}{llX}
+\toprule
+Thời điểm & Commit / PR & Nội dung \\
+\midrule
+21/09/2026 & \commit{cae1e86} & Commit khởi tạo mã nguồn \\
+23/09/2026 & \commit{bb4d99e} & Thêm nhật ký và khung CI \\
+24/09/2026 & \commit{66820fe} & Workflow GitHub Actions chạy test backend \\
+24/09/2026 & \commit{dcb3040} & Thêm test cố tình sai để kiểm chứng cổng CI \\
+24/09/2026 & \commit{9561da2} & Gỡ test cố tình sai \\
+24/09/2026 & \commit{20e414b} & Thử push thẳng vào \texttt{main} (kiểm chứng branch protection) \\
+25/09/2026 & \commit{8ab21c5} & Thêm \texttt{Jenkinsfile} (stage test) \\
+25/09/2026 & \commit{584d72a} & Image Jenkins có Maven \\
+27/09/2026 & PR \#1, \#2, \#3 & Merge Jenkinsfile, nhật ký tuần 3, nhật ký tuần 4 \\
+01/10/2026 & PR \#4 (\commit{a89dd0b}) & Jenkins dựng được Docker image backend \\
+01/10/2026 & PR \#5 (\commit{606555f}) & Thêm stage dựng image frontend \\
+01/10/2026 & PR \#6 (\commit{3ebd18a}) & Thêm buildx để Jenkins dùng BuildKit \\
+02/10/2026 & PR \#9 & Nhật ký tuần 5 \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+% =============================================================================
+\section{Tuần 2 — Chạy goldcast trên máy cá nhân}
+% =============================================================================
+
+\subsection{Cấu hình tách khỏi mã nguồn (12-Factor: Config)}
+
+Cấu hình không viết cứng trong Java. Nếu viết cứng, mật khẩu bị ``hàn'' vào
+image khi build: đọc ra rất dễ, nhưng muốn đổi thì phải build lại.
+
+Đường đi của một biến cấu hình gồm ba chặng:
+
+\begin{lstlisting}[language=Env, caption={Chặng 1 — \texttt{.env} (không commit, đã có trong \texttt{.gitignore})}]
+APP_INGEST_SEED_ON_EMPTY=true
+\end{lstlisting}
+
+\begin{lstlisting}[language=YAML, caption={Chặng 2 — \texttt{docker-compose.yml} đọc \texttt{.env} và truyền vào container}]
+  backend:
+    environment:
+      APP_INGEST_SEED_ON_EMPTY: ${APP_INGEST_SEED_ON_EMPTY:-true}
+\end{lstlisting}
+
+\begin{lstlisting}[language=YAML, caption={Chặng 3 — \texttt{application.yml} của Spring đọc biến môi trường}]
+app:
+  ingest:
+    seed-on-empty: ${APP_INGEST_SEED_ON_EMPTY:true}
+\end{lstlisting}
+
+\subsection{Docker Compose}
+
+\begin{lstlisting}[language=YAML, caption={\texttt{docker-compose.yml} (rút gọn: dịch vụ \texttt{backend})}]
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: goldcast-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-goldcast}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-goldcast}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-goldcast}
+      APP_INGEST_ENABLED: ${APP_INGEST_ENABLED:-true}
+      APP_INGEST_SEED_ON_EMPTY: ${APP_INGEST_SEED_ON_EMPTY:-true}
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS:-http://localhost:3000}
+      TZ: Asia/Ho_Chi_Minh
+    ports:
+      - "${BACKEND_PORT:-8080}:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 40s
+    restart: unless-stopped
+\end{lstlisting}
+
+Hai điểm đáng trình bày:
+\begin{itemize}
+  \item \texttt{depends\_on} với \texttt{condition: service\_healthy}: backend chỉ
+        khởi động khi Postgres đã sẵn sàng, chứ không chỉ khi container đã chạy.
+        Frontend cũng chờ healthcheck của backend theo cùng cách.
+  \item Cú pháp \verb|${BIEN:-mac_dinh}|: chạy được ngay cả khi thiếu \texttt{.env}.
+\end{itemize}
+
+\subsection{Dockerfile backend — multi-stage build}
+
+\begin{lstlisting}[language=Dockerfile, caption={\texttt{backend/Dockerfile}}]
+# ---- build ----
+FROM maven:3.9-eclipse-temurin-21 AS build
+WORKDIR /build
+
+# Dependencies resolve in their own layer, so editing source does not re-download Maven Central.
+COPY pom.xml .
+RUN mvn -B -q dependency:go-offline
+
+COPY src ./src
+RUN mvn -B clean package -DskipTests
+
+# ---- run ----
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+
+# tzdata so Asia/Ho_Chi_Minh resolves; the alpine image ships without it.
+RUN apk add --no-cache tzdata \
+    && addgroup -S app \
+    && adduser -S -G app app
+
+COPY --from=build /build/target/*.jar app.jar
+RUN chown -R app:app /app
+USER app
+
+EXPOSE 8080
+
+ENTRYPOINT ["sh", "-c", "exec java -XX:MaxRAMPercentage=75 -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom -jar /app/app.jar"]
+\end{lstlisting}
+
+Các điểm kỹ thuật cần giải thích:
+\begin{itemize}
+  \item \textbf{Hai stage}: image chạy chỉ chứa JRE và file \texttt{.jar}, không
+        mang theo Maven hay mã nguồn.
+  \item \textbf{Tách lớp phụ thuộc}: \texttt{COPY pom.xml} và
+        \texttt{dependency:go-offline} đứng trước \texttt{COPY src}, nên sửa code
+        không làm tải lại thư viện.
+  \item \textbf{Chạy bằng user thường} (\texttt{USER app}), không chạy bằng root.
+  \item \texttt{-XX:MaxRAMPercentage=75}: JVM tính heap theo giới hạn bộ nhớ của
+        container, không theo RAM của máy chủ.
+\end{itemize}
+
+\subsection{Số đo tuần 2}
+
+Lấy từ dòng \texttt{time} cuối mỗi file trong \texttt{docs/logs/}.
+
+\begin{center}
+\begin{tabular}{llr}
+\toprule
+File log & Lệnh & Thời gian \\
+\midrule
+\texttt{tuan02-build-nguoi.txt} & \texttt{docker compose build --no-cache} & 2 ph 12 s \\
+\texttt{tuan02-build-nong.txt}  & \texttt{docker compose up -d --build} & 36,0 s \\
+\texttt{tuan02-build-lan1.txt}  & \texttt{docker compose up -d --build} & 19,5 s \\
+\texttt{tuan02-khoi-dong.txt}   & \texttt{docker compose up -d} (không build) & 17,1 s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\canbosung{Log \texttt{tuan02-build-lan1.txt} không có output của bước build, chỉ có
+dòng ``Built''. Rất có thể image đã có sẵn từ trước nên con số 19,5 s không phải
+thời gian build lần đầu. Cần xác nhận lại trước khi đưa vào báo cáo; ô ``Thời gian
+build lần đầu'' trong nhật ký tuần 2 hiện cũng đang trống.}
+
+% =============================================================================
+\section{Tuần 3 — Continuous Integration với GitHub Actions}
+% =============================================================================
+
+\subsection{Workflow}
+
+\begin{lstlisting}[language=YAML, caption={\texttt{.github/workflows/ci.yml} (commit \commit{66820fe})}]
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+      - name: Chay test backend
+        working-directory: backend
+        run: mvn -B test
+\end{lstlisting}
+
+\subsection{Kiểm chứng cổng chất lượng}
+
+\begin{enumerate}
+  \item Thêm \texttt{CiGateTest} chứa \texttt{assertEquals(1, 2)}
+        (commit \commit{dcb3040}) $\rightarrow$ CI \#4 đỏ.
+  \item Gỡ test đó (commit \commit{9561da2}) $\rightarrow$ CI \#5 xanh.
+  \item Bật branch protection cho \texttt{main}, rồi push thẳng
+        (commit \commit{20e414b}) $\rightarrow$ bị từ chối với
+        \texttt{protected branch hook declined}.
+\end{enumerate}
+
+Ảnh minh chứng ghi trong nhật ký: \texttt{tuan03-ci-do.png},
+\texttt{tuan03-branch-protection.png}.
+\canbosung{hai ảnh này chưa có trong \texttt{docs/anh/} của repo}
+
+\subsection{Số đo — ảnh hưởng của cache Maven}
+
+Cùng commit \commit{20e414b}, chạy lại 4 lần bằng ``Re-run all jobs''.
+
+\begin{center}
+\begin{tabular}{lllr}
+\toprule
+Lần chạy & Cache & Job \texttt{backend-test} & Total duration \\
+\midrule
+Nguội & trống  & 34 s & 1 ph 15 s \\
+Nóng 1 & có sẵn & 21 s & 26 s \\
+Nóng 2 & có sẵn & 19 s & 24 s \\
+Nóng 3 & có sẵn & 23 s & 29 s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Kết luận: cache giảm thời gian job từ 34 s xuống 19–23 s (khoảng 38\%).
+Dùng cột \emph{Job} chứ không dùng \emph{Total duration}, vì ở lần nguội có 41
+trên 75 giây là thời gian chờ GitHub cấp máy ảo.
+Hạn chế: lần nguội chỉ có một mẫu.
+Dung lượng cache: \canbosung{số MB, xem tab Caches của repo trên GitHub}.
+
+\subsection{Vấn đề gặp phải}
+\begin{enumerate}
+  \item Branch protection không có hiệu lực trên repo private gói Free
+        $\rightarrow$ chuyển repo sang public, sau khi rà lịch sử Git để chắc
+        chắn \texttt{.env} và khoá SSH chưa từng bị commit.
+  \item Admin vẫn push thẳng được $\rightarrow$ bật
+        ``Do not allow bypassing the above settings''.
+  \item Đọc nhầm Total duration ở lần đo đầu (kết luận sai là nhanh 3,4 lần).
+\end{enumerate}
+
+% =============================================================================
+\section{Tuần 4 — Jenkins, CI tự vận hành}
+% =============================================================================
+
+\subsection{Image Jenkins có Maven}
+
+Image \texttt{jenkins/jenkins} chính thức không có Maven. Thay vì cài bằng giao
+diện, môi trường CI được mô tả bằng Dockerfile để nằm trong Git và dựng lại được.
+
+\begin{lstlisting}[language=Dockerfile, caption={\texttt{jenkins/Dockerfile} ở tuần 4 (commit \commit{584d72a})}]
+FROM maven:3.9-eclipse-temurin-21 AS maven
+
+FROM jenkins/jenkins:lts-jdk21
+
+USER root
+COPY --from=maven /usr/share/maven /opt/maven
+RUN ln -s /opt/maven/bin/mvn /usr/local/bin/mvn
+USER jenkins
+\end{lstlisting}
+
+\subsection{Pipeline đầu tiên}
+
+\begin{lstlisting}[language=Jenkinsfile, caption={\texttt{Jenkinsfile} ở tuần 4 (commit \commit{8ab21c5})}]
+pipeline {
+    agent any
+
+    stages {
+        stage('Test backend') {
+            steps {
+                dir('backend') {
+                    sh 'mvn -B test'
+                }
+            }
+        }
+    }
+}
+\end{lstlisting}
+
+Job \texttt{goldcast-ci} kiểu Pipeline, đọc pipeline từ SCM, nhánh
+\texttt{*/main}, trigger Poll SCM với lịch \texttt{H/5 * * * *}.
+
+\subsection{Số đo}
+
+\begin{center}
+\begin{tabular}{lllr}
+\toprule
+Lần chạy & Trạng thái & Build duration & Maven \texttt{Total time} \\
+\midrule
+\#2 (nguội) & SUCCESS & 46 s  & \canbosung{số giây} \\
+\#3 (nóng)  & SUCCESS & 5,2 s & 1,693 s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Kiểm chứng tự kích hoạt: sau khi merge PR, build \#4 tự chạy trong vòng 5 phút,
+ghi \emph{Started by an SCM change}, thời gian 6,1 s.
+
+\subsection{So sánh hai mô hình CI}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{lXX}
+\toprule
+& GitHub Actions & Jenkins \\
+\midrule
+Hạ tầng & Do GitHub quản lý & Tự vận hành (container trên máy cá nhân) \\
+Workspace & Máy ảo mới mỗi lần & Dùng lại giữa các lần build \\
+Lần chạy nóng & 19–23 s (vẫn phải biên dịch) & 5,2 s (Maven 1,7 s) \\
+Công cụ & Runner có sẵn hàng chục công cụ & Phải tự thêm Maven, Docker \\
+Kích hoạt & Webhook sự kiện GitHub & Poll SCM 5 phút/lần \\
+Rủi ro & Chậm hơn & Build có thể xanh nhờ tàn dư của lần trước \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{Vấn đề gặp phải}
+\begin{enumerate}
+  \item Năm plugin Pipeline cài hỏng chỉ vì một plugin gốc
+        (\texttt{pipeline-groovy-lib}) bị timeout khi tải.
+  \item Build đầu chết sau 1,6 s vì \texttt{main} chưa có \texttt{Jenkinsfile}:
+        \texttt{git branch -d} không kiểm tra nhánh đã vào \texttt{main} chưa.
+  \item Ô \texttt{base} của pull request mặc định không phải \texttt{main}.
+  \item \texttt{README.md} bị xoá nhầm; CI vẫn xanh. Phát hiện nhờ đọc diff
+        (21 dòng thêm, 265 dòng xoá), khôi phục ở commit \commit{1e92507}.
+  \item Yêu cầu review chặn merge với đồ án một người $\rightarrow$ tắt review,
+        giữ yêu cầu CI xanh.
+  \item Poll SCM được tích nhưng ô Schedule trống nên không có build nào chạy.
+\end{enumerate}
+
+% =============================================================================
+\section{Tuần 5 — Pipeline sinh ra artifact}
+% =============================================================================
+
+\subsection{Image Jenkins điều khiển được Docker}
+
+\begin{lstlisting}[language=Dockerfile, caption={\texttt{jenkins/Dockerfile} hiện tại (commit \commit{3ebd18a})}]
+FROM maven:3.9-eclipse-temurin-21 AS maven
+FROM docker:27-cli AS docker
+
+FROM jenkins/jenkins:lts-jdk21
+
+USER root
+COPY --from=maven /usr/share/maven /opt/maven
+COPY --from=docker /usr/local/bin/docker /usr/local/bin/docker
+COPY --from=docker /usr/local/libexec/docker/cli-plugins /usr/local/libexec/docker/cli-plugins
+RUN ln -s /opt/maven/bin/mvn /usr/local/bin/mvn
+USER jenkins
+\end{lstlisting}
+
+So với tuần 4 có thêm hai dòng \texttt{COPY}:
+\begin{itemize}
+  \item \texttt{/usr/local/bin/docker} (commit \commit{a89dd0b}): lệnh
+        \texttt{docker} cho Jenkins. Container Jenkins được gắn
+        \texttt{/var/run/docker.sock} để điều khiển Docker daemon của máy chủ.
+  \item \texttt{cli-plugins} (commit \commit{3ebd18a}): plugin buildx, để
+        \texttt{docker build} dùng BuildKit thay vì builder cũ.
+\end{itemize}
+
+\canbosung{lệnh \texttt{docker run} dựng container Jenkins (cổng 8081, volume
+\texttt{jenkins\_home}, \texttt{-v /var/run/docker.sock:...}, \texttt{--group-add 0})
+không nằm trong repo — nên chép lại vào báo cáo, hoặc đưa vào repo dưới dạng
+script hay file compose}
+
+\subsection{Pipeline hiện tại}
+
+\begin{lstlisting}[language=Jenkinsfile, caption={\texttt{Jenkinsfile} hiện tại}]
+pipeline {
+    agent any
+
+    stages {
+        stage('Test backend') {
+            steps {
+                dir('backend') {
+                    sh 'mvn -B test'
+                }
+            }
+        }
+
+        stage('Build backend image') {
+            steps {
+                sh 'docker build -t goldcast-backend:${BUILD_NUMBER} -t goldcast-backend:latest backend/'
+            }
+        }
+
+        stage('Build frontend image') {
+            steps {
+                sh 'docker build -t goldcast-frontend:${BUILD_NUMBER} -t goldcast-frontend:latest frontend/'
+            }
+        }
+    }
+}
+\end{lstlisting}
+
+\begin{itemize}
+  \item Stage dựng image đặt \emph{sau} stage test: không đóng gói thứ chưa qua
+        kiểm thử. Đây là ranh giới giữa CI và CD.
+  \item Mỗi image mang hai tag: số build (truy vết được) và \texttt{latest}.
+\end{itemize}
+
+\subsection{Số đo}
+
+\begin{center}
+\begin{tabular}{lllll}
+\toprule
+Build & Pipeline & Builder & Trạng thái cache & Thời gian \\
+\midrule
+\#5 & test + backend            & legacy   & --                         & 2 ph 35 s \\
+\#6 & test + backend + frontend & legacy   & tải mới image nền frontend & 4 ph 05 s \\
+\#7 & test + backend + frontend & BuildKit & cache BuildKit trống       & 1 ph 16 s \\
+\#8 & test + backend + frontend & BuildKit & ấm hoàn toàn               & 6,5 s \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Ở trạng thái ổn định, toàn bộ pipeline (93 unit test và hai lần dựng image) mất
+6,5 s. Bảng này \emph{không} cho phép kết luận BuildKit nhanh hơn builder cũ bao
+nhiêu lần, vì giữa \#6 và \#7 có hai biến cùng đổi: builder và trạng thái cache.
+
+\subsection{Điều tra tính tái lập của build}
+
+\begin{center}
+\begin{tabularx}{\linewidth}{llX}
+\toprule
+Cặp so sánh & Khác biệt thật & Nguyên nhân \\
+\midrule
+Tuần 2 với \#5 & có & Máy cá nhân dùng BuildKit, Jenkins dùng builder cũ \\
+\#5 với \#6 & có & Nhãn \texttt{node:22-alpine} đã trỏ sang bản mới \\
+\#7 với \#8 & \textbf{không} & Nội dung image giống hệt \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+Kiểm bằng \texttt{docker image inspect} cho cặp \#7/\#8: danh sách mã băm các
+lớp, trường \texttt{Created}, \texttt{Config}, \texttt{History}, \texttt{RootFS}
+giống hệt; chỉ khác \texttt{LastTagTime} và \texttt{Metadata.Ref}, là thông tin
+của phiên build chứ không phải nội dung image.
+
+Kết luận: nội dung image tái lập được nếu cố định công cụ build và image nền.
+Artifact vẫn phải được giữ và luân chuyển thay vì build lại ở từng môi trường,
+vì image nền và builder có thể thay đổi mà mã nguồn không đổi.
+
+\subsection{Hạn chế đã nhận diện, chưa xử lý}
+\begin{enumerate}
+  \item \textbf{Image tích tụ}: mỗi build sinh một image mới và không tự xoá.
+  \item \textbf{\texttt{NEXT\_PUBLIC\_API\_BASE\_URL} bị cố định trong image frontend}:
+        stage dựng image không truyền \texttt{--build-arg}, nên image mang giá
+        trị mặc định \texttt{http://localhost:8080}.
+  \item \textbf{Pipeline không tự dựng lại được chính nó}: thay image Jenkins
+        vẫn phải làm thủ công.
+  \item \textbf{Quyền của Jenkins}: gắn \texttt{docker.sock} tương đương quyền
+        root trên máy chủ.
+\end{enumerate}
+
+\subsection{Bài học phương pháp}
+
+Bốn lần kết luận sai vì so sánh nhầm đại lượng: Total duration của GitHub
+Actions (tuần 3), Total time của Maven (tuần 4), so \#6 với \#7 khi cache khác
+nhau (tuần 5), và cột \texttt{IMAGE ID} (tuần 5). Cả bốn lần đều được phát hiện
+bằng cùng một cách: khi con số không khớp dự đoán, mở ra xem đại lượng đó thật
+sự đo cái gì.
+
+% =============================================================================
+\section{Danh sách cần bổ sung trước khi nộp}
+% =============================================================================
+
+\begin{itemize}
+  \item Họ tên, MSSV, lớp ở trang bìa.
+  \item Thời gian build lần đầu ở tuần 2 (xác nhận lại ý nghĩa của log
+        \texttt{tuan02-build-lan1.txt}).
+  \item Dung lượng cache Maven trên GitHub Actions (tuần 3).
+  \item Maven \texttt{Total time} của Jenkins build \#2 (tuần 4).
+  \item Ảnh minh chứng tuần 3–5: hiện \texttt{docs/anh/} chỉ có thư mục
+        \texttt{Tuan2}. Khi có ảnh, chèn bằng:
+\begin{lstlisting}[language={[LaTeX]TeX}]
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.9\linewidth]{anh/tuan03-ci-do.png}
+  \caption{CI báo đỏ khi có test cố tình sai}
+\end{figure}
+\end{lstlisting}
+  \item Lệnh \texttt{docker run} dựng container Jenkins.
+\end{itemize}
+
+\end{document}
