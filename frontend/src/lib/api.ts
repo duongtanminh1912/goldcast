@@ -10,14 +10,18 @@ import type {
 } from "./types";
 
 /**
- * Server components talk to the backend over the compose network; the browser cannot
- * resolve that hostname, so it uses the public URL. Reading both keeps one deployment
- * working from inside and outside the container without a rewrite proxy.
+ * Every API call in this app runs in a Server Component, so the real address comes
+ * from API_BASE_URL_INTERNAL, read at runtime. Nothing is baked into the image.
+ *
+ * The browser branch is deliberately an empty string -- a relative path. If someone
+ * later writes a client component that calls this module, it will fail the same way
+ * everywhere instead of working on the developer's machine and breaking on the server,
+ * which is what a hardcoded localhost:8080 here would do.
  */
 const BASE_URL =
-  (typeof window === "undefined"
-    ? process.env.API_BASE_URL_INTERNAL ?? process.env.NEXT_PUBLIC_API_BASE_URL
-    : process.env.NEXT_PUBLIC_API_BASE_URL) ?? "http://localhost:8080";
+  typeof window === "undefined"
+    ? process.env.API_BASE_URL_INTERNAL ?? "http://localhost:8080"
+    : "";
 
 /** An HTTP failure carrying the backend's problem document, when it sent one. */
 export class ApiError extends Error {

@@ -9,9 +9,8 @@ RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
 FROM node:22-alpine AS build
 WORKDIR /app
 
-# Baked into the client bundle at build time, so it must be known here, not at runtime.
-ARG NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
-ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
+# No NEXT_PUBLIC_* build arg: every API call runs server-side, so the image carries
+# no environment-specific value and the same image runs anywhere.
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY --from=deps /app/node_modules ./node_modules

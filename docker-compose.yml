@@ -49,16 +49,14 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
     container_name: goldcast-frontend
     depends_on:
       backend:
         condition: service_healthy
     environment:
-      # Server-side calls run inside the compose network; browser calls use the public URL.
+      # Every API call runs server-side, inside the compose network. The browser
+      # never talks to the backend directly, so no public backend URL is needed.
       API_BASE_URL_INTERNAL: http://backend:8080
-      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL:-http://localhost:8080}
       TZ: Asia/Ho_Chi_Minh
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
