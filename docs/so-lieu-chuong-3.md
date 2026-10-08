@@ -47,6 +47,27 @@ trong bộ số liệu: nó phân biệt được "repo có đổi" với "build
 gian; thời lượng do nội dung commit quyết định. Một đường từ #2 tới #17 sẽ gợi ý
 một xu hướng không tồn tại. Biểu đồ đúng là biểu đồ cột nhóm theo bốn bậc trên.
 
+### Hai dự đoán được ghi trước khi đo
+
+Mô hình bốn bậc ở trên được rút ra từ dữ liệu đã có, nên nó mới chỉ là **mô tả**.
+Để kiểm xem nó có phải là **hiểu cơ chế** hay không, hai lần tiếp theo được dự
+đoán trước, viết ra trước khi commit, rồi mới đo.
+
+| Build | Thay đổi | Dự đoán ghi trước | Thực tế |
+|---|---|---|---|
+| #18 | chỉ chạm `docs/` | bậc 1, 6–8 s | **7,4 s** |
+| #19 | thêm `frontend/package-lock.json` | bậc 3–4, hàng chục giây tới vài phút | **35 s** |
+
+Build #19 đáng chú ý nhất: từ 7,4 lên 35 giây mà **không một dòng mã nguồn nào
+đổi**. Chỉ thêm một file khoá phụ thuộc, làm vỡ tầng
+`COPY package.json package-lock.json* ./`, kéo theo `npm ci` phải chạy thật.
+
+Một mô hình giải thích được dữ liệu đã thấy thì dễ. Một mô hình đoán đúng dữ liệu
+chưa tồn tại thì khó hơn, và chỉ loại thứ hai mới đáng gọi là hiểu cơ chế.
+
+*Còn cần kiểm: thời gian tăng thêm của #19 có nằm đúng ở stage `Build frontend
+image` không. Tổng khớp chưa chứng minh được chỗ khớp.*
+
 ## Bảng 2 — Thời lượng từng stage
 
 Nguồn: `localhost:8081/job/goldcast-ci/<số>/stages/`.
