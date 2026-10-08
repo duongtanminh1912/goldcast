@@ -28,3 +28,11 @@ Thumbs.db
 
 # playwright-cli
 .playwright-cli/
+
+# File trung gian cua TypeScript va cong cu
+*.tsbuildinfo
+.playwright-cli/
+
+# Bao cao LaTeX soan tren Overleaf, Overleaf tu giu lich su phien ban.
+# De them mot ban trong repo la co hai ban se troi khoi nhau.
+docs/bao-cao/
