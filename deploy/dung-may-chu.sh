@@ -50,9 +50,14 @@ buoc "Swap $SWAP"
 if swapon --show 2>/dev/null | grep -q '/swapfile'; then
   echo "swapfile da bat, bo qua"
 else
-  if [ ! -f /swapfile ]; then
+  # Kiem KICH THUOC chu khong kiem su ton tai: image goc cua InterData
+  # co san /swapfile rong 0 byte, `[ ! -f ]` bo qua no roi mkswap chet.
+  CAN_BYTE=$(numfmt --from=iec "$SWAP")
+  CO_BYTE=$(stat -c %s /swapfile 2>/dev/null || echo 0)
+  if [ "$CO_BYTE" -ne "$CAN_BYTE" ]; then
+    rm -f /swapfile
     fallocate -l "$SWAP" /swapfile 2>/dev/null \
-      || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
+      || dd if=/dev/zero of=/swapfile bs=1M count=$((CAN_BYTE / 1024 / 1024)) status=none
   fi
   chmod 600 /swapfile
   mkswap /swapfile >/dev/null
