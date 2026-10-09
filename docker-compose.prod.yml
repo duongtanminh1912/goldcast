@@ -1,0 +1,80 @@
+# Compose cho may chu that. File DOC LAP, khong phai override cua
+# docker-compose.yml - de doc tron ven mot file thay vi ghep hai file
+# trong dau. Compose khong xoa duoc `ports` qua override, nen tach han.
+#
+# Khac ban dev:
+#   - khong build, chi keo image tu GHCR
+#   - KHONG publish cong nao cho db/backend/frontend
+#   - chi Caddy publish 80 va 443
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: goldcast-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: Asia/Ho_Chi_Minh
+    volumes:
+      - goldcast-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  backend:
+    image: ghcr.io/duongtanminh1912/goldcast-backend:${THE_TAG:-latest}
+    container_name: goldcast-backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      # Du lieu la tong hop, khong co nguon ngoai. Tat cai nay la web rong.
+      APP_INGEST_ENABLED: "true"
+      APP_INGEST_SEED_ON_EMPTY: "true"
+      APP_CORS_ALLOWED_ORIGINS: ${APP_CORS_ALLOWED_ORIGINS}
+      APP_ADMIN_TOKEN: ${APP_ADMIN_TOKEN}
+      TZ: Asia/Ho_Chi_Minh
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      # 60s chu khong 40s: 1 vCPU khoi dong JVM cham hon may ca nhan.
+      start_period: 60s
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/duongtanminh1912/goldcast-frontend:${THE_TAG:-latest}
+    container_name: goldcast-frontend
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      API_BASE_URL_INTERNAL: http://backend:8080
+      TZ: Asia/Ho_Chi_Minh
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: goldcast-caddy
+    depends_on:
+      - frontend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+volumes:
+  goldcast-pgdata:
+  caddy-data:
+  caddy-config:
