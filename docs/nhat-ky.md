@@ -405,3 +405,182 @@ này phơi ra lỗ hổng enum trong thiết kế cổng.
 | Jenkins build | #14 |
 
 Cổng chạy ở hai nơi: GitHub Actions chặn merge, Jenkins chặn việc đóng gói image.
+
+## Tuần 8 — Lên internet thật
+
+### Đã làm
+
+Thuê VPS, dựng máy chủ bằng script, siết SSH, build image cho đúng kiến trúc,
+đẩy lên registry, deploy, và xác minh từ bên ngoài. Cuối tuần web chạy thật tại
+`http://103.175.248.236`.
+
+Máy: InterData Platinum 1 — 1 vCPU, 2 GB RAM, 20 GB NVMe, Ubuntu 24.04 LTS,
+213.400đ/tháng (194.000đ + VAT), trả theo tháng không ràng buộc kỳ hạn. Chọn nhà
+cung cấp Việt Nam vì Azure từ chối tài khoản sinh viên và GitHub Student Pack bị
+từ chối hai lần — mọi phương án nước ngoài đều đòi thẻ quốc tế.
+
+### Ba lỗi script chỉ lộ ra khi chạy trên máy thật
+
+Hai script `deploy/dung-may-chu.sh` và `deploy/siet-ssh.sh` được viết ở tuần 7,
+đọc lại nhiều lần, và đều sai. Không lỗi nào đọc code mà thấy được.
+
+**Một — kiểm sự tồn tại thay vì kiểm trạng thái.** Bước tạo swap dùng
+`if [ ! -f /swapfile ]`. Image gốc của InterData có sẵn `/swapfile` rỗng 0 byte,
+nên điều kiện sai, khối tạo file bị bỏ qua, và `mkswap` chết với
+`swap area needs to be at least 40 KiB`. Sửa thành so sánh kích thước thật với
+kích thước cần:
+
+    CAN_BYTE=$(numfmt --from=iec "$SWAP")
+    CO_BYTE=$(stat -c %s /swapfile 2>/dev/null || echo 0)
+    if [ "$CO_BYTE" -ne "$CAN_BYTE" ]; then rm -f /swapfile; ...
+
+Dấu thời gian là thứ chỉ ra thủ phạm: file ghi `Oct 8 21:42`, đúng lúc nhà cung
+cấp khởi tạo máy, trước khi script chạy lần nào.
+
+**Hai — thứ tự đọc file cấu hình.** `siet-ssh.sh` ghi `99-goldcast.conf` vào
+`/etc/ssh/sshd_config.d/`. Nhưng sshd lấy **giá trị đầu tiên** cho mỗi từ khoá, và
+image có sẵn `50-cloud-init.conf` đặt `PasswordAuthentication yes`. File `99-` đọc
+sau nên thua. Đổi tiền tố thành `01-`. Mỉa mai là trong chính script đã có một
+đoạn comment giải thích đúng cơ chế đó, dùng để biện minh cho việc đẩy dòng
+`Include` lên dòng 1 — nhưng không áp dụng cho tên file của chính nó.
+
+**Ba — in kết quả không phải là kiểm tra.** Cả ba lần đều cùng một gốc: script
+chạy một lệnh, in kết quả ra cho người đọc, rồi đi tiếp bất kể kết quả là gì.
+Lần đầu phát hiện qua swap, lần hai qua `System clock synchronized: no`, lần ba
+qua cấu hình sshd không ăn mà script vẫn báo xong. Bản sửa thay khối in bằng
+vòng lặp so khớp và `exit 1` khi sai:
+
+    for CAN in "permitrootlogin no" "passwordauthentication no" ...; do
+      sshd -T | grep -qx "$CAN" || LOI=1
+    done
+
+Script không tự kiểm thì người phải kiểm tay, và người sẽ quên.
+
+### Kiến trúc: vấn đề không chỉ của tuần này
+
+Máy cá nhân là Apple Silicon (`arm64`), VPS là `x86_64`. Image build mặc định
+không chạy được trên máy chủ. Phải dùng `docker buildx build --platform linux/amd64`,
+tức là biên dịch qua mô phỏng QEMU.
+
+Điều đáng lo hơn: **Jenkins cũng chạy trên chính máy arm64 đó**, nên kế hoạch
+tuần 10 "Jenkins đẩy image, VPS kéo về" dính cùng bức tường. Giữ Jenkins làm
+pipeline chính thì phải chấp nhận build chéo mỗi lần merge.
+
+Hai con số build lần đầu ở bảng dưới là số **nguội** — gồm cả thời gian tải base
+image bản amd64 mà máy chưa từng có. Chúng không dùng để quyết tuần 10 được.
+Con số cần đo ở tuần 10 là: sửa một file nguồn rồi build lại, vì đó mới đúng thứ
+Jenkins làm mỗi lần merge.
+
+### Xác minh từ bên ngoài, không từ bên trong
+
+`docker compose ps` cho thấy db, backend, frontend không publish cổng nào. Nhưng
+đó là góc nhìn từ bên trong máy chủ, và cái bẫy "Docker ghi iptables vào chain
+DOCKER-USER, nằm trước rule của ufw" chính là loại lỗi mà góc nhìn bên trong
+không thấy.
+
+Phép kiểm thật là quét cổng từ một máy khác:
+
+| Cổng | Kết quả | Mong đợi |
+|---|---|---|
+| 22 | mở | SSH |
+| 80 | mở | Caddy |
+| 443 | đóng | Caddyfile tuần 8 chỉ có khối `:80`, chưa ai nghe 443 |
+| 3000 | đóng | frontend, không được phơi |
+| 5432 | đóng | Postgres, không được phơi |
+| 8080 | đóng | backend, không được phơi |
+
+Ba dòng cuối là bằng chứng thật sự của tuần này.
+
+Phép kiểm đầu tiên cho kết quả sai hoàn toàn — cả sáu cổng đều báo đóng, kể cả
+cổng 22 đang mang chính phiên SSH đó. Nguyên nhân: cờ `-G` của `nc` không được
+hỗ trợ, lệnh lỗi, và mọi nhánh rơi vào `||`. Một phép kiểm hỏng im lặng nguy hiểm
+hơn không kiểm, vì nó tạo ra niềm tin sai.
+
+### Số đo
+
+Trạng thái máy trước và sau khi deploy:
+
+| Chỉ số | Máy sạch | Sau deploy |
+|---|---|---|
+| RAM dùng | 482 MiB | 819 MiB |
+| RAM còn dùng được | 1,5 GiB | 1,1 GiB |
+| Swap | 0 B (chưa tạo) | 2,0 GiB, dùng 268 KiB |
+| Đĩa | 2,5 GB / 20 GB (14%) | 6,2 GB / 20 GB (33%) |
+
+Từng container, đo bằng `docker stats` trên máy chủ, đặt cạnh số đo cùng cách
+trên máy cá nhân ở tuần 7:
+
+| Container | Máy cá nhân (arm64) | VPS (amd64, 1 vCPU) |
+|---|---|---|
+| backend | 295,9 MiB | 310 MiB |
+| frontend | 35,17 MiB | 118,4 MiB |
+| db | 35,42 MiB | 51,73 MiB |
+| caddy | — | 51,18 MiB |
+| **Tổng** | **366,5 MiB** | **531,3 MiB** |
+
+Frontend tăng gấp ba vì lần đo trên máy cá nhân nó đang nằm không, còn trên máy
+chủ nó đã render thật ít nhất một lượt. Dự đoán trước khi đo là "khoảng 550 MiB
+cho toàn máy" — thực tế 819 MiB, hụt gần 50%. Biên an toàn vẫn đủ, nhưng hẹp hơn
+dự đoán.
+
+Build chéo kiến trúc, lần đầu, cache nguội:
+
+| Việc | Thời gian |
+|---|---|
+| Build + đẩy backend | 4 phút 05 |
+| — trong đó kéo base image amd64 | 61,5 giây |
+| Build + đẩy frontend | 2 phút 05 |
+| — trong đó `npm ci` | 24,4 giây |
+| — trong đó `npm run build` | 65,3 giây |
+
+Dự đoán trước khi đo là frontend nặng hơn backend. Sai: backend chậm gấp đôi, và
+phần lớn chênh lệch là tải base image `maven:3.9-eclipse-temurin-21` bản amd64,
+không phải biên dịch.
+
+Khác:
+
+| Chỉ số | Giá trị |
+|---|---|
+| Backend từ `up` tới `healthy` | 32 giây |
+| Đĩa còn trống | 13 GB |
+| Số lần deploy trước khi hết đĩa | ~18, nếu không dọn image cũ |
+
+### Vấn đề gặp phải
+
+**`siet-ssh.sh` mất trắng.** Script viết ở tuần 7 trong một hội thoại, đẩy lên một
+nhánh, nhưng **chưa bao giờ commit** — nhánh rỗng. Khi hội thoại đó kết thúc thì
+script biến mất, phải viết lại từ đầu. Dấu hiệu nhận ra là `git log` cho thấy
+`origin/chore/script-siet-ssh` trỏ cùng commit với `main`. Thứ không commit thì
+không tồn tại.
+
+**Đồng hồ không đồng bộ, nhưng không sao.** `timedatectl` báo
+`System clock synchronized: no`. Truy ra: timesyncd phân giải `ntp.ubuntu.com`
+thành địa chỉ IPv6, mà máy không có IPv6 — `Packet count: 0`. Ghim sang IPv4 cũng
+không khá hơn, nhà cung cấp chặn UDP 123. Nhưng `date -u` trên máy chủ khớp với
+máy cá nhân tới từng phút: hypervisor giữ đồng hồ cho máy khách. TLS tuần 9 cần
+đồng hồ đúng, không cần timesyncd — nên bỏ qua. Bài học: hỏi "cái này có thật sự
+hỏng không" trước khi đi sửa.
+
+**Package GHCR mặc định private** kể cả khi repo công khai. Phải vào đổi visibility
+cho từng package, nếu không máy chủ kéo image bị `unauthorized`.
+
+**Dán lệnh nhầm cửa sổ** nhiều lần, giữa terminal máy cá nhân và phiên SSH. Một
+lần suýt nghiêm trọng: `ssh-keygen` hỏi tên file, và dòng dán kế tiếp
+(`ssh-copy-id root@...`) bị nhận làm tên file — sinh ra một **private key nằm
+trong thư mục của repo công khai**. Xoá kịp trước khi `git add`. Cách tránh:
+dùng `-f` để lệnh không còn câu hỏi nào mà dán nhầm vào.
+
+### Bài học
+
+**Kiểm tra idempotent phải hỏi "trạng thái đã đúng chưa", không hỏi "dấu vết có
+tồn tại không".** Sự tồn tại của một file không nói gì về việc nó có đúng không.
+
+**In kết quả ra màn hình không phải là kiểm tra.** Script phải tự so khớp và tự
+dừng. Người đọc log sẽ bỏ sót, và trong CI thì không có ai đọc cả.
+
+**Xác minh phải đến từ bên ngoài hệ thống đang xác minh.** `docker compose ps`
+không chứng minh được cổng có đóng hay không; một lệnh `nc` từ máy khác thì có.
+
+**Một phép kiểm hỏng tệ hơn không kiểm**, vì nó tạo ra niềm tin sai. Cả sáu cổng
+báo đóng trong khi SSH đang chạy qua cổng 22 là dấu hiệu phải nghi ngờ công cụ,
+không nghi ngờ kết quả.
