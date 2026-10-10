@@ -1,7 +1,7 @@
-# Tuan 8: chi HTTP tren IP, chua co ten mien nen chua xin duoc chung chi.
-# Tuan 9: doi dong dau thanh ten mien, Caddy tu xin Let's Encrypt va tu
-# chuyen huong 80 sang 443. Khong phai sua gi khac trong file nay.
-:80 {
+# Caddy tu xin chung chi Let's Encrypt va tu chuyen huong HTTP sang HTTPS.
+# Khong co dong nao cau hinh TLS bang tay - do la diem manh cua Caddy so
+# voi Nginx, dang mot doan trong bao cao.
+goldcast.click, www.goldcast.click {
 	encode gzip
 	reverse_proxy frontend:3000
 }
