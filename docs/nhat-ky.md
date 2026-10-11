@@ -866,3 +866,169 @@ lần một với lần hai.
 
 **Đọc hết thông báo lỗi.** Jenkins liệt kê toàn bộ bước đang có ngay trong lỗi
 `sshagent` không tồn tại, và phương án thay thế nằm trong danh sách đó.
+
+## Tuần 11 — Cổng G2, tutorial, và bài kiểm phá đi dựng lại
+
+### Đã làm
+
+**Gắn cổng G2 vào pipeline.** `scripts/smoke.mjs` viết từ tuần 7 nhưng tới giờ
+mới được nối vào Jenkins. Nó chạy sau bước deploy, bên trong mạng nội bộ của
+compose trên máy chủ, gọi backend qua `http://backend:8080`. Thêm một phép kiểm
+trang công khai bằng `curl` tới `https://goldcast.click`.
+
+Hai lần đỏ trước khi xanh:
+
+- Build #32 đỏ vì credentials `ghcr` và `vps-deploy` chưa được tạo.
+- Build #33 đỏ với `No such DSL method 'sshagent'`. Plugin SSH Agent không nằm
+  trong bộ gợi ý mặc định của Jenkins. Thay vì cài thêm plugin, dùng
+  `withCredentials([sshUserPrivateKey(...)])` — chính thông báo lỗi đã liệt kê
+  symbol này trong danh sách khả dụng.
+
+**Viết tutorial** `docs/tutorial.md`, 455 dòng, chia hai phần: phần A chạy được
+trên máy bất kỳ không tốn tiền, phần B cần máy chủ thuê và tên miền. Mỗi bước
+kết thúc bằng một phép kiểm.
+
+**Phá máy chủ đi dựng lại từ số không.** Đây là phần chính của tuần.
+
+### Vì sao phải phá đi dựng lại
+
+Máy chủ chạy được không chứng minh tutorial đủ dùng. Trong ba ngày từ tuần 8
+tới tuần 10 có nhiều thứ được sửa bằng tay ngoài script: swapfile tạo lại thủ
+công, `.env` gõ tay, Caddy phải `restart` vì `up -d` không ăn, bản ghi DNS
+chỉnh trên web. Một số đã đưa vào script, một số có thể chỉ còn trong lịch sử
+shell. Không có cách nào phân biệt từ bên ngoài.
+
+Bài kiểm này trả lời đúng một câu: **repo có dựng lại được máy chủ không, hay
+máy chủ đang chạy chỉ vì nó tình cờ tồn tại.**
+
+Chi phí thấp bất thường, và là hệ quả của một quyết định từ tuần 2: dữ liệu giá
+vàng tự sinh, `APP_INGEST_SEED_ON_EMPTY` bật, database tự dựng lại. Không có dữ
+liệu người dùng nào để mất. Nếu có, bài kiểm này đã không dám làm.
+
+### Số đo
+
+Cài lại hệ điều hành qua Virtualizor, cùng image `ubuntu-24.04-x86_64`, cùng
+IP, cùng gói Platinum 1.
+
+| Mốc | Giờ |
+|---|---|
+| Chạm máy mới lần đầu | 21:25 |
+| Khoá SSH xong, mã nguồn về máy | 21:30 |
+| `dung-may-chu.sh` chạy xong | 21:31 |
+| Siết SSH xong, `deploy` vào được | 21:41 |
+| `.env` production sinh xong | 21:42 |
+| Bốn container chạy | 21:48 |
+| **Web sống, HTTPS, cổng đúng** | **21:52** |
+| Pipeline xanh hết, `THE_TAG=39` | 21:59 |
+
+**27 phút** từ lúc chạm máy tới lúc web sống. Dự đoán trước khi bắt đầu là 18
+phút — lệch 50%.
+
+Trạng thái máy cũ ngay trước khi xoá, lấy từ bảng Virtualizor:
+
+| | |
+|---|---|
+| Đĩa | 6,41 / 20 GB (32%) |
+| Uptime | 2 ngày 23 giờ |
+| Băng thông 3 ngày | 1,14 GB (827 MB vào, 344 MB ra) |
+
+Băng thông gần như toàn bộ là chiều **vào**, tức kéo image từ GHCR. Một trang
+hầu như không ai truy cập vẫn tốn 827 MB trong ba ngày. Đó là lý do
+`docker image prune -f` trong pipeline là cần, không phải tiện.
+
+Quét cổng từ máy khác sau khi dựng xong:
+
+```
+22 MO   80 MO   443 MO   3000 dong   5432 dong   8080 dong
+```
+
+Build #39 (xanh), thời gian từng phần:
+
+| Stage | Thời gian |
+|---|---|
+| Test backend | 1,5 s — 102 phép thử, 0 lỗi |
+| Build + đẩy backend | ~15 s |
+| Build + đẩy frontend | ~14 s |
+| Deploy | vài giây |
+| G2 | 18 phép thử |
+
+**Con số build này không dùng để so sánh được.** Jenkins chạy trên máy Mac,
+không bị đụng tới khi xoá máy chủ, nên toàn bộ cache BuildKit còn nguyên — mọi
+layer đều `CACHED`, chỉ còn thời gian đẩy lên registry. Một lần build nguội sẽ
+khác hẳn. Ghi lại để không trích nhầm vào chương 3.
+
+### Nhận xét
+
+**Ba chỗ vấp được liệt kê trước khi bắt đầu, cả ba đều đúng:**
+
+1. Host key đổi sau khi cài lại — xảy ra ngay lệnh SSH đầu tiên.
+2. `/swapfile` rỗng 0 byte của image gốc InterData — **không** xảy ra. Bản vá
+   tuần 8 (kiểm kích thước thay vì kiểm sự tồn tại) giữ được. Bằng chứng gián
+   tiếp nhưng đủ chắc: lỗi cũ là lỗi chết hẳn ở `mkswap`, và nó không xảy ra
+   trên đúng image đó.
+3. `known_hosts` cũ trong container Jenkins — xảy ra, làm đỏ build #38.
+
+Đoán trúng cả ba mà vẫn mất 6 phút cho chỗ thứ ba, vì câu lệnh khắc phục bị
+sai. **Biết trước một lỗi và sửa được nó là hai việc khác nhau.** Thứ cuối cùng
+bắt được lỗi vẫn là phép kiểm, không phải sự tiên liệu.
+
+**`|| true` che mất chính thông báo cần đọc.** Lệnh xoá host key ban đầu viết là
+`docker exec jenkins sh -c 'ssh-keygen -R <ip> || true'`. Nó thất bại vì thiếu
+`-f` nên không tìm thấy file, nhưng `|| true` nuốt mã lỗi, nên nhìn bên ngoài
+như đã chạy xong. Thêm một lớp bảo vệ vào chỗ không cần, và lớp đó giấu đi sự
+thật. Bản sửa dùng đường dẫn tuyệt đối và không có `|| true`, rồi kiểm lại bằng
+cách `grep` chính file đó chứ không tin vào lệnh vừa chạy.
+
+**Một phép kiểm có thể xanh mà không chứng minh điều nó tưởng.** Tutorial kiểm
+khoá Jenkins bằng `ssh -i ~/.ssh/jenkins_deploy deploy@<ip> 'docker ps'`. Thiếu
+`IdentitiesOnly=yes`, SSH sẽ lần lượt thử mọi khoá trong `~/.ssh` và rất có thể
+vào được bằng khoá khác — phép kiểm đạt, kết luận sai. Đây là biến thể của điều
+đã học ở tuần 10 khi đo thời gian build ba lần đều ra số hợp lệ cho câu hỏi
+không ai hỏi.
+
+**Suy luận sai từ một bằng chứng thật.** Giữa chừng tôi kết luận script chưa
+chạy vì đồng hồ trong thanh tmux còn hiện UTC trong khi script có bước đổi múi
+giờ. Bằng chứng đúng, suy luận hỏng: tiến trình tmux khởi động trước khi múi
+giờ đổi, và một tiến trình đang chạy giữ nguyên TZ cũ. Mất vài phút đi nhầm
+hướng.
+
+**tmux không đáng cho việc này.** Dùng tmux để script sống sót khi rớt mạng là
+đúng về nguyên tắc, nhưng một cú cuộn chuột làm tmux nhảy vào chế độ xem lại
+lịch sử và nuốt hết phím gõ — mất 5 phút không hiểu vì sao màn hình đứng yên.
+Bỏ tmux, chạy thẳng `ssh may-chu 'bash script'` từ máy cá nhân, output chảy về
+một cửa sổ duy nhất. Script đã idempotent nên rớt mạng chỉ cần chạy lại.
+
+**Bọc lệnh từ xa thành `ssh dich 'lenh'` loại bỏ hẳn một lớp lỗi.** Từ tuần 8
+tới nay đã dán nhầm cửa sổ khoảng sáu lần. Khi lệnh tự mang theo đích đến thì
+không còn cửa sổ nào để nhầm. Chỉ bước siết SSH là bắt buộc giữ hai cửa sổ, vì
+cần một phiên root mở sẵn làm đường lui.
+
+### Vấn đề gặp phải
+
+Mười một lỗ hổng của tutorial, thu được bằng cách làm theo nó trên máy trắng:
+
+| Mục | Thiếu gì |
+|---|---|
+| Toàn file | 24 chỗ dùng `<IP>` kiểu ngoặc nhọn — với shell đó là cú pháp chuyển hướng, dán vào là `zsh: parse error` |
+| Bảng đầu | Dùng `<TEN_GITHUB>` ở B6 nhưng không có trong bảng chú giải |
+| B2 | Không có bước `ssh-keygen -R` sau khi cài lại máy |
+| B2 | Mặc định máy chưa có khoá SSH; máy đã có khoá thì bước `ssh-keygen` vừa thừa vừa nguy hiểm, vì nó hỏi ghi đè và dòng dán tiếp theo thành câu trả lời |
+| B2 | `ssh-copy-id` thiếu `-i`, sẽ đẩy mọi khoá công khai tìm được lên tài khoản root, gồm cả khoá chỉ dành cho `deploy` |
+| B3 | Không ghi log lần chạy script |
+| B5 | Viết các lệnh dưới dạng chạy bằng root, trong khi B4 ngay trước đó vừa tắt đăng nhập root |
+| B5 | Heredoc tạo `.env` kẹt khi dán vào terminal; thay bằng `printf` một dòng |
+| B7 | Thiếu phép quét cổng từ ngoài sau khi stack lên |
+| B9 | Thiếu hẳn bước xoá `known_hosts` trong container Jenkins |
+| B9 | Phép kiểm khoá Jenkins thiếu `IdentitiesOnly=yes` nên có thể đạt giả |
+
+Chỗ cuối là loại nguy hiểm nhất trong bảng: một phép kiểm chạy đúng, báo xanh,
+mà không chứng minh điều nó tưởng mình đang chứng minh.
+
+Còn tồn: `timedatectl` vẫn báo `System clock synchronized: no` trên máy mới,
+giống hệt tuần 8. Giờ hiện tại vẫn đúng nên chưa ảnh hưởng, nhưng nếu đồng hồ
+trôi thì Let's Encrypt sẽ từ chối chứng chỉ. Chưa xử lý.
+
+Chứng chỉ Let's Encrypt cho `goldcast.click` phải cấp lại vì chứng chỉ cũ nằm
+trên đĩa máy cũ. Đây là lần cấp thứ hai trong tuần; giới hạn trùng bộ tên miền
+là khoảng 5 lần mỗi 7 ngày, nên không thể lặp lại bài kiểm này nhiều lần trong
+cùng một tuần.
