@@ -584,3 +584,136 @@ không chứng minh được cổng có đóng hay không; một lệnh `nc` t�
 **Một phép kiểm hỏng tệ hơn không kiểm**, vì nó tạo ra niềm tin sai. Cả sáu cổng
 báo đóng trong khi SSH đang chạy qua cổng 22 là dấu hiệu phải nghi ngờ công cụ,
 không nghi ngờ kết quả.
+
+## Tuần 9 — Tên miền và HTTPS
+
+### Đã làm
+
+Mua tên miền, trỏ DNS về máy chủ, đổi một dòng trong Caddyfile. Cuối tuần web
+chạy tại `https://goldcast.click` với chứng chỉ Let's Encrypt, và `http://`
+tự chuyển sang `https://`.
+
+Phần kỹ thuật đúng như dự tính: ngắn. Thời gian thực tế tiêu vào việc mua tên
+miền và vào một lỗi khiến cấu hình mới không được nạp.
+
+### Tên miền: định mua miễn phí, kết cục trả tiền
+
+VNNIC có chương trình "Gương mặt số" cấp miễn phí tên miền `.id.vn` hai năm cho
+công dân Việt Nam 18–23 tuổi. Đủ điều kiện, eKYC bằng CCCD, đặt hàng
+`goldcast.id.vn` thành công — hoá đơn 1.590.000đ giảm còn 0đ, trạng thái "Đã
+thanh toán", mã đơn 10092616818.
+
+Nhưng tên miền không hiện trong trang quản lý. Panel báo "Không tìm thấy dữ
+liệu!". Kiểm bằng `dig +short NS goldcast.id.vn` cũng không ra gì.
+
+Nguyên nhân phát hiện hôm sau: **đăng nhập nhầm tài khoản.** Lúc đặt hàng là
+một tài khoản, lúc mở trang quản lý là tài khoản khác (`guonatd546` so với
+`tminh1912`). Tên miền không mất, nó nằm ở tài khoản kia. Mất gần một tiếng đi
+tìm một thứ không hỏng.
+
+Quyết định: mua `goldcast.click` 19.000đ/năm để đi tiếp, không chờ. Suất
+`.id.vn` miễn phí vẫn còn nguyên ở tài khoản cũ, lấy lại lúc nào cũng được.
+
+Một thứ suýt mua mà bỏ: **DNSSEC 39.000đ**. Let's Encrypt không đòi DNSSEC, và
+cấu hình sai thì tên miền ngừng phân giải hoàn toàn. Thêm một thứ có thể hỏng
+mà không đổi lại được gì.
+
+### DNS: cảnh báo của nhà cung cấp so với thực tế
+
+Trang cấu hình DNS của Tenten ghi rõ: *"Thiết lập bản ghi DNS sẽ có hiệu lực
+nhanh nhất trong vòng 3 giờ. Chậm nhất 24 giờ."*
+
+Thực tế: **khoảng 10 phút**. Thêm hai bản ghi A (`@` và `www`) trỏ về
+`103.175.248.236`, chờ mười phút là `dig` trả về đúng.
+
+Ghi lại vì nó là một dạng số liệu: con số nhà cung cấp công bố là biên an toàn
+của họ, không phải thời gian thật. Nhưng không được *dựa* vào thực tế nhanh —
+Let's Encrypt giới hạn 5 lượt xin chứng chỉ thất bại mỗi giờ cho một tên miền,
+nên nguyên tắc vẫn là `dig` xanh rồi mới đụng tới Caddy.
+
+### Lỗi: sửa file bind mount không làm container nạp lại
+
+Caddyfile đổi, commit, merge, `git pull` trên máy chủ, rồi
+`docker compose up -d caddy`. Lệnh chạy xong, không báo lỗi. Nhưng log Caddy
+không có một dòng nào về chứng chỉ.
+
+Đọc dấu thời gian trong log mới thấy: dòng `serving initial configuration` cách
+dòng cuối **gần 17 tiếng**. Đó vẫn là tiến trình khởi động từ hôm trước.
+
+Lý do: **Caddyfile là bind mount, không phải một phần cấu hình container.**
+Compose so sánh image và cấu hình service để quyết định có tạo lại container
+hay không. File nằm trong volume đổi nội dung thì compose không thấy gì khác,
+nên để nguyên. Caddy tiếp tục chạy với cấu hình cũ đã nạp sẵn trong bộ nhớ.
+
+`docker compose restart caddy` giải quyết xong trong một lệnh.
+
+Loại lỗi này khó thấy nhất: **lệnh thành công, không có thông báo nào, và không
+làm gì cả.** Nếu không đọc dấu thời gian trong log mà chỉ nhìn "không có lỗi"
+thì sẽ đi tìm nguyên nhân ở DNS, ở tường lửa, ở Let's Encrypt — tức là ở mọi
+chỗ trừ chỗ hỏng.
+
+### Chứng chỉ
+
+Toàn bộ cấu hình TLS trong dự án này:
+
+    goldcast.click, www.goldcast.click {
+        encode gzip
+        reverse_proxy frontend:3000
+    }
+
+Không có đường dẫn tới file `.crt`, không có `ssl_certificate`, không có cron
+gia hạn, không có `certbot`. Caddy đọc tên miền ở dòng đầu, tự xin chứng chỉ
+qua ACME, tự gia hạn, và tự dựng chuyển hướng HTTP sang HTTPS.
+
+Đây là điểm đáng đặt cạnh Nginx trong chương so sánh công cụ: với Nginx, cùng
+việc này cần cài certbot, viết block server cho HTTP-01 challenge, trỏ đường dẫn
+chứng chỉ, và đặt cron gia hạn — bốn thứ phải cấu hình đúng và phải nhớ kiểm
+lại sau 90 ngày.
+
+### Số đo
+
+| Chỉ số | Giá trị |
+|---|---|
+| DNS lan (Tenten công bố) | nhanh nhất 3 giờ, chậm nhất 24 giờ |
+| DNS lan (đo thực tế) | ~10 phút |
+| Từ lệnh `restart` tới hai chứng chỉ | **2,5 giây** |
+| Số chứng chỉ | 2 (`goldcast.click`, `www.goldcast.click`) |
+| Dòng cấu hình TLS viết tay | **0** |
+| Chi phí tên miền | 19.000đ/năm |
+
+Phản hồi HTTP sau khi xong:
+
+| Yêu cầu | Kết quả |
+|---|---|
+| `https://goldcast.click` | `HTTP/2 200`, `via: 1.1 Caddy` |
+| `http://goldcast.click` | `HTTP/1.1 308 Permanent Redirect` |
+| `alt-svc` | `h3=":443"` — Caddy bật HTTP/3 mà không ai yêu cầu |
+
+Dự đoán trước khi chạy là mã `301`. Thực tế `308`, và khác biệt có thật: `301`
+cho phép trình duyệt đổi `POST` thành `GET` khi chuyển hướng, `308` bắt buộc
+giữ nguyên method. Với một trang chỉ có `GET` thì không khác gì, nhưng Caddy
+chọn mặc định đúng hơn.
+
+### Bot tìm ra máy chủ
+
+Trong log Caddy có hàng loạt dòng `warn` từ `infrawatch/1.0` và
+`GenomeCrawlerd/1.0` (Nokia), gõ vào `host: ""` và `192.0.2.1` — tức là quét
+theo dải IP chứ không theo tên miền.
+
+Máy chủ lên IP công khai lúc 20:26 ngày 9/10; dòng bot đầu tiên trong log là
+vài giờ sau đó. Không phải tấn công, chỉ là nền nhiễu của internet. Nhưng nó
+là lý do cụ thể cho những việc đã làm ở tuần 8: tắt đăng nhập root, tắt mật
+khẩu, và không publish cổng nào ngoài 80/443.
+
+### Bài học
+
+**Kiểm xem mình đang đăng nhập bằng tài khoản nào** trước khi kết luận một
+dịch vụ đã trả tiền bị hỏng. Một tiếng đi tìm lỗi không tồn tại.
+
+**Lệnh chạy thành công không có nghĩa là nó đã làm gì.** `up -d` trả về 0,
+không cảnh báo, và không nạp lại cấu hình. Bằng chứng duy nhất là dấu thời gian
+trong log. Cùng họ với ba lỗi tuần 8: phải kiểm *kết quả*, không kiểm *lệnh có
+chạy không*.
+
+**Con số nhà cung cấp công bố là biên an toàn, không phải số đo.** 3–24 giờ so
+với 10 phút thực tế. Dùng để lên kế hoạch thì được, dùng để kết luận thì không.
