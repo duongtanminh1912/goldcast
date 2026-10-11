@@ -61,9 +61,14 @@ pipeline {
 
             }
             steps {
-                sshagent(['vps-deploy']) {
+                // Dung withCredentials thay sshagent: khong can plugin SSH Agent.
+                // No ghi khoa ra file tam, xoa sau khi khoi lenh ket thuc.
+                withCredentials([sshUserPrivateKey(
+                        credentialsId: 'vps-deploy',
+                        keyFileVariable: 'SSH_KEY')]) {
                     sh """
-                        ssh -o StrictHostKeyChecking=accept-new ${VPS} '
+                        mkdir -p ~/.ssh
+                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=accept-new ${VPS} '
                             set -e
                             cd /opt/goldcast
                             git pull --ff-only
