@@ -25,12 +25,15 @@ một phép kiểm và phát hiện ra ba bước sau đó.
 
 Thay bằng giá trị của bạn khi làm theo.
 
-| Chỗ trống | Đồ án này dùng |
+Phần B dùng năm biến shell. Gán một lần ở đầu mỗi phiên terminal (xem đầu Phần B).
+
+| Biến | Đồ án này dùng |
 |---|---|
-| `<REPO>` | `github.com/duongtanminh1912/goldcast` |
-| `<IP>` | `103.175.248.236` |
-| `<TEN_MIEN>` | `goldcast.click` |
-| `<REGISTRY>` | `ghcr.io/duongtanminh1912` |
+| `REPO` | `github.com/duongtanminh1912/goldcast` |
+| `IP` | `103.175.248.236` |
+| `TEN_MIEN` | `goldcast.click` |
+| `REGISTRY` | `ghcr.io/duongtanminh1912` |
+| `TEN_GITHUB` | `duongtanminh1912` |
 
 ---
 
@@ -42,7 +45,7 @@ Cần Docker Desktop (hoặc Docker Engine) và Git. Không cần cài Java, Nod
 PostgreSQL — tất cả chạy trong container.
 
 ```bash
-git clone https://github.com/<REPO>.git
+git clone https://github.com/duongtanminh1912/goldcast.git
 cd goldcast
 cp .env.example .env
 ```
@@ -131,6 +134,20 @@ server tự chạy khi có commit. Phần A hết.
 
 # Phần B — đưa lên internet
 
+Phần B dùng năm biến shell. **Gán lại ở đầu mỗi phiên terminal mới**, kể cả sau
+khi `ssh` sang máy chủ — biến shell không đi theo kết nối:
+
+```bash
+IP=103.175.248.236
+TEN_MIEN=goldcast.click
+TEN_GITHUB=duongtanminh1912
+REPO=duongtanminh1912/goldcast
+REGISTRY=ghcr.io/duongtanminh1912
+```
+
+Thay năm giá trị bằng của bạn. Sau đó mọi khối lệnh phía dưới dán thẳng được,
+không phải sửa gì bên trong lệnh.
+
 ## B1. Thuê máy chủ
 
 Cấu hình tối thiểu đã đo được là đủ: **1 vCPU, 2 GB RAM, 20 GB đĩa**. Cả stack
@@ -152,17 +169,41 @@ Khi đặt hàng, chọn image **`ubuntu-24.04-x86_64`** — không phải bản
 
 ## B2. Đẩy khoá SSH lên trước khi làm gì khác
 
-Máy bạn chưa có khoá thì tạo:
+**Nếu máy chủ vừa được cài lại**, nó sinh host key mới và SSH sẽ từ chối kết nối
+với `REMOTE HOST IDENTIFICATION HAS CHANGED`. Xoá bản ghi cũ trước:
+
+```bash
+ssh-keygen -R $IP
+```
+
+Xem máy đã có khoá chưa:
+
+```bash
+ls -l ~/.ssh/id_ed25519
+```
+
+**Chưa có** thì tạo. **Đã có thì bỏ qua lệnh dưới** — chạy lại nó sẽ hỏi ghi đè,
+và dòng bạn dán tiếp theo trở thành câu trả lời cho câu hỏi đó, dẫn tới một
+khoá riêng mang tên rất lạ nằm trong thư mục làm việc:
 
 ```bash
 ssh-keygen -t ed25519 -C "goldcast" -f ~/.ssh/id_ed25519
-ssh-copy-id root@<IP>
 ```
+
+Đẩy khoá công khai lên:
+
+```bash
+ssh-copy-id -i ~/.ssh/id_ed25519.pub root@$IP
+```
+
+`-i` là bắt buộc. Thiếu nó, `ssh-copy-id` đẩy **mọi** khoá công khai tìm thấy
+trong `~/.ssh` lên tài khoản root, gồm cả khoá riêng dành cho Jenkins mà bạn sẽ
+tạo ở B9 — khoá đó chỉ được phép vào bằng tài khoản `deploy`.
 
 **Kiểm — đừng bỏ qua:**
 
 ```bash
-ssh -o PasswordAuthentication=no root@<IP>
+ssh -o PasswordAuthentication=no root@$IP
 ```
 
 Vào được mà không hỏi mật khẩu máy chủ. Nếu bước này chưa đạt mà vẫn đi tiếp
@@ -173,7 +214,7 @@ tới B4, bạn sẽ tự khoá mình ra khỏi máy.
 ```bash
 apt update && apt install -y git tmux
 tmux new -s setup
-git clone https://github.com/<REPO>.git
+git clone https://github.com/$REPO.git
 cd goldcast
 cat deploy/dung-may-chu.sh
 ```
@@ -181,10 +222,23 @@ cat deploy/dung-may-chu.sh
 Đọc script trước khi chạy. Rồi:
 
 ```bash
-bash deploy/dung-may-chu.sh
+bash deploy/dung-may-chu.sh 2>&1 | tee /root/dung-may-chu.log
 ```
 
-Chạy trong `tmux` để mất mạng giữa chừng script vẫn tiếp tục.
+`tee` giữ lại toàn bộ output vào file, để đọc lại sáu dòng kiểm cuối khi màn
+hình đã trôi.
+
+Chạy trong `tmux` để mất mạng giữa chừng script vẫn tiếp tục. **Đừng cuộn chuột
+trong tmux khi script đang chạy** — nó nhảy vào chế độ xem lại lịch sử, màn hình
+đứng yên và mọi phím gõ bị nuốt, rất dễ tưởng là máy treo. Bấm `q` để thoát ra.
+
+Không muốn dùng tmux thì chạy thẳng từ máy cá nhân, output vẫn chảy về:
+
+```bash
+ssh root@$IP 'bash /root/goldcast/deploy/dung-may-chu.sh 2>&1 | tee /root/dung-may-chu.log'
+```
+
+Rớt mạng thì script chết, nhưng nó idempotent nên chạy lại y nguyên là xong.
 
 Script làm sáu việc: đặt múi giờ, tạo swap 2 GB, cài Docker, tạo user `deploy`,
 mở ufw cho 22/80/443, và in lại kết quả để kiểm.
@@ -208,7 +262,7 @@ visudo -c
 Trước khi chạy, **chứng minh user `deploy` vào được**, từ máy cá nhân:
 
 ```bash
-ssh deploy@<IP> 'sudo -n id && echo SUDO_OK'
+ssh deploy@$IP 'sudo -n id && echo SUDO_OK'
 ```
 
 Phải ra `uid=0(root)` kèm `SUDO_OK`. Chưa ra thì **dừng lại**.
@@ -225,7 +279,7 @@ dừng với lỗi nếu sai.
 **Kiểm:** bốn dòng `ok`. Rồi từ **cửa sổ khác** trên máy cá nhân:
 
 ```bash
-ssh deploy@<IP> 'echo VAO_DUOC'
+ssh deploy@$IP 'echo VAO_DUOC'
 ```
 
 Ra `VAO_DUOC` thì mới đóng phiên root. Không ra thì phiên root vẫn còn, hoàn
@@ -236,26 +290,34 @@ tác bằng `rm /etc/ssh/sshd_config.d/01-goldcast.conf && systemctl reload ssh`
 Sau khi khoá SSH, `/root` không với tới được nữa. Mã nguồn phải nằm ở chỗ
 `deploy` sở hữu:
 
+B4 vừa tắt đăng nhập root, nên từ đây mọi thứ đi qua `deploy` và `sudo`. Chạy
+từ máy cá nhân:
+
 ```bash
-mkdir -p /opt/goldcast
-chown deploy:deploy /opt/goldcast
-sudo -u deploy git clone https://github.com/<REPO>.git /opt/goldcast
+ssh deploy@$IP
+sudo mkdir -p /opt/goldcast
+sudo chown deploy:deploy /opt/goldcast
+git clone https://github.com/$REPO.git /opt/goldcast
 ```
+
+Clone bằng `deploy` chứ không bằng root, để không sinh ra file thuộc sở hữu root
+trong thư mục mà `deploy` phải ghi được.
 
 Tạo `.env` production. Bí mật sinh thẳng vào file, không qua màn hình:
 
 ```bash
 cd /opt/goldcast
 umask 077
-cat > .env <<EOF
-POSTGRES_DB=goldcast
-POSTGRES_USER=goldcast
-POSTGRES_PASSWORD=$(openssl rand -hex 24)
-APP_ADMIN_TOKEN=$(openssl rand -hex 32)
-APP_CORS_ALLOWED_ORIGINS=https://<TEN_MIEN>
-EOF
+printf 'POSTGRES_DB=goldcast\nPOSTGRES_USER=goldcast\nPOSTGRES_PASSWORD=%s\nAPP_ADMIN_TOKEN=%s\nAPP_CORS_ALLOWED_ORIGINS=https://%s\n' \
+  "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" "$TEN_MIEN" > .env
 chmod 600 .env
 ```
+
+Dùng `printf` chứ không dùng heredoc: dán một khối heredoc vào terminal rất hay
+kẹt ở dấu nhắc `heredoc>` và phải Ctrl+C bỏ dở.
+
+`umask 077` đặt trước khi tạo để file kín ngay từ lúc sinh ra, không hở một nhịp
+rồi mới `chmod`.
 
 **Kiểm:** `ls -l .env` ra `-rw-------`, và `grep -c . .env` ra `5`. Đừng `cat`
 file đó ra.
@@ -274,21 +336,21 @@ uname -m
 Ra `arm64` thì phải build chéo:
 
 ```bash
-docker login ghcr.io -u <TEN_GITHUB>
-docker buildx build --platform linux/amd64 -t <REGISTRY>/goldcast-backend:latest --push ./backend
-docker buildx build --platform linux/amd64 -t <REGISTRY>/goldcast-frontend:latest --push ./frontend
+docker login ghcr.io -u $TEN_GITHUB
+docker buildx build --platform linux/amd64 -t $REGISTRY/goldcast-backend:latest --push ./backend
+docker buildx build --platform linux/amd64 -t $REGISTRY/goldcast-frontend:latest --push ./frontend
 ```
 
 Token đăng nhập là Personal Access Token **classic** với scope `write:packages`.
 
 Sau khi đẩy, package trên GHCR **mặc định private** kể cả khi repo công khai.
-Vào `github.com/<TEN_GITHUB>?tab=packages`, mở từng package → Package settings
+Vào `github.com/<tên-github-của-bạn>?tab=packages`, mở từng package → Package settings
 → Change visibility → Public.
 
 **Kiểm:** từ máy chủ kéo về được và đúng kiến trúc:
 
 ```bash
-ssh deploy@<IP> 'docker pull <REGISTRY>/goldcast-backend:latest && docker image inspect <REGISTRY>/goldcast-backend:latest --format "{{.Architecture}}"'
+ssh deploy@$IP 'docker pull $REGISTRY/goldcast-backend:latest && docker image inspect $REGISTRY/goldcast-backend:latest --format "{{.Architecture}}"'
 ```
 
 Phải ra `amd64`.
@@ -296,7 +358,7 @@ Phải ra `amd64`.
 ## B7. Chạy stack trên máy chủ
 
 ```bash
-ssh deploy@<IP>
+ssh deploy@$IP
 docker compose -f /opt/goldcast/docker-compose.prod.yml up -d
 docker compose -f /opt/goldcast/docker-compose.prod.yml ps
 ```
@@ -309,7 +371,7 @@ từ máy chủ:
 
 ```bash
 for p in 22 80 443 3000 5432 8080; do
-  nc -z -w 2 <IP> "$p" >/dev/null 2>&1 && echo "$p MO" || echo "$p dong"
+  nc -z -w 2 $IP "$p" >/dev/null 2>&1 && echo "$p MO" || echo "$p dong"
 done
 ```
 
@@ -322,27 +384,27 @@ bất kể ufw nói gì. `docker compose ps` nhìn từ bên trong nên không t
 
 ## B8. Tên miền và HTTPS
 
-Mua tên miền, rồi thêm hai bản ghi A trỏ về `<IP>`:
+Mua tên miền, rồi thêm hai bản ghi A trỏ về IP máy chủ của bạn:
 
 | Loại | Tên | Giá trị | TTL |
 |---|---|---|---|
-| A | `@` | `<IP>` | 300 |
-| A | `www` | `<IP>` | 300 |
+| A | `@` | IP máy chủ | 300 |
+| A | `www` | IP máy chủ | 300 |
 
 **Kiểm, và chờ cho tới khi đạt:**
 
 ```bash
-dig +short <TEN_MIEN>
-dig +short www.<TEN_MIEN>
+dig +short $TEN_MIEN
+dig +short www.$TEN_MIEN
 ```
 
-Cả hai phải ra `<IP>`. **Đừng đụng vào Caddy trước khi đạt** — Let's Encrypt
+Cả hai phải ra đúng IP máy chủ. **Đừng đụng vào Caddy trước khi đạt** — Let's Encrypt
 giới hạn 5 lượt xin chứng chỉ thất bại mỗi giờ cho một tên miền.
 
 Rồi sửa dòng đầu `deploy/Caddyfile`:
 
 ```
-<TEN_MIEN>, www.<TEN_MIEN> {
+ten-mien-cua-ban.com, www.ten-mien-cua-ban.com {
 	encode gzip
 	reverse_proxy frontend:3000
 }
@@ -362,8 +424,8 @@ cả, và lệnh vẫn trả về thành công.
 **Kiểm:**
 
 ```bash
-curl -I https://<TEN_MIEN>
-curl -I http://<TEN_MIEN>
+curl -I https://$TEN_MIEN
+curl -I http://$TEN_MIEN
 ```
 
 Cái đầu `HTTP/2 200`, cái sau `308` chuyển sang `https://`. Caddy tự xin chứng
@@ -376,14 +438,18 @@ Tạo khoá riêng cho Jenkins — **không dùng khoá cá nhân**, vì Jenkins
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/jenkins_deploy -N "" -C "jenkins"
-ssh-copy-id -i ~/.ssh/jenkins_deploy.pub deploy@<IP>
+ssh-copy-id -i ~/.ssh/jenkins_deploy.pub deploy@$IP
 ```
 
 **Kiểm:**
 
 ```bash
-ssh -i ~/.ssh/jenkins_deploy deploy@<IP> 'docker ps && echo OK'
+ssh -i ~/.ssh/jenkins_deploy -o IdentitiesOnly=yes deploy@$IP 'docker ps && echo OK'
 ```
+
+`IdentitiesOnly=yes` là mấu chốt. Thiếu nó, SSH thử lần lượt mọi khoá trong
+`~/.ssh` và rất có thể vào được bằng khoá cá nhân — phép kiểm báo đạt mà không
+chứng minh được điều cần chứng minh.
 
 Trong Jenkins, Manage Jenkins → Credentials → System → Global, thêm hai mục:
 
@@ -411,12 +477,30 @@ thấy, và nó hiện nguyên trong log.
 vào `.env` trên máy chủ. Nhờ đó trả lời được "đang chạy bản nào" bằng
 `grep THE_TAG .env`, và rollback là sửa một dòng rồi `up -d`.
 
+**Nếu máy chủ từng được cài lại**, container Jenkins vẫn nhớ host key cũ và
+stage Deploy sẽ đỏ với `Host key verification failed`. Jenkinsfile dùng
+`StrictHostKeyChecking=accept-new`, tên này dễ gây hiểu nhầm: nó chỉ tự chấp
+nhận host **mới tinh**, còn host đã biết mà đổi khoá thì vẫn chặn. Xoá bản ghi
+cũ, dùng đường dẫn tuyệt đối vì `docker exec` không chắc đặt `HOME`:
+
+```bash
+docker exec jenkins ssh-keygen -f /var/jenkins_home/.ssh/known_hosts -R $IP
+```
+
+Rồi kiểm bằng chính file đó, đừng tin vào lệnh vừa chạy:
+
+```bash
+docker exec jenkins sh -c 'grep -c '"$IP"' /var/jenkins_home/.ssh/known_hosts; echo "ma thoat: $?"'
+```
+
+Phải ra `0` và `ma thoat: 1`.
+
 **Kiểm:** đẩy một commit bất kỳ lên `main`, **không bấm gì trong Jenkins**.
 Trong 5 phút phải có build mới, và trang build ghi **"Started by an SCM change"**
 chứ không phải "Started by user". Rồi:
 
 ```bash
-ssh deploy@<IP> 'grep THE_TAG /opt/goldcast/.env'
+ssh deploy@$IP 'grep THE_TAG /opt/goldcast/.env'
 ```
 
 Số phải khớp với số build vừa chạy.
