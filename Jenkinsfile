@@ -81,6 +81,35 @@ pipeline {
                 }
             }
         }
+
+        stage('G2 - kiem noi dung sau deploy') {
+            when {
+                expression { return (env.BRANCH_NAME ?: 'main') == 'main' }
+            }
+            steps {
+                // Kiem 1: trang cong khai co phuc vu khong.
+                // -f lam curl tra ma loi khi HTTP >= 400, nho do stage do theo.
+                sh 'curl -fsS -o /dev/null -w "trang cong khai: %{http_code}\n" https://goldcast.click'
+
+                // Kiem 2: noi dung API co giu dung bat bien khong.
+                // Chay TRONG mang compose: Caddy chi dinh tuyen ve frontend nen
+                // /api/v1 khong ra toi internet. Dung container node vi Jenkins
+                // khong cai Node.
+                withCredentials([sshUserPrivateKey(
+                        credentialsId: 'vps-deploy',
+                        keyFileVariable: 'SSH_KEY')]) {
+                    sh """
+                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=accept-new ${VPS} '
+                            docker run --rm \\
+                              --network goldcast_default \\
+                              -v /opt/goldcast/scripts:/s:ro \\
+                              node:22-alpine \\
+                              node /s/smoke.mjs http://backend:8080
+                        '
+                    """
+                }
+            }
+        }
     }
 
     post {
