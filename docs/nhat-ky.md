@@ -717,3 +717,152 @@ chạy không*.
 
 **Con số nhà cung cấp công bố là biên an toàn, không phải số đo.** 3–24 giờ so
 với 10 phút thực tế. Dùng để lên kế hoạch thì được, dùng để kết luận thì không.
+
+## Tuần 10 — Jenkins tự deploy
+
+### Đã làm
+
+Chuyển mấy lệnh làm tay ở tuần 8 vào `Jenkinsfile`: build chéo kiến trúc, đẩy
+GHCR, SSH sang máy chủ, dựng lại stack. Cuối tuần một commit vào `main` tự đi
+hết đường tới production mà không ai gõ lệnh nào.
+
+Khoá SSH riêng cho Jenkins (`ed25519`, không passphrase), hai credential trong
+Jenkins (`vps-deploy` và `ghcr`), và một token GHCR riêng — không dùng lại khoá
+hay token cá nhân.
+
+### Bốn lần đo, ba lần đo nhầm
+
+Câu hỏi cần trả lời rất gọn: **Jenkins mất bao lâu cho mỗi lần merge?** Mất bốn
+lần đo mới ra, và ba lần đầu đều cho ra một con số hợp lệ cho một câu hỏi không
+ai hỏi.
+
+| Lần | Thực tế đo được | backend | frontend |
+|---|---|---|---|
+| 1 | Tải base image amd64 lần đầu | 4:05 | 2:05 |
+| 2 | Builder buildx mới, cache rỗng | 3:57 | 1:50 |
+| 3 | Không có gì thay đổi | 0:08 | 0:07 |
+| 4 | **Có sửa mã nguồn, cache ấm** | **0:46** | **1:19** |
+
+**Lần 2** chậm vì lần 1 đã tạo một builder `buildx` mới (`docker buildx create
+--name multiarch`). Builder mới có kho cache riêng, và nó rỗng — toàn bộ base
+image tải về ở lần 1 nằm trong builder cũ, không dùng lại được. Dấu vết trong
+log: `booting buildkit`, `pulling image moby/buildkit`.
+
+**Lần 3** ra 8 giây vì mọi layer đều `CACHED`. Lệnh tạo thay đổi là
+`echo "" >> file.java` rồi `git checkout` hoàn nguyên. Lần sau chạy lại đúng
+lệnh đó cho ra **cùng một nội dung file** — cùng hash, cùng cache. Thay đổi
+phải *mới*, không chỉ cần *có*. Lần 4 dùng `echo "// $(date +%s)" >>` nên nội
+dung không bao giờ trùng.
+
+Mỗi lần đo đều chạy trót lọt và in ra một con số. Không có lỗi nào để mà sửa.
+Đó là lý do loại sai này khó bắt hơn hẳn một lệnh chạy hỏng.
+
+### Chi phí thật của build chéo kiến trúc
+
+Máy cá nhân `arm64`, máy chủ `x86_64`, nên mọi image phải build qua mô phỏng
+QEMU. Phạt đo được:
+
+| Bước | Native | Dưới QEMU | Tỉ lệ |
+|---|---|---|---|
+| `mvn clean package` | 5,4s | 22,3s | **4,1×** |
+| `npm run build` | — | 65,8s | — |
+
+`npm run build` được đo ba lần độc lập: 65,3s trên Mac, 65,8s trên Mac lần
+khác, 67,5s trong Jenkins. Chênh dưới 2 giây — đủ ổn định để trích dẫn.
+
+Và một kết quả không ngờ: **thời gian build trong Jenkins khớp với trên máy
+cá nhân**.
+
+| | Trên Mac | Trong Jenkins |
+|---|---|---|
+| `mvn clean package` | 22,3s | 22,7s |
+| `npm run build` | 65,8s | 67,5s |
+
+Vì Jenkins chạy trong container có mount `/var/run/docker.sock`, nên nó dùng
+**chung một Docker daemon** với máy host — chung cả kho image lẫn cache. Jenkins
+không có môi trường build riêng; nó chỉ là một client khác của cùng daemon đó.
+
+Điều này đáng đặt cạnh phần so sánh với GitHub Actions ở chương 3: runner của
+GitHub sạch mỗi lần chạy, nên không bao giờ có 46 giây; Jenkins ở đây thừa
+hưởng cache của máy cá nhân, nên có. Cùng một `Jenkinsfile`, hai con số khác
+hẳn nhau, và khác biệt không nằm trong file.
+
+### Ba lần chạy, hai lần đỏ
+
+**#32 đỏ** — credentials chưa tạo. Lỗi của người vận hành, không phải của mã.
+
+**#33 đỏ** — `No such DSL method 'sshagent'`. Plugin SSH Agent không nằm trong
+bộ plugin mặc định của Jenkins. Nhưng thông báo lỗi liệt kê luôn mọi bước đang
+có, và trong đó có `withCredentials` với kiểu `sshUserPrivateKey` — làm đúng
+việc cần: ghi khoá ra file tạm, xoá sau khi khối lệnh kết thúc. Đổi sang dùng
+cái đó, không cài plugin, không khởi động lại Jenkins.
+
+Đáng ghi vì nó là một lựa chọn kiến trúc nhỏ: **thông báo lỗi của Jenkins tự
+liệt kê phương án thay thế**, nếu chịu đọc hết thay vì chỉ đọc dòng đầu.
+
+**#34 xanh**, 1 phút 30. Nhưng commit đó chỉ sửa `Jenkinsfile`, mà file này
+không nằm trong build context của `backend/` hay `frontend/` — nên cả hai image
+đều CACHED. 1:30 là **pipeline đầy đủ khi mã nguồn không đổi**. Pipeline có sửa
+code thật ước chừng 3 phút 10. Mốc trong kế hoạch là dưới 10 phút.
+
+### Deploy theo số build, không theo `latest`
+
+`.env` trên máy chủ được pipeline ghi lại mỗi lần:
+
+    THE_TAG=34
+
+Compose đọc `${THE_TAG:-latest}`, nên container luôn chạy đúng image của một
+build cụ thể. Hai hệ quả:
+
+**Trả lời được câu "đang chạy bản nào"** bằng `grep THE_TAG .env`. Deploy
+`latest` thì không ai biết, vì `latest` là một cái tên di động.
+
+**Rollback là một dòng**: sửa `THE_TAG` về số cũ, `docker compose up -d`. Image
+cũ vẫn còn trên GHCR.
+
+Pipeline cũng gắn cả hai tag `:34` và `:latest` cho mỗi image — số build để
+deploy và truy vết, `latest` để tiện kéo tay khi cần.
+
+### Bảo mật
+
+**Token không lộ trong log.** Lệnh đăng nhập viết bằng nháy đơn:
+
+    sh 'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin'
+
+Nháy đơn nên Groovy không nội suy; shell mới mở biến, và Jenkins che được. Log
+in ra `+ echo ****`. Dùng nháy kép thì token bị nhúng thẳng vào chuỗi lệnh
+trước khi Jenkins nhìn thấy, và nó sẽ hiện nguyên trong console.
+
+**`docker logout` đặt trong `post { always }`** nên chạy cả khi pipeline đỏ.
+
+**Hạn chế chưa xử lý:** khoá deploy của Jenkins không có passphrase và vào được
+production với `sudo` không mật khẩu. Ai lấy được file khoá thì có máy chủ.
+Cách siết đúng là thêm `restrict,command="..."` vào `authorized_keys` để khoá
+chỉ chạy được đúng một lệnh. Chọn không làm ở tuần này vì nó thêm một chỗ có
+thể hỏng vào đúng lúc đang dựng thứ mới — nhưng ghi lại ở đây, cùng chỗ với sáu
+giới hạn của G1.
+
+### Số đo
+
+| Chỉ số | Giá trị |
+|---|---|
+| Pipeline, mã nguồn không đổi | 1 phút 30 |
+| Pipeline, có sửa mã nguồn (ước từ số đo) | ~3 phút 10 |
+| Mốc trong kế hoạch | dưới 10 phút |
+| Phạt QEMU với Maven | 4,1× |
+| Số stage | 5 |
+| Số lần chạy để pipeline xanh | 3 |
+
+### Bài học
+
+**Một phép đo chạy trót lọt vẫn có thể đo nhầm thứ.** Ba lần liên tiếp, mỗi lần
+ra một con số hợp lệ, không lần nào trả lời đúng câu hỏi. Cách bắt được là viết
+câu hỏi ra trước — *"Jenkins mất bao lâu mỗi lần merge?"* — rồi hỏi con số vừa
+có đúng là câu trả lời cho nó không.
+
+**Thay đổi dùng để thử phải là thay đổi mới, không chỉ là có thay đổi.** Hai
+lần chạy cùng một lệnh sinh ra cùng một nội dung, và cache không phân biệt được
+lần một với lần hai.
+
+**Đọc hết thông báo lỗi.** Jenkins liệt kê toàn bộ bước đang có ngay trong lỗi
+`sshagent` không tồn tại, và phương án thay thế nằm trong danh sách đó.
