@@ -264,3 +264,130 @@ Hai bảng này cho thấy điều đáng nói nhất: **Jenkins làm nhiều vi
 thời gian ngắn hơn** — nó còn đóng gói hai Docker image mà GitHub Actions không
 làm. Nhưng nó làm được vậy nhờ tái dùng trạng thái của lần trước, tức là nó
 **không kiểm chứng được** điều mà runner sạch kiểm chứng được.
+
+## Bổ sung: số đo tuần 2–3 và tuần 10–11
+
+Phần này gom các số đo còn nằm rải rác trong ảnh chụp màn hình và log, kèm
+**điều kiện đo** của từng con số. Điều kiện quan trọng ngang con số: phần lớn
+sai lầm khi so sánh CI đến từ việc đem một lần chạy cache nguội đọ với một lần
+cache nóng.
+
+### Điều kiện chung
+
+| | |
+|---|---|
+| Máy cá nhân | MacBook Pro, kiến trúc arm64 |
+| Máy chủ | VPS 1 vCPU / 2 GB, x86\_64 |
+| GitHub Actions | runner `ubuntu-latest`, x86\_64 |
+| Jenkins | chạy trong Docker trên chính máy Mac, dùng chung Docker daemon của host |
+
+### Build Docker trên máy cá nhân
+
+| Lệnh | Cache | Thời gian |
+|---|---|---|
+| `docker compose build --no-cache` (cả 2 image) | nguội hoàn toàn | **2 ph 15,5 s** |
+| `docker compose up -d --build` | nóng | **36,0 s** |
+
+Chênh **3,8 lần**. Đây là lý do mọi con số build phải ghi kèm trạng thái cache,
+nếu không thì vô nghĩa.
+
+### Chạy `mvn test` ở ba nơi
+
+| Nơi | Số phép thử | Thời gian Maven | Ghi chú |
+|---|---|---|---|
+| Máy cá nhân (23/09) | 93 | 35,0 s | biên dịch lại từ đầu |
+| GitHub Actions (24/09) | 93 | 26,1 s | cache `setup-java` 59 MB |
+| Jenkins, build #39 (11/10) | 102 | 1,5 s | **không so sánh được** |
+
+Con số 1,5 giây của Jenkins **không phải** bằng chứng Jenkins nhanh hơn. Log
+ghi rõ `Nothing to compile - all classes are up to date`: workspace của Jenkins
+còn nguyên từ lần build trước, nên nó chỉ chạy lại phép thử chứ không biên dịch
+gì. Đem con số này đọ với 26,1 giây của GitHub Actions là so hai việc khác nhau.
+
+Tương tự, toàn bộ thời gian build image trong build #39 (backend ~15 s,
+frontend ~14 s) đều rơi vào trạng thái mọi layer đều `CACHED`, chỉ còn thời
+gian đẩy lên registry. Jenkins chạy trên máy Mac nên việc cài lại máy chủ không
+đụng tới cache của nó.
+
+Số phép thử tăng từ 93 lên 102 trong khoảng 23/09 đến 11/10. Hai con số đều
+đúng, chỉ khác thời điểm.
+
+### Phân rã một job GitHub Actions
+
+| Bước | Thời gian |
+|---|---|
+| Set up job | 2 s |
+| `actions/checkout@v4` | 0 s |
+| `actions/setup-java@v4` | 1 s |
+| Chạy test backend | 33 s |
+| Post `setup-java` | 2 s |
+| Post `checkout` | 1 s |
+| Complete job | 0 s |
+| **Tổng job** | **40 s** |
+
+Khoảng 7 giây là chi phí cố định của nền tảng, không liên quan tới mã nguồn.
+Với một job 33 giây thì đó là **21% chi phí phụ**.
+
+### Nhiễu: bốn lần chạy lại trên cùng một commit
+
+Cùng commit `8501278`, không sửa một dòng nào, bấm Re-run bốn lần:
+
+| Lần | Tổng | Riêng job `backend-test` |
+|---|---|---|
+| 1 | 1 ph 15 s | 34 s |
+| 2 | 26 s | 21 s |
+| 3 | 24 s | 19 s |
+| 4 | 29 s | 23 s |
+
+Lần đầu chậm gấp ba vì cache nguội. Ba lần sau đều nóng, nhưng vẫn dao động
+19–23 giây, tức khoảng **±10%** quanh trung bình 21 giây.
+
+**Hệ quả cho chương 3:** so sánh Jenkins với GitHub Actions bằng một lần chạy
+mỗi bên là vô nghĩa, vì chênh lệch 10% có thể đến hoàn toàn từ nhiễu của hạ
+tầng. Mọi so sánh phải chạy lặp ít nhất ba lần ở trạng thái cache nóng, và phải
+nói rõ đang so cái gì.
+
+### Bằng chứng cổng chất lượng thật sự chặn
+
+Hai thứ dưới đây không phải số đo mà là bằng chứng, và chúng trả lời trực tiếp
+yêu cầu 3 và 4 của đề bài.
+
+**Phép thử cố tình sai làm đỏ CI.** `CiGateTest.coTinhSaiDeKiemTraCongCI` được
+viết để luôn thất bại:
+
+```
+[ERROR] CiGateTest.coTinhSaiDeKiemTraCongCI:10
+        Test nay co tinh sai - dung de chung minh CI biet chan
+        ==> expected: <1> but was: <2>
+[ERROR] Tests run: 94, Failures: 1, Errors: 0, Skipped: 0
+[INFO] BUILD FAILURE
+Error: Process completed with exit code 1.
+```
+
+Job đỏ sau 18 giây. Một cổng chỉ biết báo xanh thì không chứng minh được gì;
+phải thấy nó báo đỏ đúng lúc cần đỏ.
+
+**Nhánh chính thật sự được bảo vệ.** Thử đẩy thẳng một commit rỗng vào `main`:
+
+```
+remote: error: GH006: Protected branch update failed for refs/heads/main.
+remote: - Changes must be made through a pull request.
+remote: - Required status check "backend-test" is expected.
+ ! [remote rejected] main -> main (protected branch hook declined)
+```
+
+Luật chặn hoạt động ở phía máy chủ GitHub, không phải một quy ước tự giác.
+
+### Giả lập kiến trúc
+
+| Chế độ | Thời gian build Maven |
+|---|---|
+| Bản địa arm64 | 5,4 s |
+| Giả lập amd64 qua QEMU | 22,3 s |
+| Hệ số | **4,1 lần** |
+
+Con số này chỉ đúng ở lần đo thứ tư. Ba lần trước lần lượt đo nhầm: thời gian
+kéo base image, thời gian của một builder có cache rỗng, và một lần trúng cache
+hoàn toàn vì nội dung file sửa ra giống hệt lần trước nên BuildKit coi là không
+đổi. Cả ba lần đều chạy trót lọt và đều cho ra một con số hợp lệ cho một câu
+hỏi không ai đặt ra.
