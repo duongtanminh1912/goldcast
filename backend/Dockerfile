@@ -18,8 +18,7 @@ RUN apk add --no-cache tzdata \
     && addgroup -S app \
     && adduser -S -G app app
 
-COPY --from=build /build/target/*.jar app.jar
-RUN chown -R app:app /app
+COPY --from=build --chown=app:app /build/target/*.jar app.jar
 USER app
 
 EXPOSE 8080
