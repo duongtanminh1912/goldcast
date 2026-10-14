@@ -8,6 +8,15 @@ pipeline {
     }
 
     stages {
+        stage('Lay ma commit') {
+            steps {
+                script {
+                    env.SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
+                    echo "Commit dang build: ${env.SHA}"
+                }
+            }
+        }
+
         stage('Test backend') {
             steps {
                 dir('backend') {
@@ -36,6 +45,7 @@ pipeline {
                 sh """
                     docker buildx build --platform linux/amd64 \
                       -t ${REG}/goldcast-backend:${TAG} \
+                      -t ${REG}/goldcast-backend:${env.SHA} \
                       -t ${REG}/goldcast-backend:latest \
                       --push backend/
                 """
@@ -47,6 +57,7 @@ pipeline {
                 sh """
                     docker buildx build --platform linux/amd64 \
                       -t ${REG}/goldcast-frontend:${TAG} \
+                      -t ${REG}/goldcast-frontend:${env.SHA} \
                       -t ${REG}/goldcast-frontend:latest \
                       --push frontend/
                 """
