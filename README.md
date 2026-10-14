@@ -1,17 +1,165 @@
-# GoldCast
-
 [![CI](https://github.com/duongtanminh1912/goldcast/actions/workflows/ci.yml/badge.svg)](https://github.com/duongtanminh1912/goldcast/actions/workflows/ci.yml)
+
+# GoldCast
 
 **Đây là một đồ án về quy trình DevOps.** Ứng dụng theo dõi giá vàng bên dưới là
 *đối tượng* mà quy trình xây dựng, kiểm thử, đóng gói và triển khai — không phải
 mục tiêu của đồ án.
 
-Nếu bạn tới đây để xem cách dựng một pipeline CI/CD từ con số không, phần đáng đọc là
-[Quy trình DevOps](#quy-trình-devops) và [nhật ký từng tuần](docs/nhat-ky.md).
+Một thay đổi đi từ `git push` tới production đang chạy thật, không có bước nào gõ tay.
 
 > **Giá vàng ở đây là dữ liệu tổng hợp, không phải giá thật.**
 > Hệ thống tự sinh chuỗi giá mô phỏng khi database rỗng. Đừng dùng con số nào trong
 > này để ra quyết định tài chính.
+
+Nếu bạn tới đây để xem cách dựng một pipeline CI/CD từ con số không:
+[Quy trình DevOps](#quy-trình-devops) · [nhật ký từng tuần](docs/nhat-ky.md) ·
+[số liệu đo được](docs/so-lieu-chuong-3.md) · [hướng dẫn dựng lại từ đầu](docs/tutorial.md)
+
+---
+
+## Quy trình DevOps
+
+```
+git push
+   │
+   ├──► GitHub Actions ───────────────────────────────────┐
+   │      mvn test  (gồm cổng G1)                         │
+   │      npm run build                                   ├──► xanh / đỏ trên pull request
+   │      docker build  (không push)                      │
+   │                                                       ┘
+   │
+   └──► Jenkins  (poll nhánh main mỗi 5 phút)
+          mvn test  (gồm cổng G1)
+          docker buildx --platform linux/amd64  ──►  GHCR
+          ssh deploy@vps:  docker compose pull && up -d
+          cổng G2:  scripts/smoke.mjs gọi API thật
+          docker image prune
+```
+
+### Hai công cụ, hai vai trò khác nhau
+
+Không phải hai lựa chọn thay thế nhau:
+
+| | GitHub Actions | Jenkins |
+|---|---|---|
+| Thấy pull request | **có**, nên chặn được merge | không, chỉ theo dõi `main` |
+| Môi trường | sạch mỗi lần | bền vững — giữ `~/.m2` và `target/` giữa các lần chạy |
+| Sản phẩm | tín hiệu xanh hoặc đỏ | **image Docker đẩy lên GHCR + triển khai thật** |
+| Chạy ở đâu | hạ tầng GitHub | máy cá nhân, sau router gia đình |
+
+Jenkins nằm sau router gia đình nên không nhận được webhook, phải poll `main` mỗi 5
+phút — mà poll thì chỉ theo dõi được nhánh, không đánh giá được pull request. Cách phân
+vai trên là **hệ quả của một ràng buộc kỹ thuật**, không phải lựa chọn tuỳ ý.
+
+### Hai cổng chất lượng tự phát triển
+
+**G1 — hợp đồng API.** Đối chiếu DTO Java với khai báo TypeScript của frontend. Kiểu
+TypeScript bị xoá lúc biên dịch nên không gì đối chiếu chúng với JSON thật: đổi tên một
+trường ở backend thì `mvn test` xanh, `tsc` xanh, còn người dùng thấy ô trống. Cổng chạy
+hai chặng — so tên kiểu, rồi duyệt đồ thị kiểu để **so tên từng trường**. Nằm trong
+`mvn test` nên GitHub Actions chặn được merge. Chạy mất 0,029 giây.
+
+→ [`ApiContractTest.java`](backend/src/test/java/vn/goldcast/api/dto/ApiContractTest.java)
+
+**G2 — nội dung API.** Script độc lập nhận `BASE_URL`, gọi API thật sau khi triển khai và
+kiểm **bất biến** thay vì giá trị, vì dữ liệu là tổng hợp. Ví dụ:
+`worldVndPerGram × troyOunceInGrams` phải bằng `usdPerOunce × vndPerUsd` — nối ba trường ở
+ba khối khác nhau của cùng một phản hồi, nên công thức quy đổi sai là lộ ngay.
+
+→ [`scripts/smoke.mjs`](scripts/smoke.mjs)
+
+Cả hai cổng đều đã được **kiểm chứng bằng cách cố tình làm hỏng**: đổi tên một trường DTO
+để xem G1 có đỏ không, sửa một hằng số quy đổi để xem G2 có bắt được không. Một cổng chưa
+bao giờ đỏ thì không phân biệt được với một cổng không làm gì cả.
+
+### Triển khai
+
+| | |
+|---|---|
+| Máy chủ | VPS 1 vCPU / 2 GB RAM / 20 GB — 213.400đ/tháng |
+| Tên miền + HTTPS | 19.000đ/năm; chứng chỉ do Caddy tự xin và tự gia hạn |
+| Registry | GitHub Container Registry (GHCR), miễn phí cho repo công khai |
+| Cổng mở ra internet | **chỉ 22, 80, 443** — đã quét từ một máy khác để xác nhận |
+| Người dùng triển khai | `deploy`, không phải `root` |
+
+Máy chủ được dựng bằng script chạy lại được, không gõ tay — để việc xoá sạch và dựng lại
+từ đầu là chuyện vài phút thay vì vài giờ: [`deploy/`](deploy/)
+
+Toàn bộ quy trình đã được **kiểm chứng bằng cách huỷ máy chủ và dựng lại từ con số không**
+theo đúng tài liệu. Mất 27 phút, phát hiện 10 lỗi trong tài liệu, tất cả đã sửa.
+[Hướng dẫn dựng lại khi hết hạn VPS](docs/dung-lai-khi-het-vps.md)
+
+### Số liệu đo được
+
+Thời lượng build biến thiên gần 50 lần (5 đến 245 giây) trên cùng một pipeline. Biến giải
+thích không phải số lượng test, mà là **build context của Docker có thay đổi hay không**.
+Mô hình bốn bậc rút ra từ đó đã đoán đúng bốn lần liên tiếp, ghi trước khi đo.
+
+| Phép đo | Kết quả |
+|---|---|
+| `docker compose build` lạnh so với ấm | 2m15,5s so với 36,0s (3,8 lần) |
+| Jenkins so với GitHub Actions, **cùng lạnh** | 36,9s so với 34,0s |
+| Jenkins so với GitHub Actions, **cùng ấm** | 1,70s so với 26,1s |
+| Image backend, trước và sau khi gộp `chown` vào `COPY` | 500 MB → 393 MB |
+| Image frontend trên production | 308 MB |
+| Bộ nhớ cả stack sau 3 ngày chạy | 531 MiB |
+
+Dòng thứ hai và thứ ba quan trọng hơn vẻ ngoài của chúng. So Jenkins ấm với GitHub Actions
+lạnh cho ra "nhanh hơn 15 lần", và con số đó **sai**: đo lạnh với lạnh thì hai bên gần như
+bằng nhau. Thứ tạo ra chênh lệch là **tính bền vững của môi trường chạy**, không phải tốc
+độ của công cụ. Nhiễu phép đo cũng khác nhau — Jenkins ±0,3%, GitHub Actions ±10% ngay cả
+khi ấm — nên mọi chênh lệch dưới 10% trên GitHub Actions là vô nghĩa.
+
+Chi tiết kèm nguồn của từng con số: [`docs/so-lieu-chuong-3.md`](docs/so-lieu-chuong-3.md)
+
+### Hạn chế đã biết
+
+Liệt kê trước khi bị hỏi:
+
+| Hạn chế | Hệ quả |
+|---|---|
+| **Không có giám sát** | Hệ thống chết lúc 2 giờ sáng thì không ai biết |
+| **G2 chạy sau khi triển khai** | Lúc nó đỏ thì bản lỗi đã lên production |
+| **Không tự động quay lui** | Phải sửa bằng tay khi G2 đỏ |
+| **Một máy chủ, không dự phòng** | Máy chết là dịch vụ chết; mỗi lần triển khai gián đoạn vài giây |
+| **Khoá triển khai không passphrase** | Bắt buộc vì Jenkins chạy tự động; khoá đó vào thẳng production |
+| **Jenkins gắn `/var/run/docker.sock`** | Quyền tương đương quản trị trên máy chạy Jenkins |
+| **Frontend không có test trong CI** | Logic nghiệp vụ nằm ở backend, nhưng đây vẫn là lỗ hổng |
+| **Không có khoá chống chạy song song** | Hai build cùng lúc có thể triển khai chồng lên nhau |
+
+Máy 1 vCPU không chạy nổi hai bản ứng dụng cùng lúc, nên triển khai không gián đoạn và
+cổng chặn trước khi triển khai đều nằm ngoài tầm của phần cứng này.
+
+---
+
+## Chạy thử
+
+```bash
+git clone https://github.com/duongtanminh1912/goldcast && cd goldcast
+cp .env.example .env
+make up            # hoặc: docker compose up -d --build
+```
+
+| Dịch vụ  | URL                                  |
+|----------|--------------------------------------|
+| Frontend | http://localhost:3000                |
+| API      | http://localhost:8080/api/v1         |
+| Swagger  | http://localhost:8080/swagger-ui.html |
+| Health   | http://localhost:8080/actuator/health |
+
+Lần khởi động đầu, backend chạy ingest ngay sau khi sẵn sàng. Nếu lấy được dữ liệu thật thì
+dùng dữ liệu thật; nếu không (không có mạng, nguồn đổi cấu trúc) nó sinh **dữ liệu mô phỏng
+có tính xác định** để ứng dụng vẫn chạy được — xem phần [Dữ liệu mô phỏng](#dữ-liệu-mô-phỏng).
+
+```bash
+make logs           # xem log
+make backend-test   # chạy unit test backend
+make seed           # gọi ingest thủ công
+make clean          # dừng và xoá volume database
+```
+
+---
 
 ## Ứng dụng làm gì
 
@@ -29,84 +177,16 @@ Spring Boot 3.3 · Java 21
 PostgreSQL 16
 ```
 
-## Quy trình DevOps
-
-Hai công cụ, hai vai trò khác nhau — không phải hai lựa chọn thay thế nhau:
-
-| | GitHub Actions | Jenkins |
-|---|---|---|
-| Thấy pull request | **có**, nên chặn được merge | không, chỉ theo dõi `main` |
-| Môi trường | sạch mỗi lần | bền vững, chạy test nhanh hơn 5–20 lần |
-| Sản phẩm | tín hiệu xanh hoặc đỏ | **image Docker gắn tag theo số build** |
-
-Jenkins chạy sau router gia đình nên không nhận được webhook, phải poll `main` mỗi 5
-phút — mà poll thì chỉ theo dõi được nhánh, không đánh giá được pull request. Cách phân
-vai trên là hệ quả của ràng buộc kỹ thuật đó, không phải lựa chọn tuỳ ý.
-
-### Hai cổng tự phát triển
-
-**G1 — hợp đồng API.** Đối chiếu DTO Java với khai báo TypeScript của frontend. Kiểu
-TypeScript bị xoá lúc biên dịch nên không gì đối chiếu chúng với JSON thật: đổi tên một
-trường ở backend thì `mvn test` xanh, `tsc` xanh, còn người dùng thấy ô trống. Cổng nằm
-trong `mvn test` nên GitHub Actions chặn được merge. Chạy mất 0,029 giây.
-
-→ [`ApiContractTest.java`](backend/src/test/java/vn/goldcast/api/dto/ApiContractTest.java)
-
-**G2 — nội dung API.** Script độc lập nhận `BASE_URL`, gọi API thật và kiểm **bất biến**
-thay vì giá trị, vì dữ liệu là tổng hợp. Ví dụ: `worldVndPerGram × troyOunceInGrams` phải
-bằng `usdPerOunce × vndPerUsd` — nối ba trường ở ba khối khác nhau của cùng một phản hồi,
-nên công thức quy đổi sai là lộ ngay. *Đã viết và kiểm chứng, chưa nối vào pipeline.*
-
-→ [`scripts/smoke.mjs`](scripts/smoke.mjs)
-
-### Số liệu đo được
-
-Thời lượng build biến thiên gần 50 lần (5 đến 245 giây) trên cùng một pipeline. Biến giải
-thích không phải số lượng test, mà là **build context của Docker có thay đổi hay không**.
-Mô hình bốn bậc rút ra từ đó đã đoán đúng bốn lần liên tiếp, ghi trước khi đo.
-
-Chi tiết kèm nguồn của từng con số: [`docs/so-lieu-chuong-3.md`](docs/so-lieu-chuong-3.md)
-
-### Triển khai
-
-Máy chủ dựng bằng script chạy lại được, không gõ tay — để việc xoá và dựng lại từ đầu
-là chuyện vài phút: [`deploy/`](deploy/)
-
-## Chạy thử
-
-```bash
-git clone <repo> && cd goldcast
-cp .env.example .env
-make up            # hoặc: docker compose up -d --build
-```
-
-| Dịch vụ  | URL                                  |
-|----------|--------------------------------------|
-| Frontend | http://localhost:3000                |
-| API      | http://localhost:8080/api/v1         |
-| Swagger  | http://localhost:8080/swagger-ui.html |
-| Health   | http://localhost:8080/actuator/health |
-
-Lần khởi động đầu, backend chạy ingest ngay sau khi sẵn sàng. Nếu lấy được dữ liệu thật thì
-dùng dữ liệu thật; nếu không (không có mạng, nguồn đổi cấu trúc) nó sinh **dữ liệu mô phỏng
-có tính xác định** để ứng dụng vẫn chạy được — xem phần [Dữ liệu mô phỏng](#dữ-liệu-mô-phỏng).
-
-Lệnh hữu ích khác:
-
-```bash
-make logs           # xem log
-make backend-test   # chạy unit test backend
-make seed           # gọi ingest thủ công
-make clean          # dừng và xoá volume database
-```
-
----
-
-## Cấu trúc
+### Cấu trúc
 
 ```
 goldcast/
-├── docker-compose.yml
+├── Jenkinsfile              pipeline triển khai
+├── docker-compose.yml       môi trường phát triển
+├── docker-compose.prod.yml  môi trường production (kéo image từ GHCR)
+├── deploy/                  Caddyfile + script dựng máy chủ + script siết SSH
+├── scripts/smoke.mjs        cổng G2
+├── docs/                    nhật ký, số liệu, tutorial dựng lại từ đầu
 ├── backend/
 │   └── src/main/java/vn/goldcast/
 │       ├── domain/      Instrument, PricePoint, ForecastRun, ForecastPoint
@@ -241,6 +321,9 @@ Khi so sánh, hệ thống dùng giá thế giới và tỷ giá **có hiệu l�
 nước đó**, không phải giá mới nhất: so giá niêm yết Chủ nhật với giá đóng cửa thứ Hai là so
 một mức giá với thông tin chưa tồn tại ở thời điểm đó.
 
+Chính công thức quy đổi này là thứ cổng G2 kiểm, và nó đã được kiểm chứng bằng cách cố tình
+sửa sai hằng số 31,1034768 để xem cổng có đỏ không.
+
 ---
 
 ## Cấu hình
@@ -253,10 +336,18 @@ Mọi thứ nằm trong `.env` hoặc biến môi trường:
 | `APP_INGEST_SEED_ON_EMPTY` | `true` | Sinh dữ liệu mô phỏng cho chuỗi trống. **Tắt khi chạy thật** |
 | `APP_INGEST_CRON` | `0 7 * * * *` | Lịch ingest (hàng giờ, phút thứ 7) |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Origin được phép gọi API |
-| `NEXT_PUBLIC_API_BASE_URL` | `http://localhost:8080` | URL API **trình duyệt** gọi tới |
+| `APP_ADMIN_TOKEN` | rỗng | Token cho `/api/v1/admin/**` |
+| `API_BASE_URL_INTERNAL` | `http://backend:8080` | URL backend mà **frontend gọi từ phía máy chủ** |
+
+Frontend gọi API hoàn toàn ở phía máy chủ, bên trong mạng của compose. Trình duyệt không bao
+giờ nói chuyện trực tiếp với backend, nên không cần công khai URL backend ra ngoài — và đó
+cũng là lý do cổng 8080 đóng hoàn toàn trên production.
 
 Tham số mô hình nằm trong `backend/src/main/resources/application.yml` dưới `app.forecast`:
 `min-history`, `max-horizon`, `backtest-min-train`, `backtest-max-origins`, `max-train-window`.
+
+Schema database do **Flyway** quản lý (`backend/src/main/resources/db/migration`), không phải
+`ddl-auto` — để schema trên máy phát triển và trên production chắc chắn giống nhau.
 
 ---
 
@@ -281,6 +372,7 @@ cd backend && mvn test
 
 Bộ test tập trung vào phần toán và phần parse — hai nơi lỗi âm thầm gây thiệt hại nhất:
 
+- `ApiContractTest` — **cổng G1**, đối chiếu DTO Java với khai báo TypeScript
 - `ForecasterTest` — từng mô hình trên chuỗi đã biết đáp án; AR(p) được kiểm bằng cách khôi
   phục hệ số của một quá trình AR(1) sinh sẵn
 - `BacktesterTest` — Drift phải có sai số 0 trên đường thẳng, sai số phải tăng theo bước
@@ -293,18 +385,34 @@ Bộ test tập trung vào phần toán và phần parse — hai nơi lỗi âm 
 
 ---
 
-## Trước khi đưa lên production
+## Trước khi đưa lên production thật
 
-- [ ] `APP_INGEST_SEED_ON_EMPTY=false` — tắt dữ liệu mô phỏng
+Danh sách này đã làm xong trên môi trường đang chạy, giữ lại để ai dựng bản sao còn biết:
+
+- [x] `APP_INGEST_SEED_ON_EMPTY=false` — tắt dữ liệu mô phỏng
+- [x] Đổi mật khẩu Postgres, sinh thẳng vào `.env` trên máy chủ, không đi qua màn hình
+- [x] Giới hạn `APP_CORS_ALLOWED_ORIGINS` về đúng domain thật
+- [x] Đóng mọi cổng trừ 22, 80, 443 — và **quét từ máy khác** để xác nhận, vì Docker ghi
+      luật vào chuỗi `DOCKER-USER` nằm trước ufw
 - [ ] Đặt authentication cho `/api/v1/admin/**`: nó gọi ra ngoài và ghi vào database
-- [ ] Đổi mật khẩu Postgres, dùng secret manager thay vì `.env`
-- [ ] Giới hạn `APP_CORS_ALLOWED_ORIGINS` về đúng domain thật
-- [ ] Kiểm tra lại `app.providers.sjc.url` còn sống; đặt cảnh báo khi ingest trả 0 dòng nhiều
-      lượt liên tiếp — feed chết trông giống hệt feed yên ắng
-- [ ] Cân nhắc đổi `spring.jpa.hibernate.ddl-auto` sang `validate` sau khi đã xác nhận mapping
-      khớp schema (hiện đang là `none`; Flyway là nguồn chân lý của schema)
-- [ ] Thêm bảng ngày lễ Việt Nam nếu cần nhãn ngày chính xác quanh Tết — hiện `TradingCalendar`
-      chỉ bỏ qua thứ Bảy và Chủ nhật
+- [ ] Đặt cảnh báo khi ingest trả 0 dòng nhiều lượt liên tiếp — feed chết trông giống hệt
+      feed yên ắng
+- [ ] Thêm bảng ngày lễ Việt Nam nếu cần nhãn ngày chính xác quanh Tết — hiện
+      `TradingCalendar` chỉ bỏ qua thứ Bảy và Chủ nhật
+
+---
+
+## Ba điều rút ra
+
+Bỏ hết tên công cụ đi thì còn lại:
+
+1. **Một phép đo có thể chạy hoàn hảo mà vẫn trả lời sai câu hỏi.** Con số so sánh Jenkins
+   với GitHub Actions chỉ đúng ở lần đo thứ tư; ba lần trước đều chạy trót lọt và đều cho ra
+   số hợp lệ, cho một câu hỏi không ai đặt ra.
+2. **Kiểm bằng hành vi, không kiểm bằng nhãn.** Không tin `ufw status`, không tin một lệnh
+   trả về 0, và không kiểm từ bên trong hệ thống đang được kiểm.
+3. **Thứ chưa được kiểm chứng thì chưa tồn tại.** Tài liệu chưa ai làm theo là bản nháp; cổng
+   chưa bao giờ đỏ là cổng không làm gì.
 
 ---
 
