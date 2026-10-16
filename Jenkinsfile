@@ -1,6 +1,12 @@
 pipeline {
     agent any
 
+    options {
+        // Hai build khong duoc deploy chong len nhau: buoc quay lui doc tag
+        // tu mot file tren VPS, hai build song song se ghi de len nhau.
+        disableConcurrentBuilds()
+    }
+
     environment {
         REG = 'ghcr.io/duongtanminh1912'
         VPS = 'deploy@103.175.248.236'
@@ -83,6 +89,9 @@ pipeline {
                             set -e
                             cd /opt/goldcast
                             git pull --ff-only
+                            if grep -q "^THE_TAG=" .env; then
+                              grep "^THE_TAG=" .env | cut -d= -f2 > \$HOME/.goldcast-tag-truoc
+                            fi
                             sed -i "/^THE_TAG=/d" .env
                             echo "THE_TAG=${TAG}" >> .env
                             docker compose -f docker-compose.prod.yml up -d
@@ -118,6 +127,32 @@ pipeline {
                               node /s/smoke.mjs http://backend:8080
                         '
                     """
+                }
+            }
+            post {
+                failure {
+                    // G2 do nghia la ban vua len production co van de.
+                    // Quay lui ve tag da duoc Deploy ghi lai truoc do.
+                    withCredentials([sshUserPrivateKey(
+                            credentialsId: 'vps-deploy',
+                            keyFileVariable: 'SSH_KEY')]) {
+                        sh """
+                            ssh -i \$SSH_KEY -o StrictHostKeyChecking=accept-new ${VPS} '
+                                set -e
+                                cd /opt/goldcast
+                                if [ ! -f \$HOME/.goldcast-tag-truoc ]; then
+                                  echo "KHONG co tag truoc do - khong quay lui duoc"
+                                  exit 1
+                                fi
+                                TAG_CU=\$(cat \$HOME/.goldcast-tag-truoc)
+                                echo "G2 do - quay lui tu ${TAG} ve \$TAG_CU"
+                                sed -i "/^THE_TAG=/d" .env
+                                echo "THE_TAG=\$TAG_CU" >> .env
+                                docker compose -f docker-compose.prod.yml up -d
+                                echo "da quay lui xong"
+                            '
+                        """
+                    }
                 }
             }
         }
