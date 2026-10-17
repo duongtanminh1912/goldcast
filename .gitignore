@@ -33,3 +33,9 @@ Thumbs.db
 *.tsbuildinfo
 .playwright-cli/
 docs/bao-cao/
+
+# Jenkins digest manifest (stored as a build artifact)
+/release.env
+
+# Python test cache
+__pycache__/

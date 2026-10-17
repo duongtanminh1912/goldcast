@@ -1,166 +1,108 @@
 pipeline {
     agent any
-
     options {
-        // Hai build khong duoc deploy chong len nhau: buoc quay lui doc tag
-        // tu mot file tren VPS, hai build song song se ghi de len nhau.
         disableConcurrentBuilds()
     }
-
     environment {
         REG = 'ghcr.io/duongtanminh1912'
         VPS = 'deploy@103.175.248.236'
-        TAG = "${BUILD_NUMBER}"
     }
-
     stages {
-        stage('Lay ma commit') {
+        stage('Checkout identity') {
             steps {
                 script {
-                    env.SHA = sh(script: 'git rev-parse --short HEAD', returnStdout: true).trim()
-                    echo "Commit dang build: ${env.SHA}"
+                    env.SHA = sh(script: 'git rev-parse HEAD', returnStdout: true).trim()
+                    def jobKey = sh(script: 'printf "%s" "$JOB_NAME" | sha256sum | cut -c1-12', returnStdout: true).trim()
+                    env.RELEASE_ID = "${env.SHA}-${jobKey}-${env.BUILD_NUMBER}"
+                    env.CI_PROJECT = "g2-${env.RELEASE_ID}"
+                    env.RELEASE_DIR = "/opt/goldcast/releases/${env.RELEASE_ID}"
+                    // Also works for a single-branch job; never assume missing BRANCH_NAME means main.
+                    def branch = env.BRANCH_NAME ?: env.GIT_LOCAL_BRANCH ?: env.GIT_BRANCH ?:
+                        sh(script: 'git symbolic-ref --short -q HEAD || git name-rev --name-only HEAD', returnStdout: true).trim()
+                    env.SOURCE_BRANCH = branch.replaceFirst('^remotes/origin/', '').replaceFirst('^origin/', '')
                 }
             }
         }
-
-        stage('Test backend') {
+        stage('G1 - code') {
             steps {
-                dir('backend') {
-                    sh 'mvn -B test'
-                }
+                dir('backend') { sh 'mvn -B test' }
+                // Tests use only Python's standard library and POSIX sh; no Docker socket.
+                sh '''
+                    tar -cf - scripts |
+                      docker run --rm -i python:3.13-alpine sh -ec '
+                        mkdir /src; cd /src; tar -xf -;
+                        python3 -m unittest discover -s scripts/tests -v'
+                '''
+                // Jenkins has Docker and Maven; Node runs in a disposable container.
+                sh '''
+                    tar -C frontend --exclude=node_modules --exclude=.next -cf - . |
+                      docker run --rm -i node:22-alpine sh -ec '
+                        mkdir /src; cd /src; tar -xf -; npm ci; npm run typecheck'
+                '''
             }
         }
-
-        stage('Dang nhap GHCR') {
+        stage('Registry login') {
             steps {
-                withCredentials([usernamePassword(
-                        credentialsId: 'ghcr',
-                        usernameVariable: 'GHCR_USER',
-                        passwordVariable: 'GHCR_TOKEN')]) {
-                    // Dau nhay DON: Groovy khong noi suy, shell moi mo bien.
-                    // Dung nhay kep thi token bi nhung vao chuoi lenh va co the
-                    // lot ra console log.
-
+                withCredentials([usernamePassword(credentialsId: 'ghcr', usernameVariable: 'GHCR_USER', passwordVariable: 'GHCR_TOKEN')]) {
                     sh 'echo "$GHCR_TOKEN" | docker login ghcr.io -u "$GHCR_USER" --password-stdin'
                 }
             }
         }
-
-        stage('Build va day backend') {
+        stage('Build images once') {
             steps {
-                sh """
-                    docker buildx build --platform linux/amd64 \
-                      -t ${REG}/goldcast-backend:${TAG} \
-                      -t ${REG}/goldcast-backend:${env.SHA} \
-                      -t ${REG}/goldcast-backend:latest \
-                      --push backend/
-                """
+                sh '''
+                    set -eu
+                    : > release.env
+                    for service in backend frontend; do
+                        image="$REG/goldcast-$service:$RELEASE_ID"
+                        docker buildx build --platform linux/amd64 -t "$image" --push "$service/"
+                        digest=$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')
+                        echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
+                        key=$(printf '%s' "$service" | tr '[:lower:]' '[:upper:]')
+                        printf '%s_IMAGE=%s/goldcast-%s@%s\n' "$key" "$REG" "$service" "$digest" >> release.env
+                    done
+                '''
+                archiveArtifacts artifacts: 'release.env', fingerprint: true
             }
         }
-
-        stage('Build va day frontend') {
-            steps {
-                sh """
-                    docker buildx build --platform linux/amd64 \
-                      -t ${REG}/goldcast-frontend:${TAG} \
-                      -t ${REG}/goldcast-frontend:${env.SHA} \
-                      -t ${REG}/goldcast-frontend:latest \
-                      --push frontend/
-                """
-            }
+        stage('G2 - isolated image tests') {
+            steps { sh 'sh scripts/g2.sh' }
         }
-
-        stage('Deploy') {
-            // BRANCH_NAME chi co o job multibranch. Job mot nhanh thi no null,
-            // va job do chi build main - nen coi null la main.
-            when {
-                expression { return (env.BRANCH_NAME ?: 'main') == 'main' }
-
-            }
-            steps {
-                // Dung withCredentials thay sshagent: khong can plugin SSH Agent.
-                // No ghi khoa ra file tam, xoa sau khi khoi lenh ket thuc.
-                withCredentials([sshUserPrivateKey(
-                        credentialsId: 'vps-deploy',
-                        keyFileVariable: 'SSH_KEY')]) {
-                    sh """
-                        mkdir -p ~/.ssh
-                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=accept-new ${VPS} '
-                            set -e
-                            cd /opt/goldcast
-                            git pull --ff-only
-                            if grep -q "^THE_TAG=" .env; then
-                              grep "^THE_TAG=" .env | cut -d= -f2 > \$HOME/.goldcast-tag-truoc
-                            fi
-                            sed -i "/^THE_TAG=/d" .env
-                            echo "THE_TAG=${TAG}" >> .env
-                            docker compose -f docker-compose.prod.yml up -d
-                            docker image prune -f
-                        '
-                    """
+        stage('Production') {
+            when { expression { env.SOURCE_BRANCH == 'main' && !env.CHANGE_ID } }
+            stages {
+                stage('Deploy tested digests') {
+                    steps {
+                        withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
+                            sh '''
+                                set -eu
+                                mkdir -p ~/.ssh
+                                ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "mkdir -p '$RELEASE_DIR'"
+                                tar -cf - release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs |
+                                  ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "tar -xf - -C '$RELEASE_DIR'"
+                                ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "sh '$RELEASE_DIR/scripts/release.sh' deploy '$RELEASE_DIR' '$BUILD_URL'"
+                            '''
+                        }
+                    }
                 }
-            }
-        }
-
-        stage('G2 - kiem noi dung sau deploy') {
-            when {
-                expression { return (env.BRANCH_NAME ?: 'main') == 'main' }
-            }
-            steps {
-                // Kiem 1: trang cong khai co phuc vu khong.
-                // -f lam curl tra ma loi khi HTTP >= 400, nho do stage do theo.
-                sh 'curl -fsS -o /dev/null -w "trang cong khai: %{http_code}\n" https://goldcast.click'
-
-                // Kiem 2: noi dung API co giu dung bat bien khong.
-                // Chay TRONG mang compose: Caddy chi dinh tuyen ve frontend nen
-                // /api/v1 khong ra toi internet. Dung container node vi Jenkins
-                // khong cai Node.
-                withCredentials([sshUserPrivateKey(
-                        credentialsId: 'vps-deploy',
-                        keyFileVariable: 'SSH_KEY')]) {
-                    sh """
-                        ssh -i \$SSH_KEY -o StrictHostKeyChecking=accept-new ${VPS} '
-                            docker run --rm \\
-                              --network goldcast_default \\
-                              -v /opt/goldcast/scripts:/s:ro \\
-                              node:22-alpine \\
-                              node /s/smoke.mjs http://backend:8080
-                        '
-                    """
+                stage('G3 - verify and promote') {
+                    steps {
+                        withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
+                            sh 'ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "sh \'$RELEASE_DIR/scripts/release.sh\' verify \'$RELEASE_DIR\'"'
+                        }
+                    }
                 }
             }
             post {
-                failure {
-                    // G2 do nghia la ban vua len production co van de.
-                    // Quay lui ve tag da duoc Deploy ghi lai truoc do.
-                    withCredentials([sshUserPrivateKey(
-                            credentialsId: 'vps-deploy',
-                            keyFileVariable: 'SSH_KEY')]) {
-                        sh """
-                            ssh -i \$SSH_KEY -o StrictHostKeyChecking=accept-new ${VPS} '
-                                set -e
-                                cd /opt/goldcast
-                                if [ ! -f \$HOME/.goldcast-tag-truoc ]; then
-                                  echo "KHONG co tag truoc do - khong quay lui duoc"
-                                  exit 1
-                                fi
-                                TAG_CU=\$(cat \$HOME/.goldcast-tag-truoc)
-                                echo "G2 do - quay lui tu ${TAG} ve \$TAG_CU"
-                                sed -i "/^THE_TAG=/d" .env
-                                echo "THE_TAG=\$TAG_CU" >> .env
-                                docker compose -f docker-compose.prod.yml up -d
-                                echo "da quay lui xong"
-                            '
-                        """
+                unsuccessful {
+                    withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
+                        sh 'ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "test ! -f \'$RELEASE_DIR/scripts/release.sh\' || sh \'$RELEASE_DIR/scripts/release.sh\' rollback \'$RELEASE_DIR\'"'
                     }
                 }
             }
         }
     }
-
     post {
-        always {
-            sh 'docker logout ghcr.io || true'
-        }
+        always { sh 'docker logout ghcr.io || true' }
     }
 }
