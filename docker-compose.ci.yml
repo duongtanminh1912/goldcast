@@ -1,0 +1,52 @@
+# G2: project name is unique per build; no host ports or production volumes.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: goldcast
+      POSTGRES_USER: goldcast
+      POSTGRES_PASSWORD: ci-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U goldcast -d goldcast"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  backend:
+    image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to a digest}
+    platform: linux/amd64
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/goldcast
+      SPRING_DATASOURCE_USERNAME: goldcast
+      SPRING_DATASOURCE_PASSWORD: ci-only
+      APP_PROVIDERS_STOOQ_ENABLED: "false"
+      APP_PROVIDERS_SJC_ENABLED: "false"
+      SPRING_FLYWAY_TARGET: ${MIGRATION_TARGET:-latest}
+      APP_INGEST_ENABLED: ${CI_INGEST_ENABLED:-true}
+      APP_INGEST_SEED_ON_EMPTY: "true"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health/readiness"]
+      interval: 3s
+      timeout: 5s
+      retries: 60
+      start_period: 30s
+  frontend:
+    image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to a digest}
+    platform: linux/amd64
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      API_BASE_URL_INTERNAL: http://backend:8080
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+  probe:
+    image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to a digest}
+    platform: linux/amd64
+    profiles: [test]
+    entrypoint: ["node", "--input-type=module", "-"]

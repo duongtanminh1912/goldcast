@@ -2,10 +2,10 @@
 /**
  * G2 - Smoke test noi dung cho GoldCast.
  *
- * Chay duoc o ba noi, chi khac BASE_URL:
+ * Chay truc tiep hoac trong container, chi khac BASE_URL:
  *   node scripts/smoke.mjs http://localhost:8090      (tay, tren may dev)
- *   node scripts/smoke.mjs http://backend:8080        (trong mang compose, Jenkins goi)
- *   node scripts/smoke.mjs https://ten-mien-that      (sau khi trien khai)
+ *   node scripts/smoke.mjs http://backend:8080        (G2: trong mang compose rieng)
+ *   API production khong public qua Caddy; G3 kiem HTTPS frontend rieng.
  *
  * Ma thoat:
  *   0  moi phep thu dat
@@ -171,10 +171,27 @@ async function thuModels() {
   kiem("moi mo hinh co label", thieuLabel === 0, thieuLabel + " mo hinh thieu label");
 }
 
+async function thuForecast() {
+  console.log("\n[4] Forecast contract and prediction intervals");
+  const f = await layJson("/api/v1/forecast/XAUUSD?model=NAIVE&horizon=7");
+  kiem("forecast instrument/model/horizon", f.instrument?.code === "XAUUSD" && f.model === "NAIVE" && f.horizon === 7);
+  kiem("forecast has seven steps", Array.isArray(f.points) && f.points.length === 7);
+  kiem("forecast accuracy and warnings contract", !!f.accuracy && Array.isArray(f.warnings) && Number(f.trainSize) >= 30);
+  for (const [i, p] of (f.points || []).entries()) {
+    const values = [p.lower95, p.lower80, p.value, p.upper80, p.upper95].map(Number);
+    kiem(`forecast step ${i + 1}: finite ordered intervals`,
+      p.step === i + 1 && Number.isFinite(Date.parse(p.date)) &&
+      [p.lower95, p.lower80, p.value, p.upper80, p.upper95].every(v => v !== null && v !== undefined) &&
+      values.every(Number.isFinite) && Number(p.value) > 0 &&
+      values.every((v, j) => j === 0 || values[j - 1] <= v));
+    kiem(`NAIVE step ${i + 1}: equals last close`, gan(Number(p.value), Number(f.lastClose)));
+  }
+}
+
 async function main() {
   console.log("Smoke test GoldCast  --  BASE_URL = " + BASE);
 
-  for (const thu of [thuInstruments, thuMarketSummary, thuModels]) {
+  for (const thu of [thuInstruments, thuMarketSummary, thuModels, thuForecast]) {
     try {
       await thu();
     } catch (e) {

@@ -473,9 +473,24 @@ Nháy đơn nên Groovy không nội suy; shell mới mở biến, và Jenkins c
 `****`. Dùng nháy kép thì token bị nhúng vào chuỗi lệnh trước khi Jenkins nhìn
 thấy, và nó hiện nguyên trong log.
 
-**Deploy theo số build, không theo `latest`:** pipeline ghi `THE_TAG=<số build>`
-vào `.env` trên máy chủ. Nhờ đó trả lời được "đang chạy bản nào" bằng
-`grep THE_TAG .env`, và rollback là sửa một dòng rồi `up -d`.
+**Deploy đúng image đã kiểm thử:** mỗi build tạo tag `<commit>-<job>-<build>`, rồi
+lưu hai digest vào artifact `release.env`. G2 và production dùng cùng digest;
+không build lại, không dùng `latest`. Cấu hình từng release được giữ trong
+`/opt/goldcast/releases/<commit>-<job>-<build>/`.
+
+**Chuẩn bị một lần khi chuyển từ pipeline cũ:** trên VPS, cập nhật checkout
+chứa các script mới rồi chạy `sh scripts/bootstrap-release.sh` tại
+`/opt/goldcast`. Script chụp digest của hai container đang chạy, giữ cấu hình
+Caddy từ container đang chạy, kiểm project Compose `goldcast` và volume DB
+`goldcast_goldcast-pgdata`, rồi kiểm readiness, phiên bản và các trang HTTPS trước khi ghi
+`.last-good-release`. Không restart production. Nếu kiểm tra thất bại, sửa
+production trước khi chạy lại; pipeline sẽ từ chối deploy khi chưa có baseline.
+Sau khi chuyển sang release theo digest, thao tác Compose thủ công cũng phải dùng
+`--env-file /opt/goldcast/.env --env-file <release>/release.env -p goldcast
+-f <release>/docker-compose.prod.yml`; không dùng riêng `THE_TAG` cũ để cập nhật.
+
+VPS phải kéo được image GHCR, và có Docker Compose
+hỗ trợ `up --wait`. Jenkins cũng cần Compose hỗ trợ `--wait` và Buildx.
 
 **Nếu máy chủ từng được cài lại**, container Jenkins vẫn nhớ host key cũ và
 stage Deploy sẽ đỏ với `Host key verification failed`. Jenkinsfile dùng
@@ -500,23 +515,79 @@ Trong 5 phút phải có build mới, và trang build ghi **"Started by an SCM c
 chứ không phải "Started by user". Rồi:
 
 ```bash
-ssh deploy@$IP 'grep THE_TAG /opt/goldcast/.env'
+ssh deploy@$IP 'cat /opt/goldcast/.last-good-release'
 ```
 
-Số phải khớp với số build vừa chạy.
+Đường dẫn phải chứa commit và số build vừa chạy; file `release.env` trong đó
+phải khớp artifact Jenkins. Nhánh khác `main` vẫn chạy G1/build/G2 nhưng không deploy.
 
-## B10. Cổng G2
+## B10. G1 → build → G2 → deploy → G3
 
-Stage cuối chạy `scripts/smoke.mjs` — cổng chất lượng thứ hai. Nó kiểm **nội
-dung**, không kiểm trạng thái: `docker ps` nói `healthy` và `curl` nói `200` vẫn
-có thể xanh trong khi dữ liệu sai hoàn toàn.
+- **G1:** chạy test Java (gồm hợp đồng API và công thức), TypeScript typecheck
+  và bộ test release/rollback/recovery bằng `python:3.13-alpine`. Python chỉ
+  cần thư viện chuẩn; container test không được gắn Docker socket.
+- **Build:** build/push một lần cho `linux/amd64`, chốt digest vào `release.env`.
+- **G2:** `scripts/g2.sh` dựng `docker-compose.ci.yml` trên Docker của Jenkins,
+  với project riêng cho build, DB rỗng riêng, không publish cổng, không dùng
+  dữ liệu production. Flyway phải khởi tạo thành công; kiểm lịch sử migration,
+  API, công thức, dự báo NAIVE và các trang tổng quan/lịch sử/dự báo. Dữ liệu
+  tổng hợp được seed với nguồn bên ngoài tắt để kiểm thử lặp lại được.
+  Sau ca cài mới, tạo lại DB và chạy image với Flyway target V1, ingest tắt;
+  nạp `scripts/fixtures/upgrade-v1.sql` vào cả bốn bảng nghiệp vụ, rồi chạy
+  cùng image ở target mới nhất. `assert-upgrade.sql` kiểm migration và dữ liệu
+  cũ còn nguyên; smoke API và các trang cũng phải đạt sau nâng cấp.
+  Log được in khi lỗi; container, mạng và dữ liệu tạm được dọn khi kết thúc.
+- **Deploy:** chỉ `main`, dùng đúng hai digest đã qua G2, cấu hình release được
+  truyền từ workspace Jenkins qua SSH; không `git pull` mã mới trên VPS.
+- **G3:** đợi ứng dụng sẵn sàng, so image ID container với digest mong đợi,
+  kiểm readiness backend và HTTPS qua Caddy đến các trang có nội dung thực.
+  Chỉ khi tất cả đạt mới ghi nguyên tử `.last-good-release`.
 
-Script chạy **bên trong mạng compose** trên máy chủ, không phải từ Jenkins và
-không phải từ internet. Lý do: Caddy định tuyến mọi thứ về frontend, nên
-`/api/v1` không ra tới ngoài. Và vì Jenkins không cài Node, script chạy trong
-một container `node:22-alpine` dùng xong là xoá.
+Khi bắt đầu deploy, đường dẫn bản tốt trước đó được lưu cố định trong
+`<release>/previous-good-release`. Nếu Deploy hoặc G3 lỗi, rollback dùng bản
+đã lưu này, đợi sẵn sàng và xác minh lại; không lấy mục tiêu từ con trỏ
+`.last-good-release` có thể đã thay đổi. Build vẫn đỏ sau rollback. Khóa trên
+VPS ngăn các job khác deploy chồng nhau. Nếu rollback cũng lỗi, khóa được giữ
+để người vận hành xử lý, không tự nhận bản lỗi là bản tốt.
 
-**Kiểm:** Console Output của build có 18 dòng `OK`.
+Sau khi G3 đạt và `.last-good-release` đã cập nhật, lỗi dọn khóa chỉ phát cảnh
+báo và không kích hoạt rollback. Nếu Jenkins gọi rollback do mất phản hồi SSH
+sau thời điểm này, script nhận biết bản đã được ghi nhận thành công và bỏ qua.
+Khi có cảnh báo dọn khóa hoặc build bị ngắt, dùng các lệnh phục hồi dưới đây.
+Mỗi lần deploy lưu `deploy-started-at` (UTC), `deploy-build-url`, `deploy-phase`
+và `previous-good-release` trong thư mục release.
+
+Trên VPS, lấy đúng đường dẫn release từ build bị ngắt:
+
+```bash
+RELEASE_DIR=/opt/goldcast/releases/<commit>-<job>-<build>
+sh "$RELEASE_DIR/scripts/release.sh" status "$RELEASE_DIR"
+```
+
+Mở URL build, xác nhận build và lệnh SSH/deploy trên VPS đã dừng trước khi chạy:
+
+```bash
+sh "$RELEASE_DIR/scripts/release.sh" recover "$RELEASE_DIR" --confirm-stopped
+```
+
+Nếu bản mới đã được G3 ghi nhận, recovery xác minh lại rồi dọn khóa dư. Nếu
+chưa được ghi nhận, recovery rollback theo bản trước đã lưu và xác minh lại.
+Khóa thuộc release khác, thiếu mục tiêu rollback hoặc xác minh lỗi đều không
+được tự xóa. Khóa thiếu owner trước lúc ghi nhận thành công cần kiểm tra thủ
+công; script sẽ từ chối đoán release. Không phục hồi chỉ dựa vào tuổi của khóa.
+
+
+**Kiểm:** console phải có kết quả G2 trước Deploy, G3 sau Deploy và artifact
+`release.env`. Cố ý làm G2 lỗi thì Deploy bị bỏ qua và production giữ nguyên.
+G3 lỗi thì `.last-good-release` giữ bản cũ và log có `Rollback verified` nếu
+quay lui thành công.
+
+**Giới hạn:** ca nâng cấp hiện dùng baseline V1 và dữ liệu mẫu, không phải bản
+sao DB production hay tự động lấy image production trước đó. Khi schema phát
+triển, cần bổ sung baseline/fixture cho các phiên bản còn hỗ trợ. Rollback chỉ
+quay lui ứng dụng/cấu hình, không phục hồi DB;
+migration phải tương thích với cả bản ứng dụng trước và sau. Kiểm trang dùng
+HTTP và nội dung SSR, chưa thay thế kiểm thử thao tác trong trình duyệt.
 
 ---
 

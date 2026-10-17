@@ -25,16 +25,16 @@ git push
    │
    ├──► GitHub Actions ───────────────────────────────────┐
    │      mvn test  (gồm cổng G1)                         │
-   │      npm run build                                   ├──► xanh / đỏ trên pull request
-   │      docker build  (không push)                      │
+   │                                                      ├──► xanh / đỏ trên pull request
    │                                                       ┘
    │
    └──► Jenkins  (poll nhánh main mỗi 5 phút)
-          mvn test  (gồm cổng G1)
-          docker buildx --platform linux/amd64  ──►  GHCR
-          ssh deploy@vps:  docker compose pull && up -d
-          cổng G2:  scripts/smoke.mjs gọi API thật
-          docker image prune
+          G1: mvn test + TypeScript typecheck + test release/rollback
+          docker buildx --platform linux/amd64  ──►  GHCR (digest)
+          G2: Compose riêng + cài mới/nâng cấp DB có dữ liệu + smoke + SSR
+          Deploy main: đúng digest đã qua G2
+          G3: readiness + image ID + HTTPS + các trang chính
+          Thành công: ghi bản tốt; lỗi: rollback và xác minh lại
 ```
 
 ### Hai công cụ, hai vai trò khác nhau
@@ -52,7 +52,7 @@ Jenkins nằm sau router gia đình nên không nhận được webhook, phải 
 phút — mà poll thì chỉ theo dõi được nhánh, không đánh giá được pull request. Cách phân
 vai trên là **hệ quả của một ràng buộc kỹ thuật**, không phải lựa chọn tuỳ ý.
 
-### Hai cổng chất lượng tự phát triển
+### Các cổng chất lượng
 
 **G1 — hợp đồng API.** Đối chiếu DTO Java với khai báo TypeScript của frontend. Kiểu
 TypeScript bị xoá lúc biên dịch nên không gì đối chiếu chúng với JSON thật: đổi tên một
@@ -62,12 +62,16 @@ hai chặng — so tên kiểu, rồi duyệt đồ thị kiểu để **so tên
 
 → [`ApiContractTest.java`](backend/src/test/java/vn/goldcast/api/dto/ApiContractTest.java)
 
-**G2 — nội dung API.** Script độc lập nhận `BASE_URL`, gọi API thật sau khi triển khai và
+**G2 — nội dung API.** Script độc lập nhận `BASE_URL`, gọi API của image trong môi trường riêng trước deploy và
 kiểm **bất biến** thay vì giá trị, vì dữ liệu là tổng hợp. Ví dụ:
 `worldVndPerGram × troyOunceInGrams` phải bằng `usdPerOunce × vndPerUsd` — nối ba trường ở
 ba khối khác nhau của cùng một phản hồi, nên công thức quy đổi sai là lộ ngay.
 
 → [`scripts/smoke.mjs`](scripts/smoke.mjs)
+
+**G3 — xác minh production.** Kiểm readiness, image ID đúng digest và các trang HTTPS
+qua Caddy. Chỉ ghi bản tốt khi đạt; lỗi thì quay lại manifest tốt gần nhất và kiểm lại.
+Xem cách chuẩn bị baseline và giới hạn rollback DB trong [tutorial](docs/tutorial.md#b10-g1--build--g2--deploy--g3).
 
 Cả hai cổng đều đã được **kiểm chứng bằng cách cố tình làm hỏng**: đổi tên một trường DTO
 để xem G1 có đỏ không, sửa một hằng số quy đổi để xem G2 có bắt được không. Một cổng chưa
@@ -120,13 +124,12 @@ Liệt kê trước khi bị hỏi:
 | Hạn chế | Hệ quả |
 |---|---|
 | **Không có giám sát** | Hệ thống chết lúc 2 giờ sáng thì không ai biết |
-| **G2 chạy sau khi triển khai** | Lúc nó đỏ thì bản lỗi đã lên production |
-| **Không tự động quay lui** | Phải sửa bằng tay khi G2 đỏ |
+| **Migration G2 dùng baseline V1 và dữ liệu mẫu** | Chưa bao phủ mọi phiên bản cũ và hình dạng dữ liệu production |
+| **Rollback không phục hồi DB** | Migration cần tương thích với phiên bản ứng dụng trước |
 | **Một máy chủ, không dự phòng** | Máy chết là dịch vụ chết; mỗi lần triển khai gián đoạn vài giây |
 | **Khoá triển khai không passphrase** | Bắt buộc vì Jenkins chạy tự động; khoá đó vào thẳng production |
 | **Jenkins gắn `/var/run/docker.sock`** | Quyền tương đương quản trị trên máy chạy Jenkins |
-| **Frontend không có test trong CI** | Logic nghiệp vụ nằm ở backend, nhưng đây vẫn là lỗ hổng |
-| **Không có khoá chống chạy song song** | Hai build cùng lúc có thể triển khai chồng lên nhau |
+| **Chưa kiểm trình duyệt tự động** | G2/G3 kiểm HTML từ server, chưa kiểm tương tác JavaScript |
 
 Máy 1 vCPU không chạy nổi hai bản ứng dụng cùng lúc, nên triển khai không gián đoạn và
 cổng chặn trước khi triển khai đều nằm ngoài tầm của phần cứng này.
@@ -185,7 +188,8 @@ goldcast/
 ├── docker-compose.yml       môi trường phát triển
 ├── docker-compose.prod.yml  môi trường production (kéo image từ GHCR)
 ├── deploy/                  Caddyfile + script dựng máy chủ + script siết SSH
-├── scripts/smoke.mjs        cổng G2
+├── docker-compose.ci.yml    môi trường G2 riêng cho từng build
+├── scripts/                 smoke, G2, xác minh release và rollback
 ├── docs/                    nhật ký, số liệu, tutorial dựng lại từ đầu
 ├── backend/
 │   └── src/main/java/vn/goldcast/
@@ -366,9 +370,15 @@ cd frontend && npm install && npm run dev
 
 ### Test
 
+Từ thư mục gốc:
+
 ```bash
-cd backend && mvn test
+mvn -f backend/pom.xml test
+python3 -m unittest discover -s scripts/tests -v
 ```
+
+Bộ test release/rollback/recovery/bootstrap cũng chạy trong G1 bằng Python 3.13
+container, với Docker được giả lập bằng lệnh cục bộ; không truy cập VPS.
 
 Bộ test tập trung vào phần toán và phần parse — hai nơi lỗi âm thầm gây thiệt hại nhất:
 

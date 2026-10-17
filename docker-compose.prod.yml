@@ -25,7 +25,7 @@ services:
     restart: unless-stopped
 
   backend:
-    image: ghcr.io/duongtanminh1912/goldcast-backend:${THE_TAG:-latest}
+    image: ${BACKEND_IMAGE:-ghcr.io/duongtanminh1912/goldcast-backend:${THE_TAG:-latest}}
     container_name: goldcast-backend
     depends_on:
       db:
@@ -50,7 +50,7 @@ services:
     restart: unless-stopped
 
   frontend:
-    image: ghcr.io/duongtanminh1912/goldcast-frontend:${THE_TAG:-latest}
+    image: ${FRONTEND_IMAGE:-ghcr.io/duongtanminh1912/goldcast-frontend:${THE_TAG:-latest}}
     container_name: goldcast-frontend
     depends_on:
       backend:
