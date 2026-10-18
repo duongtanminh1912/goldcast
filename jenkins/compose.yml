@@ -1,0 +1,15 @@
+services:
+  jenkins:
+    build: .
+    container_name: jenkins
+    ports:
+      - "127.0.0.1:8081:8080"
+    group_add:
+      - "${DOCKER_GID:?Set DOCKER_GID to the group owning the Docker socket}"
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+    restart: unless-stopped
+
+volumes:
+  jenkins-home:

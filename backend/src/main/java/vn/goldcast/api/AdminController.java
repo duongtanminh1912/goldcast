@@ -15,10 +15,9 @@ import java.util.List;
 /**
  * Operational endpoints.
  *
- * <p>These are unauthenticated, which is fine for a single-tenant read-only deployment but
- * is the first thing to change before this is exposed publicly: {@code /admin/ingest}
- * reaches out to third-party feeds and writes to the database, so it should sit behind
- * authentication or be restricted to an internal network.
+ * <p>AdminTokenFilter requires X-Admin-Token for every endpoint under /api/v1/admin.
+ * An empty app.admin.token disables access. Ingest reaches third-party feeds and
+ * writes to the database, so callers need the token configured on the backend.
  */
 @RestController
 @RequestMapping("/api/v1/admin")

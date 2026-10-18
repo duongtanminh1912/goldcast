@@ -11,7 +11,7 @@ help:
 	@echo "  make backend-test   Chạy unit test backend"
 	@echo "  make backend-run    Chạy backend ở chế độ dev (cần Postgres đang chạy)"
 	@echo "  make frontend-dev   Chạy frontend ở chế độ dev"
-	@echo "  make seed           Gọi ingest thủ công (backend phải đang chạy)"
+	@echo "  make seed           Gọi ingest trong Compose (cần APP_ADMIN_TOKEN trong .env)"
 
 up:
 	@test -f .env || cp .env.example .env
@@ -47,4 +47,4 @@ frontend-build:
 	cd frontend && npm install && npm run build
 
 seed:
-	curl -X POST http://localhost:8080/api/v1/admin/ingest
+	@sh scripts/ingest.sh

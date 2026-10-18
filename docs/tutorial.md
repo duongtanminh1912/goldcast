@@ -2,7 +2,7 @@
 
 Tài liệu này hướng dẫn dựng lại toàn bộ quy trình từ con số không: chạy ứng
 dụng, chạy test, dựng CI, đưa lên internet, và để mỗi commit tự đi tới
-production.
+production khi commit vào `main` và vượt các cổng kiểm tra.
 
 ## Dành cho ai
 
@@ -13,9 +13,9 @@ Không cần biết Jenkins, Docker Compose hay Caddy từ trước.
 
 **Phần A chạy được trên máy bạn, không tốn đồng nào.** Ai cũng làm theo được.
 
-**Phần B cần một máy chủ thuê và một tên miền** — khoảng 215.000đ/tháng và
-19.000đ/năm. Nếu bạn chỉ muốn hiểu quy trình thì đọc là đủ; phần A đã có đầy đủ
-code, build, test và cổng chất lượng.
+**Phần B cần một máy chủ thuê và một tên miền.** Chi phí trong nhật ký là số
+liệu lịch sử, cần kiểm lại khi thuê. Phần A chạy G1/build/G2 trên nhánh riêng,
+không cần VPS; phần B bổ sung Deploy/G3 và baseline production.
 
 Mỗi bước đều kết thúc bằng một **phép kiểm**. Đừng đi tiếp khi phép kiểm chưa
 đạt — mọi lỗi tốn nhiều thời gian nhất trong đồ án này đều đến từ việc bỏ qua
@@ -29,7 +29,7 @@ Phần B dùng năm biến shell. Gán một lần ở đầu mỗi phiên termi
 
 | Biến | Đồ án này dùng |
 |---|---|
-| `REPO` | `github.com/duongtanminh1912/goldcast` |
+| `REPO` | `duongtanminh1912/goldcast` |
 | `IP` | `103.175.248.236` |
 | `TEN_MIEN` | `goldcast.click` |
 | `REGISTRY` | `ghcr.io/duongtanminh1912` |
@@ -50,7 +50,9 @@ cd goldcast
 cp .env.example .env
 ```
 
-**Kiểm:** `docker --version` và `docker compose version` đều ra số phiên bản.
+**Kiểm:** `docker version` phải có cả **Client và Server**;
+`docker compose version` hiển thị phiên bản. Chỉ có Client chưa chứng minh
+Docker daemon đang chạy.
 
 ## A2. Chạy toàn bộ ứng dụng
 
@@ -61,20 +63,30 @@ docker compose ps
 
 Lần đầu mất vài phút vì phải build cả backend lẫn frontend.
 
-**Kiểm:** bốn dòng trong `ps`, backend và db ở trạng thái `healthy`. Mở
+**Kiểm:** ba service trong `ps`: db, backend, frontend; backend và db ở trạng thái `healthy`. Mở
 `http://localhost:3000` thấy giao diện có dữ liệu.
 
-Dữ liệu là **tổng hợp**, không phải giá vàng thật. Đồ án nghiên cứu quy trình,
-không nghiên cứu độ chính xác của dự báo.
+Ingest thử lấy dữ liệu từ provider; cấu hình dev cho phép seed mô phỏng khi
+chuỗi rỗng. Kiểm nhãn nguồn trên giao diện. Tắt seed không xoá dữ liệu mô phỏng
+đã tồn tại. Đồ án tập trung vào quy trình DevOps.
 
 ## A3. Chạy test, và xem cổng G1 chặn
 
 ```bash
-cd backend
-mvn -B test
+# Chạy từ thư mục gốc repo; không cần Maven/JDK trên máy cá nhân.
+backend_test() {
+  tar --exclude=backend/target --exclude=frontend/node_modules --exclude=frontend/.next -cf - backend frontend |
+    docker run --rm -i maven:3.9-eclipse-temurin-21 sh -ec '
+      mkdir /src; cd /src; tar -xf -
+      mvn -B -f backend/pom.xml "$@"
+    ' sh "$@"
+}
+backend_test test
 ```
 
-**Kiểm:** `Tests run: 102, Failures: 0`.
+**Kiểm:** `BUILD SUCCESS`, không có failure. Mốc đã lưu là 102 test Java;
+số test có thể tăng ở các commit sau. Hàm trên chỉ tồn tại trong phiên terminal
+hiện tại và cần chạy ở thư mục gốc repo.
 
 Trong số đó có `ApiContractTest` — cổng chất lượng thứ nhất. Nó đối chiếu các
 DTO Java với các kiểu TypeScript ở frontend, và đỏ khi hai bên lệch nhau.
@@ -83,14 +95,16 @@ Thử phá nó để thấy nó thật sự gác:
 
 ```bash
 # doi ten mot truong trong types.ts
-sed -i '' 's/  series:/  seriesX:/' ../frontend/src/lib/types.ts
-mvn -B test -Dtest=ApiContractTest
+sed -i '' 's/  series:/  seriesX:/' frontend/src/lib/types.ts
+backend_test test -Dtest=ApiContractTest
 ```
+
+Lệnh `sed -i ''` dành cho macOS; trên Linux dùng `sed -i`.
 
 **Kiểm:** test đỏ, và thông báo chỉ đúng tên trường bị lệch. Hoàn nguyên:
 
 ```bash
-git checkout ../frontend/src/lib/types.ts
+git restore frontend/src/lib/types.ts
 ```
 
 Bước này quan trọng hơn vẻ ngoài của nó: **một cổng chưa từng được chứng minh
@@ -99,8 +113,9 @@ là biết chặn thì chưa phải là cổng.**
 ## A4. Dựng Jenkins
 
 ```bash
-cd ../jenkins
-docker compose up -d
+# Lấy GID của socket bên trong Docker, dùng được cả Docker Desktop và Linux.
+export DOCKER_GID=$(docker run --rm -v /var/run/docker.sock:/var/run/docker.sock docker:27-cli stat -c %g /var/run/docker.sock)
+docker compose -f jenkins/compose.yml up -d --build
 ```
 
 Mở `http://localhost:8081`. Lấy mật khẩu khởi tạo:
@@ -113,22 +128,42 @@ Chọn "Install suggested plugins", tạo tài khoản quản trị.
 
 **Kiểm:** đăng nhập được vào trang chủ Jenkins.
 
+File `jenkins/compose.yml` là cấu hình cài mới: lưu Jenkins home trong volume
+và chỉ mở UI tại `127.0.0.1:8081`. Nếu đã có Jenkins, tiếp tục dùng instance đó;
+không chạy thêm container trùng tên/port hoặc thay volume đang chứa credentials.
+Khi dùng file Compose này ở terminal mới, gán lại `DOCKER_GID` trước.
+
 ## A5. Pipeline đầu tiên
 
-New Item → đặt tên → **Pipeline** → OK.
+Trước khi chạy Jenkinsfile đầy đủ:
+
+- Nếu fork repo, sửa `REG` trong `Jenkinsfile` thành namespace GHCR của bạn.
+  Nếu đổi domain, sửa cả `deploy/Caddyfile` và URL trong hàm `verify` của
+  `scripts/release.sh`. Commit cấu hình trước khi build.
+- Tại Manage Jenkins → Credentials → System → Global, thêm credential
+  **Username with password**, ID `ghcr`: tên GitHub và token có quyền
+  `write:packages`. Chưa cần credential VPS cho nhánh kiểm thử.
+- Repo phải có nhánh `ci/pre-deploy-gate` trên remote. Nếu repo của bạn chưa có,
+  tạo nhánh này từ `main` và push trước.
+
+New Item → đặt tên `goldcast-ci` → **Pipeline** → OK.
 
 Trong phần Pipeline: chọn **Pipeline script from SCM**, SCM là **Git**, URL là
-repo của bạn, Script Path là `Jenkinsfile`.
+repo của bạn, **Branches to build là `*/ci/pre-deploy-gate`**, Script Path là
+`Jenkinsfile`. Giữ nhánh này trong phần A để Production được bỏ qua.
 
 Trong Build Triggers, tick **Poll SCM** và điền `H/5 * * * *` — Jenkins sẽ hỏi
 Git mỗi 5 phút xem có commit mới không.
 
 Bấm **Build Now**.
 
-**Kiểm:** build xanh, và trong Console Output thấy `Tests run: 102`.
+**Kiểm:** G1, Registry login, Build images once và G2 đều đạt; **Production
+`SKIPPED`**. Có artifact `release.env` chứa hai digest. G1 gồm test Java,
+typecheck và bộ test vận hành Python; chỉ thấy test Java đạt chưa đủ kết luận
+toàn bộ pipeline xanh.
 
-Tới đây bạn đã có: ứng dụng chạy, test tự động, một cổng chất lượng, và một CI
-server tự chạy khi có commit. Phần A hết.
+Tới đây bạn đã có ứng dụng, CI và hai cổng G1/G2 trước deploy. Production
+được bỏ qua có chủ đích cho nhánh kiểm thử. Phần A hết.
 
 ---
 
@@ -145,13 +180,13 @@ REPO=duongtanminh1912/goldcast
 REGISTRY=ghcr.io/duongtanminh1912
 ```
 
-Thay năm giá trị bằng của bạn. Sau đó mọi khối lệnh phía dưới dán thẳng được,
-không phải sửa gì bên trong lệnh.
+Thay năm giá trị bằng của bạn. `REG` và `VPS` trong Jenkinsfile cũng phải khớp;
+nếu đổi domain, sửa cả Caddyfile và URL kiểm HTTPS trong `scripts/release.sh`.
 
 ## B1. Thuê máy chủ
 
-Cấu hình tối thiểu đã đo được là đủ: **1 vCPU, 2 GB RAM, 20 GB đĩa**. Cả stack
-dùng khoảng 531 MiB.
+Cấu hình đã chạy ở lần đo cũ: **1 vCPU, 2 GB RAM, 20 GB đĩa**; stack khi đó
+dùng khoảng 531 MiB. Chưa đo lại tài nguyên cho mọi commit của luồng mới.
 
 Yêu cầu bắt buộc khi chọn nhà cung cấp:
 
@@ -308,7 +343,7 @@ Tạo `.env` production. Bí mật sinh thẳng vào file, không qua màn hình
 ```bash
 cd /opt/goldcast
 umask 077
-printf 'POSTGRES_DB=goldcast\nPOSTGRES_USER=goldcast\nPOSTGRES_PASSWORD=%s\nAPP_ADMIN_TOKEN=%s\nAPP_CORS_ALLOWED_ORIGINS=https://%s\n' \
+printf 'POSTGRES_DB=goldcast\nPOSTGRES_USER=goldcast\nPOSTGRES_PASSWORD=%s\nAPP_ADMIN_TOKEN=%s\nAPP_CORS_ALLOWED_ORIGINS=https://%s\nAPP_INGEST_ENABLED=true\nAPP_INGEST_SEED_ON_EMPTY=false\n' \
   "$(openssl rand -hex 24)" "$(openssl rand -hex 32)" "$TEN_MIEN" > .env
 chmod 600 .env
 ```
@@ -319,70 +354,37 @@ kẹt ở dấu nhắc `heredoc>` và phải Ctrl+C bỏ dở.
 `umask 077` đặt trước khi tạo để file kín ngay từ lúc sinh ra, không hở một nhịp
 rồi mới `chmod`.
 
-**Kiểm:** `ls -l .env` ra `-rw-------`, và `grep -c . .env` ra `5`. Đừng `cat`
-file đó ra.
+**Kiểm:** `ls -l .env` ra `-rw-------`, và `grep -c . .env` ra `7`. Đừng `cat`
+file đó ra. Nếu dựng bản demo cần dữ liệu ngay khi nguồn ngoài không truy cập
+được, chủ động đổi `APP_INGEST_SEED_ON_EMPTY=true` trước khi chạy stack; giao
+diện sẽ gắn nhãn mô phỏng. Với seed tắt, cần provider nạp đủ lịch sử để kiểm
+các trang dự báo. Không ghi đè `.env` nếu đang dùng một DB volume đã tồn tại.
 
-## B6. Build image cho đúng kiến trúc
+## B6. Chọn artifact đã qua G2
 
-Máy cá nhân Apple Silicon là `arm64`, máy chủ là `x86_64`. Image build mặc định
-**không chạy được** trên máy chủ.
+Jenkins đã build cho `linux/amd64`, push và kiểm image ở phần A. Không build
+lại bằng tay cho production. Chọn build có G1/G2 thành công; tải artifact
+`release.env` về thư mục gốc repo local (file này được Git bỏ qua). Ghi lại
+**commit đầy đủ của đúng build đó**, không lấy HEAD hiện tại để đoán.
 
-Kiểm máy bạn:
-
-```bash
-uname -m
-```
-
-Ra `arm64` thì phải build chéo:
-
-```bash
-docker login ghcr.io -u $TEN_GITHUB
-docker buildx build --platform linux/amd64 -t $REGISTRY/goldcast-backend:latest --push ./backend
-docker buildx build --platform linux/amd64 -t $REGISTRY/goldcast-frontend:latest --push ./frontend
-```
-
-Token đăng nhập là Personal Access Token **classic** với scope `write:packages`.
-
-Sau khi đẩy, package trên GHCR **mặc định private** kể cả khi repo công khai.
-Vào `github.com/<tên-github-của-bạn>?tab=packages`, mở từng package → Package settings
-→ Change visibility → Public.
-
-**Kiểm:** từ máy chủ kéo về được và đúng kiến trúc:
+Từ thư mục gốc repo trên máy cá nhân:
 
 ```bash
-ssh deploy@$IP 'docker pull $REGISTRY/goldcast-backend:latest && docker image inspect $REGISTRY/goldcast-backend:latest --format "{{.Architecture}}"'
+RELEASE_COMMIT='SHA_CUA_BUILD_DA_QUA_G2'
+RELEASE_DIR="/opt/goldcast/releases/initial-$RELEASE_COMMIT"
+grep -Ec '^(BACKEND|FRONTEND)_IMAGE=[^[:space:]]+@sha256:[a-f0-9]{64}$' release.env
+ssh deploy@$IP "mkdir -p '$RELEASE_DIR'"
+git archive "$RELEASE_COMMIT" docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs |
+  ssh deploy@$IP "tar -xf - -C '$RELEASE_DIR'"
+scp release.env "deploy@$IP:$RELEASE_DIR/release.env"
 ```
 
-Phải ra `amd64`.
+**Kiểm:** lệnh `grep` phải ra `2`, hai image dùng `@sha256:`, không phải tag.
+Commit đã chọn phải chứa domain/Caddyfile đúng cho môi trường của bạn.
+VPS phải kéo được các package GHCR: đặt Public hoặc đăng nhập registry trên
+VPS bằng token có quyền đọc. Không thay digest bằng `latest` khi gặp lỗi kéo.
 
-## B7. Chạy stack trên máy chủ
-
-```bash
-ssh deploy@$IP
-docker compose -f /opt/goldcast/docker-compose.prod.yml up -d
-docker compose -f /opt/goldcast/docker-compose.prod.yml ps
-```
-
-File compose production khác bản dev ở ba chỗ: không build mà chỉ kéo image, và
-**không publish cổng nào** cho db/backend/frontend — chỉ Caddy publish 80/443.
-
-**Kiểm — phép kiểm quan trọng nhất của cả phần B.** Từ một máy khác, không phải
-từ máy chủ:
-
-```bash
-for p in 22 80 443 3000 5432 8080; do
-  nc -z -w 2 $IP "$p" >/dev/null 2>&1 && echo "$p MO" || echo "$p dong"
-done
-```
-
-Phải thấy `3000 dong`, `5432 dong`, `8080 dong`. Nếu `5432 MO` thì cơ sở dữ liệu
-đang phơi ra internet — dừng mọi thứ lại.
-
-Lý do phải kiểm từ ngoài: **Docker ghi luật iptables vào chain `DOCKER-USER`,
-nằm trước luật của ufw.** Một cổng được `ports:` trong compose sẽ ra internet
-bất kể ufw nói gì. `docker compose ps` nhìn từ bên trong nên không thấy điều đó.
-
-## B8. Tên miền và HTTPS
+## B7. Chuẩn bị tên miền trước khi chạy Caddy
 
 Mua tên miền, rồi thêm hai bản ghi A trỏ về IP máy chủ của bạn:
 
@@ -398,38 +400,50 @@ dig +short $TEN_MIEN
 dig +short www.$TEN_MIEN
 ```
 
-Cả hai phải ra đúng IP máy chủ. **Đừng đụng vào Caddy trước khi đạt** — Let's Encrypt
-giới hạn 5 lượt xin chứng chỉ thất bại mỗi giờ cho một tên miền.
+Cả hai phải ra đúng IP máy chủ. Chờ DNS đúng trước khi chạy Caddy để tránh
+lỗi cấp chứng chỉ. Caddyfile nằm trong release đã chuyển ở B6; sửa file ở
+checkout `/opt/goldcast/deploy` không thay đổi release đang chạy.
 
-Rồi sửa dòng đầu `deploy/Caddyfile`:
+## B8. Chạy đúng digest và ghi baseline lần đầu
 
-```
-ten-mien-cua-ban.com, www.ten-mien-cua-ban.com {
-	encode gzip
-	reverse_proxy frontend:3000
-}
-```
-
-Commit, đẩy lên, rồi trên máy chủ:
+Từ máy cá nhân, vẫn giữ biến `RELEASE_DIR` của B6:
 
 ```bash
-git -C /opt/goldcast pull
-docker compose -f /opt/goldcast/docker-compose.prod.yml restart caddy
+ssh deploy@$IP "docker compose --env-file /opt/goldcast/.env --env-file '$RELEASE_DIR/release.env' -p goldcast -f '$RELEASE_DIR/docker-compose.prod.yml' up -d --wait --wait-timeout 300"
+ssh deploy@$IP "docker compose --env-file /opt/goldcast/.env --env-file '$RELEASE_DIR/release.env' -p goldcast -f '$RELEASE_DIR/docker-compose.prod.yml' ps"
 ```
 
-**`restart` chứ không phải `up -d`.** Caddyfile là bind mount, không phải một
-phần cấu hình container — compose thấy container không đổi nên sẽ không làm gì
-cả, và lệnh vẫn trả về thành công.
+Dùng project `goldcast` để tạo đúng volume `goldcast_goldcast-pgdata`. Bốn
+service production chạy; backend và db healthy. Chỉ Caddy publish 80/443.
 
-**Kiểm:**
+Kiểm HTTPS và chuyển hướng từ máy cá nhân:
 
 ```bash
 curl -I https://$TEN_MIEN
 curl -I http://$TEN_MIEN
 ```
 
-Cái đầu `HTTP/2 200`, cái sau `308` chuyển sang `https://`. Caddy tự xin chứng
-chỉ và tự dựng chuyển hướng; không có dòng cấu hình TLS nào phải viết tay.
+Cái đầu trả 200, cái sau 308 sang HTTPS. Caddy tự xin chứng chỉ. Rồi quét cổng
+từ bên ngoài VPS:
+
+```bash
+for p in 22 80 443 3000 5432 8080; do
+  nc -z -w 2 $IP "$p" >/dev/null 2>&1 && echo "$p MO" || echo "$p dong"
+done
+```
+
+Chỉ 22, 80, 443 mở. Cổng Docker publish có thể vượt qua luật ufw nên không
+chỉ dựa vào `ufw status`. Sau khi kiểm tra đạt, ghi baseline bằng chính script
+và manifest của release:
+
+```bash
+ssh deploy@$IP "sh '$RELEASE_DIR/scripts/release.sh' bootstrap '$RELEASE_DIR'"
+ssh deploy@$IP 'cat /opt/goldcast/.last-good-release'
+```
+
+Bootstrap xác minh readiness, image ID và các trang HTTPS trước khi ghi con
+trỏ. Nếu lỗi thì sửa và chạy lại, không tự tạo `.last-good-release`. Đây là
+bước triển khai đầu tiên; từ lần sau dùng pipeline ở B9/B10.
 
 ## B9. Jenkins tự deploy
 
@@ -461,7 +475,9 @@ Trong Jenkins, Manage Jenkins → Credentials → System → Global, thêm hai m
 Lấy khoá vào clipboard mà không in ra màn hình: `pbcopy < ~/.ssh/jenkins_deploy`
 (macOS) hoặc `xclip -sel clip < ~/.ssh/jenkins_deploy` (Linux).
 
-`Jenkinsfile` trong repo đã có sẵn sáu stage. Hai chi tiết trong đó đáng chú ý:
+Trong job Jenkins, đổi **Branches to build** sang `*/main` khi đã có baseline
+và credential VPS, rồi cấu hình Poll SCM như A5. Nếu thiếu baseline hoặc chưa
+sẵn sàng deploy, giữ nhánh kiểm thử. Các điểm cần chú ý trong Jenkinsfile:
 
 **Đăng nhập registry phải dùng nháy đơn:**
 
@@ -505,12 +521,12 @@ docker exec jenkins ssh-keygen -f /var/jenkins_home/.ssh/known_hosts -R $IP
 Rồi kiểm bằng chính file đó, đừng tin vào lệnh vừa chạy:
 
 ```bash
-docker exec jenkins sh -c 'grep -c '"$IP"' /var/jenkins_home/.ssh/known_hosts; echo "ma thoat: $?"'
+docker exec jenkins ssh-keygen -F "$IP" -f /var/jenkins_home/.ssh/known_hosts
 ```
 
-Phải ra `0` và `ma thoat: 1`.
+Không còn bản ghi thì lệnh không in host và trả mã 1.
 
-**Kiểm:** đẩy một commit bất kỳ lên `main`, **không bấm gì trong Jenkins**.
+**Kiểm:** đưa một thay đổi đã review vào `main` qua PR, **không bấm gì trong Jenkins**.
 Trong 5 phút phải có build mới, và trang build ghi **"Started by an SCM change"**
 chứ không phải "Started by user". Rồi:
 
@@ -560,7 +576,7 @@ và `previous-good-release` trong thư mục release.
 Trên VPS, lấy đúng đường dẫn release từ build bị ngắt:
 
 ```bash
-RELEASE_DIR=/opt/goldcast/releases/<commit>-<job>-<build>
+RELEASE_DIR='/opt/goldcast/releases/<commit>-<job>-<build>'
 sh "$RELEASE_DIR/scripts/release.sh" status "$RELEASE_DIR"
 ```
 
