@@ -53,18 +53,34 @@ pipeline {
                 sh '''
                     set -eu
                     : > release.env
+
                     for service in backend frontend; do
                         image="$REG/goldcast-$service:$RELEASE_ID"
-                        docker buildx build --platform linux/amd64 -t "$image" --push "$service/"
-                        digest=$(docker buildx imagetools inspect "$image" --format '{{.Manifest.Digest}}')
-                        echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
-                        key=$(printf '%s' "$service" | tr '[:lower:]' '[:upper:]')
-                        printf '%s_IMAGE=%s/goldcast-%s@%s\n' "$key" "$REG" "$service" "$digest" >> release.env
-                    done
-                '''
-                archiveArtifacts artifacts: 'release.env', fingerprint: true
-            }
-        }
+                        metadata_file="build-metadata-$service.json"
+
+                        docker buildx build \
+                            --platform linux/amd64 \
+                            -t "$image" \
+                            --metadata-file "$metadata_file" \
+                            --push "$service/"
+
+                    digest=$(
+                        docker run --rm -i python:3.13-alpine \
+                            python3 -c 'import json,sys; print(json.load(sys.stdin)["containerimage.digest"])' \
+                            < "$metadata_file"
+                )
+
+                    echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
+
+                    key=$(printf '%s' "$service" | tr '[:lower:]' '[:upper:]')
+
+                    printf '%s_IMAGE=%s/goldcast-%s@%s\\n' \
+                        "$key" "$REG" "$service" "$digest" >> release.env
+                done
+            '''
+            archiveArtifacts artifacts: 'release.env', fingerprint: true
+    }
+}
         stage('G2 - isolated image tests') {
             steps { sh 'sh scripts/g2.sh' }
         }
