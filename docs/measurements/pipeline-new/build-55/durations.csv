@@ -1,0 +1,10 @@
+stage,status,seconds
+TOTAL,SUCCESS,157.211
+Checkout SCM,success,0.857
+Checkout identity,success,0.726
+G1 - code,success,36.018
+Registry login,success,1.69
+Build images once,success,22.531
+G2 - isolated image tests,success,93.214
+Production,skipped,0.09
+Post Actions,success,0.285

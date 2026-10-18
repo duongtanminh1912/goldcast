@@ -1,6 +1,11 @@
 
 # Nhật ký đồ án DevOps — goldcast
 
+Các mục theo tuần ghi lại trạng thái tại thời điểm thực hiện. Những mô tả như
+G2 chạy sau deploy, `THE_TAG`, số stage và thời lượng build ở tuần 10–11 thuộc
+pipeline cũ. Cải tiến ngày 17/10/2026 được ghi riêng ở cuối file; hướng dẫn vận
+hành hiện hành nằm trong [tutorial](tutorial.md#b10-g1--build--g2--deploy--g3).
+
 ## Tuần 2 — 22/09/2026
 **Mục tiêu:** chạy được goldcast trên máy cá nhân
 
@@ -805,7 +810,11 @@ không nằm trong build context của `backend/` hay `frontend/` — nên cả 
 đều CACHED. 1:30 là **pipeline đầy đủ khi mã nguồn không đổi**. Pipeline có sửa
 code thật ước chừng 3 phút 10. Mốc trong kế hoạch là dưới 10 phút.
 
-### Deploy theo số build, không theo `latest`
+### Deploy theo số build, không theo `latest` (cơ chế tuần 10)
+
+Cơ chế dưới đây được dùng ở tuần 10–11. Từ cải tiến ngày 17/10, pipeline dùng
+manifest digest và `.last-good-release`; không dùng cách sửa `THE_TAG` dưới đây
+để thao tác với release mới.
 
 `.env` trên máy chủ được pipeline ghi lại mỗi lần:
 
@@ -871,12 +880,13 @@ lần một với lần hai.
 
 ### Đã làm
 
-**Gắn cổng G2 vào pipeline.** `scripts/smoke.mjs` viết từ tuần 7 nhưng tới giờ
-mới được nối vào Jenkins. Nó chạy sau bước deploy, bên trong mạng nội bộ của
-compose trên máy chủ, gọi backend qua `http://backend:8080`. Thêm một phép kiểm
+**Gắn cổng G2 vào pipeline cũ.** `scripts/smoke.mjs` viết từ tuần 7 và được
+nối vào Jenkins trong tuần này. Khi đó nó chạy sau bước deploy, bên trong
+mạng nội bộ của compose trên máy chủ, gọi backend qua `http://backend:8080`. Thêm một phép kiểm
 trang công khai bằng `curl` tới `https://goldcast.click`.
 
-Hai lần đỏ trước khi xanh:
+Các lỗi #32–#33 đã ghi ở tuần 10 được nhắc lại dưới đây làm bối cảnh, không
+phải hai lần chạy mới của tuần 11:
 
 - Build #32 đỏ vì credentials `ghcr` và `vps-deploy` chưa được tạo.
 - Build #33 đỏ với `No such DSL method 'sshagent'`. Plugin SSH Agent không nằm
@@ -932,9 +942,10 @@ Trạng thái máy cũ ngay trước khi xoá, lấy từ bảng Virtualizor:
 | Uptime | 2 ngày 23 giờ |
 | Băng thông 3 ngày | 1,14 GB (827 MB vào, 344 MB ra) |
 
-Băng thông gần như toàn bộ là chiều **vào**, tức kéo image từ GHCR. Một trang
-hầu như không ai truy cập vẫn tốn 827 MB trong ba ngày. Đó là lý do
-`docker image prune -f` trong pipeline là cần, không phải tiện.
+Chiều **vào** chiếm 827 MB trong ba ngày, phù hợp với việc kéo image từ GHCR.
+Băng thông không đo dung lượng image còn lưu trên đĩa. Việc giữ và dọn image
+cần theo dõi riêng; pipeline mới chưa có chính sách dọn release/image cũ và
+phải giữ được các digest cần cho rollback.
 
 Quét cổng từ máy khác sau khi dựng xong:
 
@@ -950,7 +961,7 @@ Build #39 (xanh), thời gian từng phần:
 | Build + đẩy backend | ~15 s |
 | Build + đẩy frontend | ~14 s |
 | Deploy | vài giây |
-| G2 | 18 phép thử |
+| G2 sau deploy (script tại thời điểm #39) | 18 phép thử |
 
 **Con số build này không dùng để so sánh được.** Jenkins chạy trên máy Mac,
 không bị đụng tới khi xoá máy chủ, nên toàn bộ cache BuildKit còn nguyên — mọi
@@ -1032,3 +1043,92 @@ Chứng chỉ Let's Encrypt cho `goldcast.click` phải cấp lại vì chứng 
 trên đĩa máy cũ. Đây là lần cấp thứ hai trong tuần; giới hạn trùng bộ tên miền
 là khoảng 5 lần mỗi 7 ngày, nên không thể lặp lại bài kiểm này nhiều lần trong
 cùng một tuần.
+
+
+## Cải tiến ngày 17/10/2026 — G2 trước deploy, G3 xác minh và rollback
+
+Mục này bổ sung sau tuần 11, được đối chiếu lại ngày 18/10/2026. Không thay thế
+hay đo lại số liệu build #34/#39. Mã triển khai nằm trong commit `7494a4c`;
+commit `8013a3d` sau đó chuyển cách lấy digest sang metadata của Buildx.
+
+### Thay đổi đã thực hiện
+
+Luồng mới trong `Jenkinsfile`:
+
+```text
+G1 kiểm code và test release → build/push image một lần → G2 môi trường riêng
+→ Deploy production (chỉ main) → G3 xác minh → ghi nhận bản tốt hoặc rollback
+```
+
+- **G1:** giữ `mvn test`, bổ sung TypeScript typecheck và bộ test
+  release/rollback/recovery/bootstrap trong Python 3.13 container. Cổng hợp
+  đồng Java–TypeScript ở tuần 6 vẫn là một phần của test Maven.
+- **Build:** tạo image `linux/amd64`, lấy `containerimage.digest` từ metadata
+  Buildx và lưu hai tham chiếu image vào artifact `release.env`. G2 và Deploy
+  đọc cùng manifest; production không build lại hay chọn lại qua `latest`.
+- **G2:** dùng `docker-compose.ci.yml`, project riêng cho từng build, không
+  publish cổng và không dùng DB/volume production. Kiểm cài mới và nâng cấp
+  từ V1 với dữ liệu mẫu trong cả bốn bảng nghiệp vụ. Sau mỗi ca, kiểm lịch sử
+  Flyway, nội dung API, công thức quy đổi, dự báo NAIVE và ba trang SSR.
+- **G3:** đợi readiness, đối chiếu image ID container với digest của release,
+  kiểm các trang HTTPS qua Caddy. Chỉ sau khi đạt mới cập nhật nguyên tử
+  `.last-good-release`.
+- **Rollback/recovery:** lưu cố định `previous-good-release` trước khi deploy.
+  Khóa trên VPS có thông tin release, kèm thời điểm, URL build và trạng thái
+  trong thư mục release. Lệnh `status` phục vụ kiểm tra; `recover` yêu cầu xác
+  nhận build/deploy đã dừng. Không tự xóa khóa theo tuổi.
+
+Khi chuyển production cũ sang cơ chế này, `bootstrap-release.sh` kiểm project
+Compose và volume DB, chụp digest đang chạy cùng Caddyfile từ container rồi
+xác minh trước khi ghi baseline. Đây là bước cần thực hiện trên VPS, chưa được
+coi là đã hoàn thành chỉ vì script có trong repo.
+
+### Kiểm chứng cục bộ đã có
+
+Nguồn: output terminal của phiên kiểm thử ngày 17/10/2026, đã ghi nhận trong
+phiên làm việc; chưa có số build Jenkins cho các ca này.
+
+| Hạng mục | Kết quả đã quan sát | Phạm vi |
+|---|---|---|
+| Backend | 102 test, 0 lỗi | Maven trên máy cá nhân |
+| Frontend | typecheck và build image thành công | Bộ mã/phụ thuộc tại lần build đó |
+| Release/rollback/recovery/bootstrap | 19 test đạt, gồm chạy trong `python:3.13-alpine` | Docker và VPS được giả lập bằng lệnh trong test |
+| G2 cài mới | Flyway đạt; 35 phép kiểm API và 3 trang SSR đạt | Compose cục bộ, image `linux/amd64` đã build tại máy |
+| G2 nâng cấp có dữ liệu | V1 → migration mới nhất đạt, dữ liệu bốn bảng giữ nguyên; 35 phép kiểm API và 3 trang SSR đạt | Cùng image ứng viên, DB mẫu riêng |
+| Dọn môi trường G2 | Container, mạng và dữ liệu tạm được dọn | Hai ca cục bộ trên |
+
+Không cộng 102 test Java, 19 test mô phỏng và 35 phép kiểm API thành một chỉ
+số chất lượng chung: chúng kiểm các tầng khác nhau. Con số 18 ở tuần 7/#39
+vẫn là kết quả script cũ; 35 là script đã thêm kiểm dự báo.
+
+### Lỗi tìm ra khi kiểm thử và cách sửa
+
+1. **Rollback có thể chọn nhầm bản vừa được ghi nhận.** Bản trước được lưu
+   riêng trước deploy. Sau khi G3 đã ghi nhận thành công, lỗi dọn khóa chỉ
+   cảnh báo; một lời gọi rollback muộn không quay lui bản đã được ghi nhận.
+2. **Test rollback chưa nằm trong G1.** Đã nối bộ test Python vào G1 để các
+   thay đổi sau phải đi qua cùng cơ chế kiểm tra.
+3. **Ca nâng cấp vẫn giữ target V1.** Biến môi trường đặt trước lời gọi hàm
+   shell còn hiệu lực ở bước sau, khiến kiểm lịch sử Flyway báo lỗi. Đã đưa
+   bước V1 vào subshell, đặt target mặc định rõ ràng và kiểm đúng baseline
+   trước khi nạp fixture. Lần chạy lại hoàn tất cả nâng cấp và smoke test.
+4. **Build bị ngắt có thể để lại khóa.** Đã bổ sung metadata, `status`,
+   `recover` và test lỗi xác minh/khóa thuộc release khác; không đoán rằng
+   khóa lâu ngày đồng nghĩa với có thể xóa.
+
+### Chưa có bằng chứng và giới hạn
+
+- Chưa có log Jenkins chạy trọn luồng mới, G3 trên VPS hay rollback/recovery
+  thực tế trên VPS trong phiên kiểm chứng này. Test mô phỏng không thay thế
+  các bằng chứng đó.
+- Chưa đo thời lượng từng stage hoặc toàn pipeline mới. Không dùng 7,8 s,
+  19 s, 1 phút 30 hay ước lượng ~3 phút 10 của pipeline cũ cho luồng mới.
+- Ca nâng cấp mới bao phủ baseline V1 và fixture hiện có; chưa bao phủ mọi
+  phiên bản cũ/hình dạng dữ liệu. Rollback ứng dụng không hoàn tác migration DB.
+- Các test trang kiểm nội dung SSR, chưa kiểm tương tác JavaScript trong
+  trình duyệt. Chưa có cơ chế giám sát dài hạn hay dọn release/image cũ.
+- Kết quả local ngày 17/10 gắn với mã và image khi chạy, không tự xác nhận các
+  thay đổi sau đó, gồm thay đổi lấy digest và cập nhật phụ thuộc frontend.
+
+Kế hoạch đo và cách đưa bằng chứng mới vào báo cáo được ghi trong
+[số liệu chương 3](so-lieu-chuong-3.md#bổ-sung-ngày-17102026--pipeline-g1g2g3).
