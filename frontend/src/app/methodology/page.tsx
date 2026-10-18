@@ -31,11 +31,12 @@ export default function MethodologyPage() {
             gian tích luỹ trước khi có ý nghĩa.
           </p>
           <p>
-            Khi một chuỗi hoàn toàn chưa có dữ liệu và không kết nối được nguồn nào, hệ thống
-            sinh dữ liệu mô phỏng có tính xác định để ứng dụng vẫn chạy được. Những dòng đó
+            Khi một chuỗi vẫn hoàn toàn chưa có dữ liệu sau ingest, hệ thống
+            có thể sinh dữ liệu mô phỏng nếu bật chế độ seed. Những dòng đó
             được gắn nhãn <code className="font-mono text-xs">source = "synthetic"</code> và
-            giao diện luôn cảnh báo. Dữ liệu mô phỏng không bao giờ bị trộn vào một chuỗi đã
-            có dữ liệu thật.
+            giao diện cảnh báo khi kết quả có dữ liệu mô phỏng. Seed chỉ áp dụng cho chuỗi
+            rỗng; nếu nguồn thật hoạt động trở lại, các điểm thật có thể cùng tồn tại với
+            lịch sử mô phỏng. Hệ thống không tự xoá lịch sử mô phỏng khi nguồn phục hồi.
           </p>
         </div>
       </Card>

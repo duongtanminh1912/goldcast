@@ -3,12 +3,12 @@
 Dùng file này khi VPS đã hết hạn hoặc bị xoá, và cần dựng lại hệ thống trên
 **một máy chủ mới, địa chỉ IP mới** — có thể cùng nhà cung cấp, có thể khác.
 
-Khác với `docs/tutorial.md` ở đúng một điểm, nhưng điểm đó xuyên suốt cả quy
-trình: tutorial giả định tên miền đã trỏ sẵn vào máy chủ. Ở đây IP đổi, nên
-**phải sửa IP ở ba nơi** và phải chờ DNS trước khi chạm vào HTTPS.
+Luồng release hiện tại dùng **digest đã qua G2**, cấu hình theo từng release
+và `.last-good-release` chỉ được ghi sau xác minh. Khôi phục phải giữ các thông
+tin đó, không lấy `latest` hoặc `THE_TAG` để đoán phiên bản.
 
-Thời gian thực tế đo được cho lần dựng lại trên cùng IP là 27 phút. Lần này
-cộng thêm thời gian chờ DNS, tính khoảng **40–50 phút**.
+Lần dựng lại pipeline cũ trên cùng IP mất 27 phút theo nhật ký. Chưa đo thời
+lượng khôi phục theo luồng release mới; thời gian chờ DNS còn tuỳ môi trường.
 
 ---
 
@@ -19,34 +19,70 @@ cộng thêm thời gian chờ DNS, tính khoảng **40–50 phút**.
 | Thứ | Nằm ở đâu | Trạng thái |
 |---|---|---|
 | Mã nguồn, Jenkinsfile, các tệp compose | GitHub | nguyên |
-| Image `goldcast-backend`, `goldcast-frontend` | GHCR | nguyên, mọi tag cũ còn đó |
+| Image `goldcast-backend`, `goldcast-frontend` | GHCR | chỉ phục hồi được nếu digest cần dùng vẫn còn và VPS kéo được |
 | Jenkins: job, credentials, lịch sử build | volume Docker trên máy Mac | nguyên |
 | Tên miền | nhà đăng ký | nguyên, chỉ cần sửa bản ghi A |
-| Dữ liệu giá vàng | database trên VPS | mất, nhưng tự sinh lại khi rỗng |
-| `.env` production | chỉ trên VPS | mất — không sao, sinh lại mật khẩu mới |
+| Dữ liệu giá và dự báo đã lưu | database trên VPS | mất nếu không có backup; lịch sử nguồn thật không được seed tái tạo |
+| Manifest và cấu hình release đang chạy | `/opt/goldcast/releases/` trên VPS | mất nếu chưa sao lưu; artifact Jenkins chỉ chứa `release.env` |
+| `.env` production | trên VPS | cần dựng lại cấu hình và bí mật; không đưa vào Git |
 
-Không có gì cần sao lưu trước khi để VPS hết hạn. Đây là hệ quả của việc dữ
-liệu trong hệ thống là dữ liệu tự sinh.
+Giữ backup bên ngoài VPS. Seed mô phỏng là lựa chọn cho môi trường demo,
+không phải bản sao của dữ liệu thị trường hoặc database cũ.
 
 ---
 
-## 2. Trước khi để hết hạn — ba việc, 5 phút
+## 2. Trước khi để hết hạn — giữ release và dữ liệu
 
-Làm trước khi mất quyền truy cập, vì sau đó thì muộn:
+Trên máy cá nhân, gán `IP_CU` bằng IP VPS cũ rồi chạy:
 
-1. **Ghi lại phiên bản đang chạy**, để biết sau này dựng lại có đúng bản đó
-   không:
-   ```
-   ssh deploy@<IP-CU> 'grep THE_TAG /opt/goldcast/.env'
-   ```
+```bash
+IP_CU=103.175.248.236
+BACKUP_DIR="$HOME/goldcast-backup-$(date -u +%Y%m%dT%H%M%SZ)"
+umask 077
+mkdir -p "$BACKUP_DIR"
+ssh deploy@$IP_CU 'set -eu
+  cd /opt/goldcast
+  release=$(cat .last-good-release)
+  case "$release" in /opt/goldcast/releases/*) ;; *) exit 1;; esac
+  tar -cf - -C "$release" release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs
+' > "$BACKUP_DIR/release.tar"
+tar -tf "$BACKUP_DIR/release.tar"
+```
 
-2. **Kiểm hai package trên GHCR đang để công khai.** Vào
-   `github.com/<ten-github>?tab=packages`, mở từng package, Package settings,
-   phần Danger Zone phải ghi là Public. Nếu để riêng tư thì máy chủ mới sẽ
-   không kéo image được mà không có token.
+Archive chỉ chứa manifest và cấu hình, không chứa `.env`, con trỏ hay khóa cũ.
+Nếu chưa bootstrap, không có `.last-good-release`: xem phần chuyển production
+cũ trong [tutorial](tutorial.md#b9-jenkins-tự-deploy), xác minh baseline trước.
 
-3. **Kiểm `main` đang xanh.** Nếu `main` đang đỏ thì lúc dựng lại sẽ phải vừa
-   dựng vừa sửa code, rất mất thời gian.
+Backup DB (lệnh dưới dùng tên user/database mặc định `goldcast`; đổi nếu cấu
+hình khác). Thực hiện khi không có deploy/migration đang chạy:
+
+```bash
+ssh deploy@$IP_CU 'docker exec goldcast-db pg_dump -U goldcast -d goldcast -Fc' > "$BACKUP_DIR/database.dump"
+test -s "$BACKUP_DIR/database.dump"
+```
+
+Lưu riêng cấu hình vận hành cần giữ và bí mật trong nơi lưu bí mật của bạn.
+Kiểm hai digest trong archive còn kéo được từ GHCR. Nếu package private,
+VPS mới cần được đăng nhập registry bằng token có quyền đọc package.
+
+**Nếu VPS đã mất và chưa có archive:** lấy `release.env` từ một build Jenkins
+đã đạt G2, cùng commit của build đó. Với bản từng chạy production, ưu tiên build
+có log G3 thành công. Từ checkout local chứa commit tương ứng:
+
+```bash
+# Gán SHA đầy đủ của build đã chọn; tải artifact release.env vào Downloads trước.
+RESTORE_COMMIT='SHA_CUA_BUILD_DA_CHON'
+BACKUP_DIR="$HOME/goldcast-recovery"
+umask 077
+mkdir -p "$BACKUP_DIR/candidate"
+git archive "$RESTORE_COMMIT" docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs |
+  tar -xf - -C "$BACKUP_DIR/candidate"
+cp "$HOME/Downloads/release.env" "$BACKUP_DIR/candidate/release.env"
+tar -cf "$BACKUP_DIR/release.tar" -C "$BACKUP_DIR/candidate" release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs
+```
+
+Không có DB backup thì không thể tuyên bố đã phục hồi lịch sử cũ. Không dùng
+job xanh với Production `SKIPPED` làm bằng chứng G3 của production đã thành công.
 
 ---
 
@@ -92,10 +128,13 @@ lúc vào được lúc không, và Caddy có thể xin chứng chỉ thất b�
 Đặt biến cho đỡ gõ nhầm. **Gán lại mỗi khi mở terminal mới:**
 
 ```bash
-IP=<dien-ip-moi-vao-day>
-TEN_MIEN=<dien-ten-mien-vao-day>
-REPO=<ten-github>/goldcast
+IP='DIA_CHI_IP_MOI'
+TEN_MIEN=goldcast.click
+REPO=duongtanminh1912/goldcast
 ```
+
+Thay `DIA_CHI_IP_MOI` trước khi chạy. Hướng dẫn này giữ domain `goldcast.click`;
+nếu đổi domain, phải đổi cả Caddyfile và URL HTTPS trong `scripts/release.sh`.
 
 ### 5.1 Xoá dấu vân tay cũ và đẩy khoá lên
 
@@ -217,20 +256,23 @@ ssh deploy@$IP "sudo mkdir -p /opt/goldcast && sudo chown deploy:deploy /opt/gol
   git clone https://github.com/$REPO.git /opt/goldcast && ls /opt/goldcast"
 ```
 
-### 6.2 Sinh tệp bí mật
+### 6.2 Sinh tệp bí mật trên máy mới
 
 ```bash
 ssh deploy@$IP "umask 077; cd /opt/goldcast && \
-  printf 'POSTGRES_DB=goldcast\nPOSTGRES_USER=goldcast\nPOSTGRES_PASSWORD=%s\nAPP_ADMIN_TOKEN=%s\nAPP_CORS_ALLOWED_ORIGINS=https://$TEN_MIEN\n' \
+  printf 'POSTGRES_DB=goldcast\nPOSTGRES_USER=goldcast\nPOSTGRES_PASSWORD=%s\nAPP_ADMIN_TOKEN=%s\nAPP_CORS_ALLOWED_ORIGINS=https://$TEN_MIEN\nAPP_INGEST_ENABLED=true\nAPP_INGEST_SEED_ON_EMPTY=false\n' \
   \"\$(openssl rand -hex 24)\" \"\$(openssl rand -hex 32)\" > .env && \
   chmod 600 .env && ls -l .env && grep -c . .env"
 ```
 
 Bí mật sinh thẳng trên máy chủ, không đi qua màn hình và không vào lịch sử
 shell của máy cá nhân. Mật khẩu mới khác mật khẩu cũ — không sao, database cũng
-mới.
+mới. Khi restore DB dump, user/database cần khớp với bản dump. Không ghi đè `.env`
+theo lệnh này nếu đang phục hồi trên một database volume đã có dữ liệu.
 
-**Kiểm:** ra `-rw-------` và số `5`. Đừng `cat` tệp đó ra.
+**Kiểm:** ra `-rw-------` và số `7`. Đừng `cat` tệp đó ra. Nếu chủ động dựng
+demo không có DB backup, có thể đặt seed thành `true` trước lúc chạy; dữ liệu
+được sinh là mô phỏng. Tắt seed không xoá dữ liệu mô phỏng có sẵn.
 
 ### 6.3 Chờ DNS xong rồi mới chạm vào Caddy
 
@@ -241,33 +283,63 @@ dig +short www.$TEN_MIEN
 
 **Cả hai phải ra đúng IP mới.** Chưa ra thì chờ, kiểm lại sau vài phút.
 
-Đây là phép kiểm rẻ nhất trong cả quy trình và nó đứng chắn trước thứ đắt nhất:
-Let's Encrypt đếm số lần xin chứng chỉ thất bại, và giới hạn số chứng chỉ trùng
-hệt một bộ tên miền trong 7 ngày là khoảng 5 lần. Chạm vào Caddy khi DNS chưa
-đúng là đốt hạn mức vô ích.
+Chờ DNS đúng để tránh lỗi cấp chứng chỉ và các lần thử lại không cần thiết.
 
-### 6.4 Kéo image và dựng stack
+### 6.4 Phục hồi đúng manifest và database
 
-```bash
-ssh deploy@$IP 'cd /opt/goldcast && docker compose -f docker-compose.prod.yml pull'
-```
-
-Báo `denied` hoặc `unauthorized` nghĩa là package trên GHCR đang để riêng tư —
-quay lại mục 2 việc số 2.
+Từ máy cá nhân, dùng `BACKUP_DIR` đã tạo ở mục 2:
 
 ```bash
-ssh deploy@$IP 'cd /opt/goldcast && docker compose -f docker-compose.prod.yml up -d && \
-  echo "--- cho 45 giay ---" && sleep 45 && docker compose -f docker-compose.prod.yml ps'
+scp "$BACKUP_DIR/release.tar" deploy@$IP:/opt/goldcast/release-restore.tar
+# Chỉ chạy dòng sau khi có bản dump cần phục hồi.
+scp "$BACKUP_DIR/database.dump" deploy@$IP:/opt/goldcast/database.dump
+ssh deploy@$IP
 ```
 
-Chờ 45 giây ngay trong lệnh, vì backend cần khoảng 32 giây mới chuyển sang
-`healthy`.
+Các lệnh tiếp theo chạy trên VPS mới:
+
+```bash
+cd /opt/goldcast
+RELEASE_DIR="/opt/goldcast/releases/restore-$(date -u +%Y%m%dT%H%M%SZ)"
+mkdir -p "$RELEASE_DIR"
+tar -xf release-restore.tar -C "$RELEASE_DIR"
+grep -Ec '^(BACKEND|FRONTEND)_IMAGE=[^[:space:]]+@sha256:[a-f0-9]{64}$' "$RELEASE_DIR/release.env"
+release_compose() {
+  docker compose --env-file /opt/goldcast/.env --env-file "$RELEASE_DIR/release.env" \
+    -p goldcast -f "$RELEASE_DIR/docker-compose.prod.yml" "$@"
+}
+release_compose pull
+release_compose up -d --wait --wait-timeout 300 db
+```
+
+Phép kiểm manifest phải ra `2`. Nếu kéo image thất bại, xử lý quyền GHCR hoặc
+digest đã bị xoá; không thay bằng `latest`. Nếu có dump, khôi phục vào **DB mới
+vừa tạo**, trước khi chạy backend:
+
+```bash
+docker exec -i goldcast-db pg_restore -U goldcast -d goldcast \
+  --no-owner --no-privileges --exit-on-error < /opt/goldcast/database.dump
+```
+
+Không có dump thì bỏ qua lệnh `pg_restore`. Với seed tắt, cần provider nạp đủ
+lịch sử trước khi các trang dự báo vượt kiểm tra. Sau đó:
+
+```bash
+release_compose up -d --wait --wait-timeout 300
+release_compose ps
+```
+
+Project phải là `goldcast` để dùng đúng volume `goldcast_goldcast-pgdata`.
+Chờ bằng healthcheck, không dựa vào một khoảng `sleep` cố định.
 
 **Kiểm:** bốn container `db`, `backend` (healthy), `frontend`, `caddy`. Ở cột
 cổng, **chỉ `caddy` được có `0.0.0.0:80` và `0.0.0.0:443`**. Ba cái kia không
 được có gì cả.
 
 ### 6.5 Kiểm từ bên ngoài
+
+Giữ phiên VPS ở mục 6.4 mở. Dùng terminal khác trên máy cá nhân, gán lại
+`IP` và `TEN_MIEN` rồi kiểm:
 
 ```bash
 curl -I https://$TEN_MIEN; curl -I http://$TEN_MIEN
@@ -281,13 +353,26 @@ for p in 22 80 443 3000 5432 8080; do
 done
 ```
 
-Đúng ba cổng mở: 22, 80, 443. Ba cổng kia đóng. Phải quét từ máy cá nhân chứ
-không phải từ máy chủ — Docker ghi luật iptables vào chuỗi `DOCKER-USER` nằm
-trước luật của ufw, nên nhìn từ bên trong sẽ không thấy cổng nào bị hở.
+Đúng ba cổng mở: 22, 80, 443. Ba cổng kia đóng. Phải quét từ máy cá nhân;
+các cổng Docker publish có thể đi qua đường xử lý khác với luật ufw.
+
+### 6.6 Xác minh và ghi baseline mới
+
+Trở lại phiên VPS ở mục 6.4, vẫn còn biến `RELEASE_DIR`:
+
+```bash
+sh "$RELEASE_DIR/scripts/release.sh" bootstrap "$RELEASE_DIR"
+test "$(cat /opt/goldcast/.last-good-release)" = "$RELEASE_DIR"
+sh "$RELEASE_DIR/scripts/release.sh" status "$RELEASE_DIR"
+```
+
+Bootstrap so image ID/digest, readiness và HTTPS qua các trang thật trước khi
+ghi con trỏ. Nó không restart stack. Nếu lỗi, chưa có baseline; sửa nguyên
+nhân và kiểm lại trước khi nối Jenkins. Không tự tạo `.last-good-release`.
 
 ---
 
-## 7. Nối lại Jenkins — ba chỗ phải sửa IP
+## 7. Nối lại Jenkins sau khi baseline đạt
 
 Đây là phần khác hẳn tutorial, và là chỗ dễ quên nhất.
 
@@ -331,7 +416,7 @@ thành IP mới. Commit qua pull request như bình thường.
 ### 7.3 Xoá khoá định danh cũ trong container Jenkins
 
 ```bash
-docker exec jenkins ssh-keygen -f /var/jenkins_home/.ssh/known_hosts -R <ip-cu>
+docker exec jenkins ssh-keygen -f /var/jenkins_home/.ssh/known_hosts -R "$IP_CU"
 ```
 
 Dùng đường dẫn tuyệt đối, vì `docker exec` không chắc đặt biến `HOME`. Không
@@ -340,20 +425,26 @@ thêm `|| true` — lệnh hỏng thì phải thấy nó hỏng.
 **Kiểm bằng chính tệp đó, đừng tin vào lệnh vừa chạy:**
 
 ```bash
-docker exec jenkins sh -c 'grep -c <ip-cu> /var/jenkins_home/.ssh/known_hosts; echo "ma thoat: $?"'
+docker exec jenkins ssh-keygen -F "$IP_CU" -f /var/jenkins_home/.ssh/known_hosts
 ```
 
-Phải ra `0` và `ma thoat: 1`.
+Gán lại `IP_CU` trong terminal nếu cần. Không còn bản ghi thì lệnh `-F` không
+in host và trả mã 1. Chỉ xóa bản ghi cũ khi đã xác nhận thay máy/host key.
 
 ### 7.4 Chạy thử toàn tuyến
 
-Mở Jenkins, bấm **Build Now**. Sáu chặng phải xanh hết. Rồi:
+Sau khi đã chủ động cho phép deploy VPS mới, chạy job checkout **`main`**.
+Kiểm G1, Build, G2, Deploy và G3 đạt; Production không được `SKIPPED`. Rồi:
 
 ```bash
-ssh deploy@$IP 'grep THE_TAG /opt/goldcast/.env'
+ssh deploy@$IP 'cat /opt/goldcast/.last-good-release'
 ```
 
-Số phải khớp với số build vừa chạy. Đó là lúc dây chuyền khép kín trở lại.
+Đường dẫn phải chứa commit và số build vừa chạy. Hai digest trong
+`<release>/release.env` phải khớp artifact build đó. Chỉ sau G3 con trỏ mới đổi.
+Lưu log và thời lượng thực đo; không dùng build feature chỉ đạt G1/G2 để kết luận
+đã deploy. Nếu build ngắt để lại khóa, dùng `status`/`recover` trong tutorial,
+không tự xoá khóa theo tuổi.
 
 ---
 
@@ -365,7 +456,7 @@ Số phải khớp với số build vừa chạy. Đó là lúc dây chuyền kh
 | Chặng Deploy đỏ, `Host key verification failed` | Container Jenkins còn nhớ khoá cũ | Mục 7.3 |
 | `docker compose pull` báo `denied` | Package GHCR đang riêng tư | Đổi sang Public trong Package settings |
 | `curl https://...` lỗi TLS | DNS chưa trỏ đúng, hoặc Caddy bị chạm trước khi DNS xong | `dig +short $TEN_MIEN` trước; **đừng thử lại nhiều lần**, mỗi lần hỏng là một lượt bị đếm |
-| Sửa `Caddyfile` rồi mà không thấy đổi | `up -d` không làm gì vì Caddyfile là bind mount | `docker compose -f docker-compose.prod.yml restart caddy` |
+| Sửa `Caddyfile` ở checkout mà production không đổi | Production dùng cấu hình trong release đã chốt | Tạo release mới qua pipeline; kiểm đúng đường dẫn Caddyfile của release |
 | Kịch bản chết ở `mkswap` | `/swapfile` rỗng 0 byte của image gốc | Bản vá hiện tại đã xử lý; nếu vẫn chết, `rm /swapfile` rồi chạy lại kịch bản |
 | `nc` báo mọi cổng đóng, kể cả 22 | Dùng nhầm cờ `-G` | Dùng `-w 2` |
 | `timedatectl` báo `System clock synchronized: no` | NTP chưa đồng bộ | Giờ vẫn đúng thì bỏ qua; nếu đồng hồ trôi thì Let's Encrypt sẽ từ chối |
@@ -382,7 +473,9 @@ Số phải khớp với số build vừa chạy. Đó là lúc dây chuyền kh
 - [ ] Quét cổng từ máy khác: chỉ 22, 80, 443 mở
 - [ ] `curl -I https://$TEN_MIEN` ra `HTTP/2 200`
 - [ ] `curl -I http://$TEN_MIEN` ra `308`
-- [ ] Jenkins Build Now xanh cả sáu chặng
-- [ ] `grep THE_TAG /opt/goldcast/.env` khớp số build vừa chạy
+- [ ] Baseline đã được xác minh; không tự khôi phục khóa hoặc con trỏ cũ
+- [ ] Build `main` đạt G1/G2/Deploy/G3, Production không bị bỏ qua
+- [ ] `.last-good-release` trỏ release vừa đạt G3, manifest khớp artifact Jenkins
+- [ ] DB backup đã được phục hồi, hoặc đã ghi rõ đây là DB mới/dữ liệu demo
 - [ ] Ghi lại IP mới vào nhật ký dự án, và sửa IP trong `docs/tutorial.md` nếu
       tài liệu đó còn ghi IP cũ

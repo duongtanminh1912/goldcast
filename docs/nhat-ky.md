@@ -1132,3 +1132,45 @@ vẫn là kết quả script cũ; 35 là script đã thêm kiểm dự báo.
 
 Kế hoạch đo và cách đưa bằng chứng mới vào báo cáo được ghi trong
 [số liệu chương 3](so-lieu-chuong-3.md#bổ-sung-ngày-17102026--pipeline-g1g2g3).
+
+## Đối chiếu ngày 18/10/2026 — bằng chứng pipeline và hướng dẫn vận hành
+
+Build Jenkins **#55**, commit `81185938bbd3c99db8727f8e53fbe428a5760627`,
+chạy nhánh `ci/pre-deploy-gate` và kết thúc `SUCCESS`: G1 36,018 s, build/push
+image 22,531 s, G2 93,214 s, tổng 157,211 s. Production `SKIPPED` đúng điều kiện
+nhánh. Đây là một mẫu có cache, không phải thời gian toàn luồng Deploy/G3 hay
+số trung bình đại diện. Bằng chứng lưu tại
+[`measurements/pipeline-new/build-55/`](measurements/pipeline-new/build-55/);
+phân tích trong [số liệu chương 3](so-lieu-chuong-3.md).
+
+Các mục “chưa đo” ở phần kiểm chứng ngày 17/10 mô tả thời điểm đó. Build #55
+bổ sung bằng chứng Jenkins cho G1/build/G2; vẫn chưa xác nhận bootstrap,
+Deploy/G3 hoặc rollback/recovery thật trên VPS của luồng mới.
+
+Đợt đối chiếu repo với mã hiện tại sửa các sai lệch sau:
+
+- Production Compose nhận `APP_INGEST_ENABLED`, `APP_INGEST_SEED_ON_EMPTY`
+  và `APP_INGEST_CRON` từ môi trường; seed production mặc định `false`.
+  Hai biến image bắt buộc lấy từ manifest, bỏ fallback `THE_TAG`/`latest`.
+  `.env.example` dành cho dev vẫn bật seed và bỏ biến public API không được dùng.
+- `make seed` gửi `X-Admin-Token` từ container backend; thiếu token hoặc HTTP
+  lỗi phải trả mã lỗi. Ba test lệnh ingest bổ sung vào bộ test Python mà G1
+  đã chạy bằng unittest discovery; 19 test release cũ giữ nguyên.
+- README dùng đúng số liệu #55 và phân biệt cấu hình trong repo với trạng
+  thái VPS đã kiểm chứng. Mô tả dữ liệu khớp ingest: provider thật, seed chỉ
+  cho chuỗi rỗng, lịch sử mô phỏng không tự bị xoá khi nguồn thật phục hồi.
+- Tutorial bổ sung Compose Jenkins còn thiếu; chạy test bằng container,
+  phân biệt ba service dev với bốn service production. Nhánh kiểm thử đạt
+  G2 trước khi chuẩn bị VPS, không hứa Production xanh ở phần A.
+- Khởi tạo/khôi phục VPS dùng manifest digest và cấu hình của đúng commit,
+  giữ DB backup khi cần lịch sử cũ, kiểm bootstrap trước khi nối lại Jenkins.
+  Không lấy `latest` hay `THE_TAG` để xác định bản đang chạy.
+- Bỏ dòng tuyên bố giấy phép MIT trong README vì repo chưa có file giấy phép;
+  không tự bổ sung một giấy phép mới.
+- GitHub: đóng #23/#42 vì thay đổi ignore đã có trong `main`, đóng #44 vì
+  cùng commit với #46; giữ #46 cho phần tích hợp nguồn dữ liệu còn đang mở.
+
+Kiểm tra local: 102 test Java, 22 test Python và TypeScript typecheck đạt;
+các ca render Compose production kiểm mặc định và override bật/tắt
+ingest/seed, cron và cổng publish đều đạt. Đây
+là thay đổi mã/tài liệu; không thay cấu hình Jenkins hay triển khai lên VPS.

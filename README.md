@@ -6,11 +6,13 @@
 *đối tượng* mà quy trình xây dựng, kiểm thử, đóng gói và triển khai — không phải
 mục tiêu của đồ án.
 
-Một thay đổi đi từ `git push` tới production đang chạy thật, không có bước nào gõ tay.
+Luồng hiện tại: G1 → build image → G2 độc lập → Deploy `main` → G3 → ghi bản tốt.
+Nhánh khác `main` chạy tới G2 và bỏ qua Production. Việc chuyển production cũ
+sang cơ chế release cần bootstrap một lần; xem [tutorial](docs/tutorial.md).
 
-> **Giá vàng ở đây là dữ liệu tổng hợp, không phải giá thật.**
-> Hệ thống tự sinh chuỗi giá mô phỏng khi database rỗng. Đừng dùng con số nào trong
-> này để ra quyết định tài chính.
+> **Ứng dụng có thể chứa dữ liệu mô phỏng.** Ingest thử lấy dữ liệu từ Stooq/SJC;
+> khi bật seed và chuỗi còn rỗng, hệ thống sinh dữ liệu gắn nhãn `synthetic`.
+> Xem nhãn nguồn và cảnh báo trên từng kết quả; đây là ứng dụng minh hoạ cho đồ án.
 
 Nếu bạn tới đây để xem cách dựng một pipeline CI/CD từ con số không:
 [Quy trình DevOps](#quy-trình-devops) · [nhật ký từng tuần](docs/nhat-ky.md) ·
@@ -28,7 +30,7 @@ git push
    │                                                      ├──► xanh / đỏ trên pull request
    │                                                       ┘
    │
-   └──► Jenkins  (poll nhánh main mỗi 5 phút)
+   └──► Jenkins  (poll nhánh cấu hình trong job)
           G1: mvn test + TypeScript typecheck + test release/rollback
           docker buildx --platform linux/amd64  ──►  GHCR (digest)
           G2: Compose riêng + cài mới/nâng cấp DB có dữ liệu + smoke + SSR
@@ -43,77 +45,79 @@ Không phải hai lựa chọn thay thế nhau:
 
 | | GitHub Actions | Jenkins |
 |---|---|---|
-| Thấy pull request | **có**, nên chặn được merge | không, chỉ theo dõi `main` |
+| Tín hiệu trên pull request | workflow kiểm backend, dùng làm required check | job hiện tại poll một nhánh; Jenkinsfile hỗ trợ nhận diện PR khi có multibranch job |
 | Môi trường | sạch mỗi lần | bền vững — giữ `~/.m2` và `target/` giữa các lần chạy |
 | Sản phẩm | tín hiệu xanh hoặc đỏ | **image Docker đẩy lên GHCR + triển khai thật** |
 | Chạy ở đâu | hạ tầng GitHub | máy cá nhân, sau router gia đình |
 
-Jenkins nằm sau router gia đình nên không nhận được webhook, phải poll `main` mỗi 5
-phút — mà poll thì chỉ theo dõi được nhánh, không đánh giá được pull request. Cách phân
-vai trên là **hệ quả của một ràng buộc kỹ thuật**, không phải lựa chọn tuỳ ý.
+Jenkins trong thiết lập này dùng Poll SCM `H/5 * * * *`. Nhánh được chọn ở cấu hình
+job, không bị cố định bởi Jenkinsfile. Build #55 đã chạy nhánh `ci/pre-deploy-gate`;
+chỉ khi `SOURCE_BRANCH=main` và không phải PR thì stage Production mới được chạy.
+GitHub Actions hiện chỉ chạy test Maven; kiểm TypeScript và test vận hành nằm trong G1 Jenkins.
 
 ### Các cổng chất lượng
 
-**G1 — hợp đồng API.** Đối chiếu DTO Java với khai báo TypeScript của frontend. Kiểu
+**G1 — kiểm code.** Chạy test Java, TypeScript typecheck và test Python cho các lệnh
+vận hành/release. Trong đó, hợp đồng API đối chiếu DTO Java với khai báo TypeScript. Kiểu
 TypeScript bị xoá lúc biên dịch nên không gì đối chiếu chúng với JSON thật: đổi tên một
 trường ở backend thì `mvn test` xanh, `tsc` xanh, còn người dùng thấy ô trống. Cổng chạy
 hai chặng — so tên kiểu, rồi duyệt đồ thị kiểu để **so tên từng trường**. Nằm trong
-`mvn test` nên GitHub Actions chặn được merge. Chạy mất 0,029 giây.
+`mvn test` nên cũng được kiểm trên GitHub Actions.
 
 → [`ApiContractTest.java`](backend/src/test/java/vn/goldcast/api/dto/ApiContractTest.java)
 
-**G2 — nội dung API.** Script độc lập nhận `BASE_URL`, gọi API của image trong môi trường riêng trước deploy và
-kiểm **bất biến** thay vì giá trị, vì dữ liệu là tổng hợp. Ví dụ:
+**G2 — kiểm image trước deploy.** Dùng cùng digest sẽ triển khai, dựng Compose riêng
+để kiểm cài mới và nâng cấp từ schema V1 có dữ liệu mẫu. Mỗi ca kiểm 35 bất biến API
+và ba trang SSR, với provider ngoài tắt và seed mô phỏng bật. Ví dụ:
 `worldVndPerGram × troyOunceInGrams` phải bằng `usdPerOunce × vndPerUsd` — nối ba trường ở
 ba khối khác nhau của cùng một phản hồi, nên công thức quy đổi sai là lộ ngay.
 
-→ [`scripts/smoke.mjs`](scripts/smoke.mjs)
+→ [`scripts/g2.sh`](scripts/g2.sh) · [`scripts/smoke.mjs`](scripts/smoke.mjs)
 
 **G3 — xác minh production.** Kiểm readiness, image ID đúng digest và các trang HTTPS
-qua Caddy. Chỉ ghi bản tốt khi đạt; lỗi thì quay lại manifest tốt gần nhất và kiểm lại.
+qua Caddy. Chỉ ghi bản tốt khi đạt; lỗi thì quay lại bản tốt đã lưu ở đầu deploy và kiểm lại.
 Xem cách chuẩn bị baseline và giới hạn rollback DB trong [tutorial](docs/tutorial.md#b10-g1--build--g2--deploy--g3).
 
-Cả hai cổng đều đã được **kiểm chứng bằng cách cố tình làm hỏng**: đổi tên một trường DTO
+Các kiểm tra hợp đồng G1 và công thức G2 đã được **kiểm chứng bằng cách cố tình làm hỏng**: đổi tên một trường DTO
 để xem G1 có đỏ không, sửa một hằng số quy đổi để xem G2 có bắt được không. Một cổng chưa
-bao giờ đỏ thì không phân biệt được với một cổng không làm gì cả.
+bao giờ đỏ thì không phân biệt được với một cổng không làm gì cả. Bằng chứng pipeline
+mới hiện có là build #55: G1/G2 đạt, Production bị bỏ qua. Chưa có log Deploy/G3/rollback
+thực tế trên VPS cho luồng mới trong bộ số liệu đã lưu.
 
-### Triển khai
+### Môi trường triển khai đã ghi nhận
 
 | | |
 |---|---|
 | Máy chủ | VPS 1 vCPU / 2 GB RAM / 20 GB — 213.400đ/tháng |
 | Tên miền + HTTPS | 19.000đ/năm; chứng chỉ do Caddy tự xin và tự gia hạn |
 | Registry | GitHub Container Registry (GHCR), miễn phí cho repo công khai |
-| Cổng mở ra internet | **chỉ 22, 80, 443** — đã quét từ một máy khác để xác nhận |
+| Cổng mở ra internet | Cấu hình chỉ publish 80/443 qua Caddy; SSH dùng 22. Lần quét lịch sử được ghi trong nhật ký |
 | Người dùng triển khai | `deploy`, không phải `root` |
 
 Máy chủ được dựng bằng script chạy lại được, không gõ tay — để việc xoá sạch và dựng lại
 từ đầu là chuyện vài phút thay vì vài giờ: [`deploy/`](deploy/)
 
-Toàn bộ quy trình đã được **kiểm chứng bằng cách huỷ máy chủ và dựng lại từ con số không**
-theo đúng tài liệu. Mất 27 phút, phát hiện 10 lỗi trong tài liệu, tất cả đã sửa.
+Pipeline cũ đã được thử bằng cách huỷ máy chủ và dựng lại, mất 27 phút theo nhật ký.
+Kết quả đó không xác nhận bootstrap hay G3 của luồng mới. Hướng dẫn khôi phục hiện
+dùng manifest theo digest và kiểm baseline trước khi nối lại Jenkins.
 [Hướng dẫn dựng lại khi hết hạn VPS](docs/dung-lai-khi-het-vps.md)
 
 ### Số liệu đo được
 
-Thời lượng build biến thiên gần 50 lần (5 đến 245 giây) trên cùng một pipeline. Biến giải
-thích không phải số lượng test, mà là **build context của Docker có thay đổi hay không**.
-Mô hình bốn bậc rút ra từ đó đã đoán đúng bốn lần liên tiếp, ghi trước khi đo.
+Build #55 (`81185938bbd3`, ngày 18/10/2026) là mẫu Jenkins đã lưu của luồng mới:
 
 | Phép đo | Kết quả |
 |---|---|
-| `docker compose build` lạnh so với ấm | 2m15,5s so với 36,0s (3,8 lần) |
-| Jenkins so với GitHub Actions, **cùng lạnh** | 36,9s so với 34,0s |
-| Jenkins so với GitHub Actions, **cùng ấm** | 1,70s so với 26,1s |
-| Image backend, trước và sau khi gộp `chown` vào `COPY` | 500 MB → 393 MB |
-| Image frontend trên production | 308 MB |
-| Bộ nhớ cả stack sau 3 ngày chạy | 531 MiB |
+| G1 | 36,018 s |
+| Build/push hai image | 22,531 s |
+| G2, gồm hai ca DB | 93,214 s |
+| Tổng build | 157,211 s |
+| Production | `SKIPPED` vì chạy nhánh `ci/pre-deploy-gate` |
 
-Dòng thứ hai và thứ ba quan trọng hơn vẻ ngoài của chúng. So Jenkins ấm với GitHub Actions
-lạnh cho ra "nhanh hơn 15 lần", và con số đó **sai**: đo lạnh với lạnh thì hai bên gần như
-bằng nhau. Thứ tạo ra chênh lệch là **tính bền vững của môi trường chạy**, không phải tốc
-độ của công cụ. Nhiễu phép đo cũng khác nhau — Jenkins ±0,3%, GitHub Actions ±10% ngay cả
-khi ấm — nên mọi chênh lệch dưới 10% trên GitHub Actions là vô nghĩa.
+Đây là một mẫu có cache Docker và Maven biên dịch tăng dần, chưa phải thời lượng
+đại diện hay thời gian triển khai đầy đủ. Các phép đo Docker/Maven cũ được giữ ở
+phụ lục số liệu; không so thời gian Maven của Jenkins với toàn job GitHub Actions,
+và không dùng độ dao động của vài mẫu làm ngưỡng kết luận chung.
 
 Chi tiết kèm nguồn của từng con số: [`docs/so-lieu-chuong-3.md`](docs/so-lieu-chuong-3.md)
 
@@ -131,8 +135,8 @@ Liệt kê trước khi bị hỏi:
 | **Jenkins gắn `/var/run/docker.sock`** | Quyền tương đương quản trị trên máy chạy Jenkins |
 | **Chưa kiểm trình duyệt tự động** | G2/G3 kiểm HTML từ server, chưa kiểm tương tác JavaScript |
 
-Máy 1 vCPU không chạy nổi hai bản ứng dụng cùng lúc, nên triển khai không gián đoạn và
-cổng chặn trước khi triển khai đều nằm ngoài tầm của phần cứng này.
+G2 chạy trên Docker của Jenkins, trước khi chạm VPS. Giới hạn một VPS hiện tại là
+chưa có triển khai không gián đoạn; giới hạn đó không ngăn được G2 trước deploy.
 
 ---
 
@@ -151,9 +155,9 @@ make up            # hoặc: docker compose up -d --build
 | Swagger  | http://localhost:8080/swagger-ui.html |
 | Health   | http://localhost:8080/actuator/health |
 
-Lần khởi động đầu, backend chạy ingest ngay sau khi sẵn sàng. Nếu lấy được dữ liệu thật thì
-dùng dữ liệu thật; nếu không (không có mạng, nguồn đổi cấu trúc) nó sinh **dữ liệu mô phỏng
-có tính xác định** để ứng dụng vẫn chạy được — xem phần [Dữ liệu mô phỏng](#dữ-liệu-mô-phỏng).
+Lần khởi động đầu, backend chạy ingest sau khi sẵn sàng. Với cấu hình dev mặc định,
+chuỗi nào vẫn rỗng sau ingest sẽ được seed **dữ liệu mô phỏng có tính xác định** —
+xem phần [Dữ liệu mô phỏng](#dữ-liệu-mô-phỏng).
 
 ```bash
 make logs           # xem log
@@ -161,6 +165,11 @@ make backend-test   # chạy unit test backend
 make seed           # gọi ingest thủ công
 make clean          # dừng và xoá volume database
 ```
+
+`make seed` chạy trong container backend và gửi header `X-Admin-Token`. Đặt
+`APP_ADMIN_TOKEN` trong `.env`, rồi chạy `docker compose up -d backend` để áp dụng
+trước khi gọi. Token rỗng khiến lệnh thất bại; phản hồi HTTP lỗi cũng trả mã lỗi.
+Lệnh này chạy ingest từ provider và chỉ seed chuỗi rỗng nếu đã bật seed.
 
 ---
 
@@ -263,16 +272,18 @@ những thời điểm khác nhau. Giá trị được nhân 1000 cho tới khi 
 
 ### Dữ liệu mô phỏng
 
-Khi một chuỗi hoàn toàn trống và không nguồn nào truy cập được, hệ thống sinh chuỗi mô phỏng
-có tính xác định. Ba điểm quan trọng:
+Khi bật seed, chuỗi nào vẫn hoàn toàn trống sau ingest sẽ được nạp chuỗi mô phỏng
+có tính xác định. Ba điểm cần biết:
 
 - Mọi dòng được gắn `source = "synthetic"`, và API lẫn giao diện đều cảnh báo rõ.
-- Dữ liệu mô phỏng **không bao giờ trộn vào chuỗi đã có dữ liệu thật** — biểu đồ pha trộn hai
-  loại là thứ không disclaimer nào cứu được.
+- Seed chỉ thêm vào chuỗi rỗng. Nếu nguồn thật phục hồi sau khi seed, dữ liệu thật có thể
+  cùng tồn tại với các điểm mô phỏng còn lại; hệ thống không tự xoá lịch sử mô phỏng.
 - Chuỗi trong nước được suy ra từ chuỗi thế giới + tỷ giá mô phỏng cộng một mức chênh lệch
   trôi dần, nên phần quy đổi và chênh lệch vẫn nhất quán với nhau.
 
-Tắt trong môi trường thật: `APP_INGEST_SEED_ON_EMPTY=false`.
+Compose dev mặc định bật seed; Compose production mặc định tắt. Đặt rõ
+`APP_INGEST_SEED_ON_EMPTY=false` trong `.env` production nếu chỉ muốn dữ liệu từ provider.
+Tắt seed không xoá những điểm mô phỏng đã lưu trước đó.
 
 ---
 
@@ -337,11 +348,12 @@ Mọi thứ nằm trong `.env` hoặc biến môi trường:
 | Biến | Mặc định | Ý nghĩa |
 |------|----------|---------|
 | `APP_INGEST_ENABLED` | `true` | Bật/tắt toàn bộ ingest |
-| `APP_INGEST_SEED_ON_EMPTY` | `true` | Sinh dữ liệu mô phỏng cho chuỗi trống. **Tắt khi chạy thật** |
+| `APP_INGEST_SEED_ON_EMPTY` | dev `true`, production `false` | Sinh dữ liệu mô phỏng cho chuỗi trống khi được bật |
 | `APP_INGEST_CRON` | `0 7 * * * *` | Lịch ingest (hàng giờ, phút thứ 7) |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Origin được phép gọi API |
-| `APP_ADMIN_TOKEN` | rỗng | Token cho `/api/v1/admin/**` |
-| `API_BASE_URL_INTERNAL` | `http://backend:8080` | URL backend mà **frontend gọi từ phía máy chủ** |
+| `APP_ADMIN_TOKEN` | rỗng | Header `X-Admin-Token` cho `/api/v1/admin/**`; rỗng thì khoá endpoint |
+| `BACKEND_IMAGE`, `FRONTEND_IMAGE` | bắt buộc với Compose production | Hai digest từ artifact `release.env` của build đã qua G2 |
+| `API_BASE_URL_INTERNAL` | Compose: `http://backend:8080`; ngoài Docker: `http://localhost:8080` | URL backend mà **frontend gọi từ phía máy chủ** |
 
 Frontend gọi API hoàn toàn ở phía máy chủ, bên trong mạng của compose. Trình duyệt không bao
 giờ nói chuyện trực tiếp với backend, nên không cần công khai URL backend ra ngoài — và đó
@@ -397,14 +409,15 @@ Bộ test tập trung vào phần toán và phần parse — hai nơi lỗi âm 
 
 ## Trước khi đưa lên production thật
 
-Danh sách này đã làm xong trên môi trường đang chạy, giữ lại để ai dựng bản sao còn biết:
+Những kiểm tra cần làm trên từng môi trường; trạng thái VPS không được xác nhận chỉ
+bằng cấu hình trong repo:
 
-- [x] `APP_INGEST_SEED_ON_EMPTY=false` — tắt dữ liệu mô phỏng
-- [x] Đổi mật khẩu Postgres, sinh thẳng vào `.env` trên máy chủ, không đi qua màn hình
-- [x] Giới hạn `APP_CORS_ALLOWED_ORIGINS` về đúng domain thật
-- [x] Đóng mọi cổng trừ 22, 80, 443 — và **quét từ máy khác** để xác nhận, vì Docker ghi
-      luật vào chuỗi `DOCKER-USER` nằm trước ufw
-- [ ] Đặt authentication cho `/api/v1/admin/**`: nó gọi ra ngoài và ghi vào database
+- [ ] Đặt rõ `APP_INGEST_SEED_ON_EMPTY=false` nếu chỉ sử dụng dữ liệu provider
+- [ ] Đổi mật khẩu Postgres, sinh thẳng vào `.env` trên máy chủ
+- [ ] Giới hạn `APP_CORS_ALLOWED_ORIGINS` về đúng domain thật
+- [ ] Đặt `APP_ADMIN_TOKEN` và xác nhận gọi thiếu/sai token bị trả 401; filter đã có trong code
+- [ ] Quét cổng từ máy khác: chỉ 22, 80, 443 mở. Docker có thể publish cổng vượt qua luật ufw
+- [ ] Bootstrap baseline khỏe mạnh; xác nhận `.last-good-release` và thử Deploy/G3 có lưu log
 - [ ] Đặt cảnh báo khi ingest trả 0 dòng nhiều lượt liên tiếp — feed chết trông giống hệt
       feed yên ắng
 - [ ] Thêm bảng ngày lễ Việt Nam nếu cần nhãn ngày chính xác quanh Tết — hiện
@@ -433,7 +446,3 @@ suất, chính sách tiền tệ, biến động địa chính trị hay thay đ
 mới là thứ tạo ra các cú sốc giá lớn.
 
 Đây không phải lời khuyên đầu tư và không thay thế giá niêm yết chính thức tại quầy.
-
-## Giấy phép
-
-MIT
