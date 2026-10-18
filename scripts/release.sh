@@ -1,11 +1,22 @@
 #!/bin/sh
 # Runs on VPS. Each release contains its own compose, Caddyfile and digest manifest.
 set -eu
+umask 077
 operation=${1:?deploy|verify|rollback|bootstrap|status|recover}
 release=${2:?release directory}
 root=${GOLDCAST_ROOT:-/opt/goldcast}
 case "$release" in "$root"/releases/*) ;; *) echo 'Invalid release directory' >&2; exit 1;; esac
-compose() { docker compose --env-file "$root/.env" --env-file "$release/release.env" -p goldcast -f "$release/docker-compose.prod.yml" "$@"; }
+compose() {
+    runtime_env="$release/runtime.env"
+    test -f "$runtime_env" || runtime_env="$root/.env"
+    docker compose --env-file "$runtime_env" --env-file "$release/release.env" -p goldcast -f "$release/docker-compose.prod.yml" "$@"
+}
+freeze_env() {
+    if [ ! -f "$release/runtime.env" ]; then
+        cp "$root/.env" "$release/runtime.env"
+        chmod 600 "$release/runtime.env"
+    fi
+}
 verify() {
     # Match the actual running image IDs to the exact registry digests passed by G2.
     for service in backend frontend; do
@@ -19,8 +30,16 @@ verify() {
     compose exec -T backend wget -qO- http://localhost:8080/actuator/health/readiness | grep -q '"status":"UP"'
     # HTTPS certificate validation is enabled; requests exercise Caddy -> Next -> API.
     probe_image=$(sed -n 's/^FRONTEND_IMAGE=//p' "$release/release.env")
+    public_release=$(sed -n 's/^RELEASE_ID=//p' "$release/release.env")
+    if [ -z "$public_release" ]; then
+        test -f "$release/legacy-local-origin" || { echo 'Missing public release identity' >&2; return 1; }
+        public_release=--legacy-local-origin
+    elif ! printf '%s\n' "$public_release" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$'; then
+        echo 'Invalid public release identity' >&2
+        return 1
+    fi
     docker run --rm -i --network host --entrypoint node "$probe_image" \
-      --input-type=module - https://goldcast.click < "$release/scripts/check-pages.mjs"
+      --input-type=module - https://goldcast.click "$public_release" < "$release/scripts/check-pages.mjs"
 }
 set_phase() {
     printf '%s\n' "$1" > "$release/deploy-phase.tmp"
@@ -31,7 +50,15 @@ cleanup_lock() {
 }
 case "$operation" in
   deploy)
+    test -n "$(sed -n 's/^RELEASE_ID=//p' "$release/release.env")" || { echo 'Tested release identity required' >&2; exit 1; }
+    sed -n 's/^RELEASE_ID=//p' "$release/release.env" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$' || { echo 'Invalid tested release identity' >&2; exit 1; }
     test -s "$root/.last-good-release" || { echo 'Run bootstrap against the current healthy production first' >&2; exit 1; }
+    previous=$(cat "$root/.last-good-release")
+    case "$previous" in "$root"/releases/*) ;; *) echo 'Invalid previous release' >&2; exit 1;; esac
+    if [ ! -f "$previous/runtime.env" ] || { ! grep -q '^RELEASE_ID=.' "$previous/release.env" && [ ! -f "$previous/legacy-local-origin" ]; }; then
+        echo 'Baseline predates public identity/config snapshots; run bootstrap-release.sh --refresh against healthy production first' >&2
+        exit 1
+    fi
     mkdir "$root/.release-lock"
     printf '%s\n' "$release" > "$root/.release-lock/owner"
     date -u '+%Y-%m-%dT%H:%M:%SZ' > "$release/deploy-started-at"
@@ -39,11 +66,11 @@ case "$operation" in
     set_phase preparing
     # Freeze the rollback target before touching production. Promotion may change
     # .last-good-release, but must never change this deployment's saved target.
-    previous=$(cat "$root/.last-good-release")
-    case "$previous" in "$root"/releases/*) ;; *) echo 'Invalid previous release' >&2; exit 1;; esac
+    test "$(cat "$root/.last-good-release")" = "$previous"
     test "$previous" != "$release"
     printf '%s\n' "$previous" > "$release/previous-good-release.tmp"
     mv "$release/previous-good-release.tmp" "$release/previous-good-release"
+    freeze_env
     compose pull
     set_phase deploying
     compose up -d --wait --wait-timeout 300
@@ -121,12 +148,25 @@ case "$operation" in
     ;;
   bootstrap)
     # Explicit one-time adoption of existing production; never auto-bless on deploy.
-    test ! -e "$root/.last-good-release"
-    mkdir "$root/.release-lock"
-    printf '%s\n' "$release" > "$root/.release-lock/owner"
+    case "${3:-}" in
+      '') test ! -e "$root/.last-good-release"; baseline_before=;;
+      --refresh) baseline_before=$(cat "$root/.last-good-release"); test -n "$baseline_before";;
+      *) echo 'Invalid bootstrap mode' >&2; exit 2;;
+    esac
+    if [ "${4:-}" = --lock-held ]; then
+        test "$(cat "$root/.release-lock/owner")" = "$release"
+    else
+        mkdir "$root/.release-lock"
+        printf '%s\n' "$release" > "$root/.release-lock/owner"
+    fi
     # Bootstrap has not changed production; release its lock even if G3 fails.
-    trap 'cleanup_lock || true' EXIT
-    test ! -e "$root/.last-good-release"
+    trap 'if ! cleanup_lock; then echo "WARNING: inspect residual bootstrap lock" >&2; fi' EXIT
+    if [ -n "$baseline_before" ]; then
+        test "$(cat "$root/.last-good-release")" = "$baseline_before"
+    else
+        test ! -e "$root/.last-good-release"
+    fi
+    freeze_env
     verify
     printf '%s\n' "$release" > "$root/.last-good-release.tmp"
     mv "$root/.last-good-release.tmp" "$root/.last-good-release"

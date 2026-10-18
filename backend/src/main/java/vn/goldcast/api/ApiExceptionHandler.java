@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import vn.goldcast.ingest.IngestAlreadyRunningException;
 
 import java.net.URI;
 import java.time.OffsetDateTime;
@@ -28,6 +29,11 @@ public class ApiExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
     private static final String BASE = "https://goldcast.local/problems/";
+
+    @ExceptionHandler(IngestAlreadyRunningException.class)
+    public ProblemDetail ingestInProgress(IngestAlreadyRunningException ex) {
+        return problem(HttpStatus.CONFLICT, "Đang thu thập dữ liệu", ex.getMessage(), "ingest-in-progress");
+    }
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ProblemDetail notFound(ResourceNotFoundException ex) {

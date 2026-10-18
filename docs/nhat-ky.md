@@ -1174,3 +1174,45 @@ Kiểm tra local: 102 test Java, 22 test Python và TypeScript typecheck đạt;
 các ca render Compose production kiểm mặc định và override bật/tắt
 ingest/seed, cron và cổng publish đều đạt. Đây
 là thay đổi mã/tài liệu; không thay cấu hình Jenkins hay triển khai lên VPS.
+
+## Sửa tiếp ngày 18/10/2026 — định danh công khai và snapshot rollback
+
+Sau PR #52, rà soát tìm thêm các trường hợp mà kiểm tra có thể xanh nhưng chưa
+chứng minh đủ điều cần kiểm. Đã sửa theo thứ tự:
+
+1. **Phiên bản qua HTTPS:** manifest có `RELEASE_ID`, truyền cùng giá trị tới
+   frontend/backend. `/api/release` của frontend gọi `/api/v1/release` ở backend;
+   probe đòi cả hai định danh khớp manifest trước khi kiểm ba trang. Test bắt
+   bản cũ, backend sai bản, endpoint thiếu và trang lỗi dù HTTP vẫn trả 200.
+   Image được build một lần; định danh được truyền khi chạy container.
+2. **Baseline từ runtime:** bootstrap chụp thông tin Docker đang chạy thay vì
+   sao chép Compose mới. Giữ image digest cả bốn service, env, lệnh, healthcheck,
+   volume và Caddyfile. File snapshot và `runtime.env` quyền 600 vì có thể chứa
+   bí mật. Deploy mới giữ `.env` riêng để rollback không đọc nhầm cấu hình mới.
+3. **Chuyển baseline cũ:** `bootstrap-release.sh --refresh` chỉ thay con trỏ sau
+   xác minh và không restart ứng dụng. Nếu thất bại vẫn giữ bản tốt cũ. Baseline
+   chưa có endpoint phiên bản chỉ được adopt khi DNS HTTPS trỏ trực tiếp vào
+   VPS và frontend gọi backend nội bộ; release mới không được dùng chế độ này.
+   Deploy từ chối baseline đời cũ trước khi thay production để yêu cầu refresh.
+4. **Chặn merge bằng toàn bộ G1:** giữ tên required check `backend-test`, bổ
+   sung test Python/Node và TypeScript bên cạnh Java. Jenkins chạy cùng nhóm
+   test. Không đổi điều kiện bảo vệ nhánh để bỏ qua kiểm tra.
+5. **CORS và ingest:** preflight hợp lệ tới MVC kiểm origin, POST vẫn cần token.
+   Khóa ingest nằm trong service và giữ qua commit/rollback transaction, nên
+   cả scheduler lẫn admin dùng chung. Yêu cầu chạy chồng trả HTTP 409.
+6. Dọn rule ignore trùng và thụt dòng Jenkinsfile; gói source bằng tar từ macOS
+   tắt AppleDouble metadata để test hợp đồng không quét nhầm file `._*.java`.
+
+Kiểm tra local: **114 test Java trên JDK 21 trong Docker**, **19 test Node**,
+**29 test Python** và TypeScript typecheck đạt. G2 trên hai image `linux/amd64`
+vừa build hoàn tất cả cài mới và nâng cấp V1 có dữ liệu: mỗi ca đạt 35 phép
+kiểm API, đúng định danh frontend/backend và ba trang SSR. Container, mạng và
+volume G2 được dọn sau kiểm tra. Log local ở
+`/private/tmp/goldcast-verification.zpDz1P/`, chưa lưu thành mẫu đo Jenkins.
+
+Test cấu hình bằng container thật xác nhận `$` trong bí mật được giữ nguyên.
+Các test probe/bootstrap riêng dùng Docker và HTTP giả lập; G2 local dùng
+container thật. Các kết quả này không phải bằng chứng G3 hoặc rollback thật
+trên VPS. Số liệu build
+#55 và các mốc lịch sử giữ nguyên; lần sửa này chưa tạo một mẫu thời lượng
+pipeline Jenkins mới.

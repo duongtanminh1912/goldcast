@@ -52,6 +52,29 @@ class AdminTokenFilterTest {
         assertEquals(200, res.getStatus());
     }
 
+    @Test
+    void preflightDuocChuyenToiCorsNhungPostVanCanToken() throws Exception {
+        MockHttpServletRequest req = new MockHttpServletRequest("OPTIONS", "/api/v1/admin/ingest");
+        req.addHeader("Origin", "http://localhost:3000");
+        req.addHeader("Access-Control-Request-Method", "POST");
+        req.addHeader("Access-Control-Request-Headers", "X-Admin-Token");
+        MockFilterChain chain = new MockFilterChain();
+        new AdminTokenFilter(TOKEN_DUNG).doFilter(req, new MockHttpServletResponse(), chain);
+        assertNotNull(chain.getRequest());
+        assertNull(goiAdmin(TOKEN_DUNG, null).getRequest());
+        assertNotNull(goiAdmin(TOKEN_DUNG, TOKEN_DUNG).getRequest());
+    }
+
+    @Test
+    void optionsKhongPhaiPreflightKhongDuocBoQuaToken() throws Exception {
+        MockHttpServletRequest req = new MockHttpServletRequest("OPTIONS", "/api/v1/admin/ingest");
+        MockHttpServletResponse res = new MockHttpServletResponse();
+        MockFilterChain chain = new MockFilterChain();
+        new AdminTokenFilter(TOKEN_DUNG).doFilter(req, res, chain);
+        assertNull(chain.getRequest());
+        assertEquals(401, res.getStatus());
+    }
+
     private MockFilterChain goiAdmin(String tokenMayChu, String tokenGui) throws Exception {
         MockHttpServletRequest req = new MockHttpServletRequest("POST", "/api/v1/admin/ingest");
         if (tokenGui != null) {

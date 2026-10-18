@@ -7,6 +7,7 @@ import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.web.cors.CorsUtils;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -40,7 +41,10 @@ public class AdminTokenFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !request.getRequestURI().startsWith(DUONG_DAN_ADMIN);
+        // MVC validates allowed origins/headers for a genuine preflight. The
+        // following POST still goes through token authentication as usual.
+        return !request.getRequestURI().startsWith(DUONG_DAN_ADMIN)
+                || CorsUtils.isPreFlightRequest(request);
     }
 
     @Override

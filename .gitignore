@@ -31,7 +31,6 @@ Thumbs.db
 
 # File trung gian cua TypeScript va cong cu
 *.tsbuildinfo
-.playwright-cli/
 docs/bao-cao/
 
 # Jenkins digest manifest (stored as a build artifact)

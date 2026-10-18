@@ -3,7 +3,8 @@ package vn.goldcast.ingest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import vn.goldcast.config.AppProperties;
 import vn.goldcast.domain.Instrument;
 import vn.goldcast.domain.PricePoint;
@@ -21,6 +22,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Pulls observations from every enabled provider and writes them into the price series.
@@ -39,21 +41,38 @@ public class IngestService {
     private final List<PriceProvider> providers;
     private final SyntheticSeedGenerator seedGenerator;
     private final AppProperties properties;
+    private final TransactionTemplate transactions;
+    private final AtomicBoolean running = new AtomicBoolean(false);
 
     public IngestService(InstrumentRepository instruments,
                          PricePointRepository prices,
                          List<PriceProvider> providers,
                          SyntheticSeedGenerator seedGenerator,
-                         AppProperties properties) {
+                         AppProperties properties,
+                         PlatformTransactionManager transactionManager) {
         this.instruments = instruments;
         this.prices = prices;
         this.providers = providers;
         this.seedGenerator = seedGenerator;
         this.properties = properties;
+        this.transactions = new TransactionTemplate(transactionManager);
     }
 
-    @Transactional
     public IngestReport run() {
+        if (!running.compareAndSet(false, true)) {
+            throw new IngestAlreadyRunningException();
+        }
+        try {
+            // execute returns only after commit/rollback. Releasing the guard in
+            // a @Transactional method's finally would be too early: its proxy
+            // commits after the method has returned.
+            return transactions.execute(status -> ingest());
+        } finally {
+            running.set(false);
+        }
+    }
+
+    private IngestReport ingest() {
         OffsetDateTime startedAt = OffsetDateTime.now();
         List<Instrument> active = instruments.findByActiveTrueOrderBySortOrderAscCodeAsc();
         Map<String, Instrument> byCode = new HashMap<>();
@@ -115,9 +134,8 @@ public class IngestService {
     /**
      * Fills in any instrument that still has no history at all.
      *
-     * <p>Only empty series are touched — a series with even one real observation is never
-     * mixed with synthetic data, because a chart blending the two would be misleading in a
-     * way no disclaimer can fix.
+     * <p>Only empty series are seeded. A later provider pass can add real data
+     * beside this history; existing synthetic points are not automatically deleted.
      */
     private int seedEmptySeries(List<Instrument> active, Map<String, Instrument> byCode,
                                 AtomicInteger totalInserted) {

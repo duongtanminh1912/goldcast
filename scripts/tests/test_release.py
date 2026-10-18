@@ -44,9 +44,11 @@ exec /bin/{command} "$@"
     def release(self, name):
         path = self.root / 'releases' / name
         (path / 'scripts').mkdir(parents=True)
-        (path / 'release.env').write_text('BACKEND_IMAGE=test/backend@sha256:abc\nFRONTEND_IMAGE=test/frontend@sha256:def\n')
+        (path / 'release.env').write_text(f'RELEASE_ID={name}\nBACKEND_IMAGE=test/backend@sha256:abc\nFRONTEND_IMAGE=test/frontend@sha256:def\n')
         (path / 'docker-compose.prod.yml').touch()
         (path / 'scripts/check-pages.mjs').touch()
+        if name == 'old':
+            (path / 'runtime.env').touch()
         return path
 
     def run_release(self, action, *args, **env):
@@ -71,6 +73,48 @@ exec /bin/{command} "$@"
         self.assertEqual(self.run_release('deploy').returncode, 0)
         self.assertNotEqual(self.run_release('verify', MOCK_IMAGE_ID='other-image').returncode, 0)
         self.assertEqual(self.marker.read_text().strip(), str(self.old))
+
+    def test_public_release_identity_is_passed_to_https_probe(self):
+        self.assertEqual(self.run_release('deploy').returncode, 0)
+        self.assertEqual(self.run_release('verify').returncode, 0)
+        self.assertIn('https://goldcast.click new', (self.root / 'docker.log').read_text())
+
+    def test_old_baseline_requires_verified_refresh_before_production_changes(self):
+        (self.old / 'runtime.env').unlink()
+        self.assertNotEqual(self.run_release('deploy').returncode, 0)
+        self.assertFalse((self.root / '.release-lock').exists())
+        self.assertFalse((self.root / 'docker.log').exists())
+
+    def test_refresh_keeps_old_good_pointer_when_verification_fails(self):
+        self.assertNotEqual(self.run_release('bootstrap', '--refresh', MOCK_PAGE_FAILURE='1').returncode, 0)
+        self.assertEqual(self.marker.read_text().strip(), str(self.old))
+        self.assertFalse((self.root / '.release-lock').exists())
+
+    def test_refresh_records_only_a_verified_baseline_without_restarting(self):
+        self.assertEqual(self.run_release('bootstrap', '--refresh').returncode, 0)
+        self.assertEqual(self.marker.read_text().strip(), str(self.new))
+        self.assertNotIn('up -d', (self.root / 'docker.log').read_text())
+
+    def test_candidate_without_public_identity_is_rejected_before_deploy(self):
+        manifest = self.new / 'release.env'
+        manifest.write_text(manifest.read_text().replace('RELEASE_ID=new\n', ''))
+        self.assertNotEqual(self.run_release('deploy').returncode, 0)
+        self.assertFalse((self.root / '.release-lock').exists())
+
+    def test_candidate_cannot_select_legacy_verification_via_its_identity(self):
+        manifest = self.new / 'release.env'
+        manifest.write_text(manifest.read_text().replace('RELEASE_ID=new', 'RELEASE_ID=--legacy-local-origin'))
+        self.assertNotEqual(self.run_release('deploy').returncode, 0)
+        self.assertFalse((self.root / '.release-lock').exists())
+
+    def test_release_freezes_environment_before_production_is_changed(self):
+        (self.root / '.env').write_text('APP_INGEST_SEED_ON_EMPTY=true\n')
+        self.assertEqual(self.run_release('deploy').returncode, 0)
+        (self.root / '.env').write_text('APP_INGEST_SEED_ON_EMPTY=false\n')
+        self.assertEqual((self.new / 'runtime.env').read_text(), 'APP_INGEST_SEED_ON_EMPTY=true\n')
+        self.assertEqual((self.new / 'runtime.env').stat().st_mode & 0o777, 0o600)
+        self.assertEqual(self.run_release('verify').returncode, 0)
+        self.assertIn(str(self.new / 'runtime.env'), (self.root / 'docker.log').read_text())
 
     def test_deploy_failure_can_rollback(self):
         self.assertNotEqual(self.run_release('deploy', MOCK_UP_FAILURE='1').returncode, 0)

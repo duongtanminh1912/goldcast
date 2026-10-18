@@ -44,14 +44,22 @@ ssh deploy@$IP_CU 'set -eu
   cd /opt/goldcast
   release=$(cat .last-good-release)
   case "$release" in /opt/goldcast/releases/*) ;; *) exit 1;; esac
-  tar -cf - -C "$release" release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs
+  set -- release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs
+  for file in runtime.env legacy-local-origin; do
+    if [ -f "$release/$file" ]; then set -- "$@" "$file"; fi
+  done
+  tar -cf - -C "$release" "$@"
 ' > "$BACKUP_DIR/release.tar"
 tar -tf "$BACKUP_DIR/release.tar"
 ```
 
-Archive chỉ chứa manifest và cấu hình, không chứa `.env`, con trỏ hay khóa cũ.
+Archive chứa manifest, cấu hình và `runtime.env` nếu có, không chứa con trỏ
+hay khóa cũ. Snapshot runtime có thể chứa bí mật; giữ archive quyền riêng như
+bản DB dump, không đưa vào Git hoặc artifact công khai.
 Nếu chưa bootstrap, không có `.last-good-release`: xem phần chuyển production
 cũ trong [tutorial](tutorial.md#b9-jenkins-tự-deploy), xác minh baseline trước.
+Baseline đời cũ cần `bootstrap-release.sh --refresh` khi production khỏe,
+đã dừng deploy; không xóa con trỏ bằng tay để vượt kiểm tra.
 
 Backup DB (lệnh dưới dùng tên user/database mặc định `goldcast`; đổi nếu cấu
 hình khác). Thực hiện khi không có deploy/migration đang chạy:
@@ -83,6 +91,8 @@ tar -cf "$BACKUP_DIR/release.tar" -C "$BACKUP_DIR/candidate" release.env docker-
 
 Không có DB backup thì không thể tuyên bố đã phục hồi lịch sử cũ. Không dùng
 job xanh với Production `SKIPPED` làm bằng chứng G3 của production đã thành công.
+Artifact Jenkins không chứa `runtime.env`; nếu chỉ có artifact, cấu hình bí
+mật phải lấy từ nơi lưu bí mật của bạn. Bản mới cần `RELEASE_ID` cùng hai digest.
 
 ---
 
@@ -303,6 +313,10 @@ cd /opt/goldcast
 RELEASE_DIR="/opt/goldcast/releases/restore-$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$RELEASE_DIR"
 tar -xf release-restore.tar -C "$RELEASE_DIR"
+if [ -f "$RELEASE_DIR/runtime.env" ]; then
+  cp "$RELEASE_DIR/runtime.env" /opt/goldcast/.env
+  chmod 600 /opt/goldcast/.env
+fi
 grep -Ec '^(BACKEND|FRONTEND)_IMAGE=[^[:space:]]+@sha256:[a-f0-9]{64}$' "$RELEASE_DIR/release.env"
 release_compose() {
   docker compose --env-file /opt/goldcast/.env --env-file "$RELEASE_DIR/release.env" \
@@ -331,6 +345,10 @@ release_compose ps
 
 Project phải là `goldcast` để dùng đúng volume `goldcast_goldcast-pgdata`.
 Chờ bằng healthcheck, không dựa vào một khoảng `sleep` cố định.
+
+Với archive runtime, bản `.env` vừa sinh ở 6.2 được thay bằng cấu hình đã lưu
+để mật khẩu DB và các biến khớp snapshot. Chỉ làm trên máy mới trước khi tạo
+DB; không dùng thao tác này để đổi mật khẩu một volume đang có dữ liệu.
 
 **Kiểm:** bốn container `db`, `backend` (healthy), `frontend`, `caddy`. Ở cột
 cổng, **chỉ `caddy` được có `0.0.0.0:80` và `0.0.0.0:443`**. Ba cái kia không
@@ -367,8 +385,15 @@ sh "$RELEASE_DIR/scripts/release.sh" status "$RELEASE_DIR"
 ```
 
 Bootstrap so image ID/digest, readiness và HTTPS qua các trang thật trước khi
-ghi con trỏ. Nó không restart stack. Nếu lỗi, chưa có baseline; sửa nguyên
+ghi con trỏ. Release mới phải khớp `RELEASE_ID` frontend/backend qua URL công
+khai. Archive legacy giữ marker `legacy-local-origin`, cần DNS trỏ trực tiếp
+vào VPS. Nó không restart stack. Nếu lỗi, chưa có baseline; sửa nguyên
 nhân và kiểm lại trước khi nối Jenkins. Không tự tạo `.last-good-release`.
+
+Nếu archive dùng script đời cũ chưa có snapshot/định danh, cập nhật checkout
+chứa script mới rồi chạy `sh /opt/goldcast/scripts/bootstrap-release.sh --refresh`
+trên production vừa phục hồi, trước khi chạy pipeline mới. Lệnh kiểm lại
+runtime và chỉ thay baseline sau khi đạt; không restart stack.
 
 ---
 
