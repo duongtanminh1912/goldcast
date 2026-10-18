@@ -1,0 +1,87 @@
+Drill started UTC: 2026-10-18T14:11:17Z
+Previous verified release: /opt/goldcast/releases/a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
+Drill release: /opt/goldcast/releases/a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-rollback-drill-20261018T141117Z
+ Image ghcr.io/duongtanminh1912/goldcast-frontend@sha256:68e67928649981f22ed5181b523563d831fc254a4229ed17b3039bf2d267d3bf Pulling 
+ Image caddy:2-alpine Pulling 
+ Image postgres:16-alpine Pulling 
+ Image ghcr.io/duongtanminh1912/goldcast-backend@sha256:7d239ef13af8d9943be9ba7d2cc2de0e8a4dece54a9f55954ce6e6efdde72c41 Pulling 
+ Image ghcr.io/duongtanminh1912/goldcast-backend@sha256:7d239ef13af8d9943be9ba7d2cc2de0e8a4dece54a9f55954ce6e6efdde72c41 Pulled 
+ Image ghcr.io/duongtanminh1912/goldcast-frontend@sha256:68e67928649981f22ed5181b523563d831fc254a4229ed17b3039bf2d267d3bf Pulled 
+ Image caddy:2-alpine Pulled 
+ Image postgres:16-alpine Pulled 
+ Container goldcast-db Running 
+ Container goldcast-backend Running 
+ Container goldcast-frontend Recreate 
+ Container goldcast-frontend Recreated 
+ Container goldcast-caddy Recreate 
+ Container goldcast-caddy Recreated 
+ Container goldcast-db Waiting 
+ Container goldcast-db Healthy 
+ Container goldcast-backend Waiting 
+ Container goldcast-backend Healthy 
+ Container goldcast-frontend Starting 
+ Container goldcast-frontend Started 
+ Container goldcast-caddy Starting 
+ Container goldcast-caddy Started 
+ Container goldcast-db Waiting 
+ Container goldcast-backend Waiting 
+ Container goldcast-frontend Waiting 
+ Container goldcast-caddy Waiting 
+ Container goldcast-backend Healthy 
+ Container goldcast-caddy Healthy 
+ Container goldcast-db Healthy 
+ Container goldcast-frontend Healthy 
+Controlled public identity failure: HTTP 503; frontend=rollback-drill-wrong-identity; backend=a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
+file:///app/[eval1]:27
+      throw new Error(`Public release mismatch: expected ${releaseId}`);
+            ^
+
+Error: Public release mismatch: expected a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
+    at checkPages (file:///app/[eval1]:27:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async file:///app/[eval1]:51:3
+
+Node.js v22.23.3
+G3 rejected candidate; last-good and saved rollback target still equal /opt/goldcast/releases/a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
+ Container goldcast-db Running 
+ Container goldcast-backend Running 
+ Container goldcast-frontend Recreate 
+ Container goldcast-frontend Recreated 
+ Container goldcast-caddy Recreate 
+ Container goldcast-caddy Recreated 
+ Container goldcast-db Waiting 
+ Container goldcast-db Healthy 
+ Container goldcast-backend Waiting 
+ Container goldcast-backend Healthy 
+ Container goldcast-frontend Starting 
+ Container goldcast-frontend Started 
+ Container goldcast-caddy Starting 
+ Container goldcast-caddy Started 
+ Container goldcast-caddy Waiting 
+ Container goldcast-db Waiting 
+ Container goldcast-backend Waiting 
+ Container goldcast-frontend Waiting 
+ Container goldcast-db Healthy 
+ Container goldcast-frontend Healthy 
+ Container goldcast-backend Healthy 
+ Container goldcast-caddy Healthy 
+OK public release a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
+OK page /
+OK page /instruments/XAUUSD
+OK page /forecast/XAUUSD?model=NAIVE&horizon=7
+Rollback verified: /opt/goldcast/releases/a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
+Frontend container before/during/after: 1c9912dd52716925337f3ad21794ea6dace9fd5a63c3450f1606b272dcbb680b / 3e448f0b203a50c9bfe5cc79fda97e594dadead31c315f402395d122adeb7bad / 8a41c0aca45eb7c1dfeff6b280c522672a2fd2d552f7e2ddd78e52fed7a66683
+Backend and database containers unchanged.
+release: /opt/goldcast/releases/a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
+deploy-started-at: 2026-10-18T13:39:48Z
+deploy-build-url: http://localhost:8081/job/goldcast-ci/58/
+deploy-phase: promoted
+previous-good-release: /opt/goldcast/releases/bootstrap-20261018203238
+last-good: /opt/goldcast/releases/a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
+lock-owner: none
+NAME                IMAGE                                                                                                                COMMAND                  SERVICE    CREATED          STATUS                    PORTS
+goldcast-backend    ghcr.io/duongtanminh1912/goldcast-backend@sha256:7d239ef13af8d9943be9ba7d2cc2de0e8a4dece54a9f55954ce6e6efdde72c41    "sh -c 'exec java -X…"   backend    31 minutes ago   Up 31 minutes (healthy)   8080/tcp
+goldcast-caddy      caddy:2-alpine                                                                                                       "caddy run --config …"   caddy      4 seconds ago    Up 3 seconds              0.0.0.0:80->80/tcp, [::]:80->80/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp, 443/udp, 2019/tcp
+goldcast-db         postgres:16-alpine                                                                                                   "docker-entrypoint.s…"   db         6 days ago       Up 6 days (healthy)       5432/tcp
+goldcast-frontend   ghcr.io/duongtanminh1912/goldcast-frontend@sha256:68e67928649981f22ed5181b523563d831fc254a4229ed17b3039bf2d267d3bf   "docker-entrypoint.s…"   frontend   4 seconds ago    Up 3 seconds              3000/tcp
+Drill completed UTC: 2026-10-18T14:11:29Z

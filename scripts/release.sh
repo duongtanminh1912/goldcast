@@ -6,7 +6,54 @@ operation=${1:?deploy|verify|rollback|bootstrap|status|recover}
 release=${2:?release directory}
 root=${GOLDCAST_ROOT:-/opt/goldcast}
 case "$release" in "$root"/releases/*) ;; *) echo 'Invalid release directory' >&2; exit 1;; esac
+validate_manifest() {
+    manifest_release=$1
+    require_identity=1
+    if [ "${2:-}" = --allow-legacy ] && [ -f "$manifest_release/legacy-local-origin" ]; then
+        require_identity=0
+    fi
+    # Treat the manifest as data, never source it as shell code. Only the two
+    # application repositories built by Jenkins may reach production.
+    awk -v require_identity="$require_identity" '
+        function fail(message) {
+            print "Invalid release manifest: " message > "/dev/stderr"
+            failed = 1
+            exit 1
+        }
+        BEGIN {
+            repository["BACKEND_IMAGE"] = "ghcr.io/duongtanminh1912/goldcast-backend"
+            repository["FRONTEND_IMAGE"] = "ghcr.io/duongtanminh1912/goldcast-frontend"
+        }
+        /^[[:space:]]*(#.*)?$/ { next }
+        {
+            equals = index($0, "=")
+            if (!equals) fail("malformed entry at line " NR)
+            key = substr($0, 1, equals - 1)
+            value = substr($0, equals + 1)
+            if (key != "RELEASE_ID" && !(key in repository))
+                fail("unknown key at line " NR)
+            if (seen[key]++) fail("duplicate " key)
+            if (key == "RELEASE_ID") {
+                if (length(value) > 128 || value !~ /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/)
+                    fail("invalid RELEASE_ID")
+            } else {
+                prefix = repository[key] "@sha256:"
+                digest = substr(value, length(prefix) + 1)
+                if (index(value, prefix) != 1 || length(digest) != 64 || digest ~ /[^a-f0-9]/)
+                    fail("invalid repository or SHA-256 digest for " key)
+            }
+        }
+        END {
+            if (failed) exit 1
+            if (!seen["BACKEND_IMAGE"] || !seen["FRONTEND_IMAGE"])
+                fail("both application image digests are required")
+            if (require_identity && !seen["RELEASE_ID"])
+                fail("RELEASE_ID is required")
+        }
+    ' "$manifest_release/release.env"
+}
 compose() {
+    validate_manifest "$release" --allow-legacy
     runtime_env="$release/runtime.env"
     test -f "$runtime_env" || runtime_env="$root/.env"
     docker compose --env-file "$runtime_env" --env-file "$release/release.env" -p goldcast -f "$release/docker-compose.prod.yml" "$@"
@@ -18,6 +65,7 @@ freeze_env() {
     fi
 }
 verify() {
+    validate_manifest "$release" --allow-legacy
     # Match the actual running image IDs to the exact registry digests passed by G2.
     for service in backend frontend; do
         case "$service" in backend) key=BACKEND_IMAGE;; frontend) key=FRONTEND_IMAGE;; esac
@@ -50,8 +98,7 @@ cleanup_lock() {
 }
 case "$operation" in
   deploy)
-    test -n "$(sed -n 's/^RELEASE_ID=//p' "$release/release.env")" || { echo 'Tested release identity required' >&2; exit 1; }
-    sed -n 's/^RELEASE_ID=//p' "$release/release.env" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$' || { echo 'Invalid tested release identity' >&2; exit 1; }
+    validate_manifest "$release"
     test -s "$root/.last-good-release" || { echo 'Run bootstrap against the current healthy production first' >&2; exit 1; }
     previous=$(cat "$root/.last-good-release")
     case "$previous" in "$root"/releases/*) ;; *) echo 'Invalid previous release' >&2; exit 1;; esac
@@ -59,6 +106,7 @@ case "$operation" in
         echo 'Baseline predates public identity/config snapshots; run bootstrap-release.sh --refresh against healthy production first' >&2
         exit 1
     fi
+    validate_manifest "$previous" --allow-legacy
     mkdir "$root/.release-lock"
     printf '%s\n' "$release" > "$root/.release-lock/owner"
     date -u '+%Y-%m-%dT%H:%M:%SZ' > "$release/deploy-started-at"
@@ -147,6 +195,7 @@ case "$operation" in
     fi
     ;;
   bootstrap)
+    validate_manifest "$release" --allow-legacy
     # Explicit one-time adoption of existing production; never auto-bless on deploy.
     case "${3:-}" in
       '') test ! -e "$root/.last-good-release"; baseline_before=;;

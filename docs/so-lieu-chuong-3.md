@@ -5,10 +5,10 @@ luồng **G1 → build image → G2 → Deploy → G3**, kết quả đã đo v�
 bằng chứng. Quá trình thử nghiệm theo tuần nằm trong [nhật ký](nhat-ky.md);
 hướng dẫn vận hành nằm trong [tutorial](tutorial.md#b10-g1--build--g2--deploy--g3).
 
-Bằng chứng Jenkins mới được lưu trong repo hiện là **build #55**: G1, build
-image và G2 thành công; **Production skipped**. Việc mã đã được merge vào
-`main` không tự chứng minh Deploy/G3 đã chạy thành công. Các bảng pipeline cũ
-được giữ ở phụ lục để truy nguyên, không dùng làm thời lượng của luồng mới.
+Bằng chứng Jenkins mới được lưu trong repo là **build #58 trên `main`**, commit
+`a58f2cc`: G1, build image, G2, Deploy và G3 đều thành công. Có thêm phép thử
+rollback thật trên VPS khi cấu hình định danh frontend sai. Build #55 và các
+bảng pipeline cũ được giữ để truy nguyên, không ghép thành cùng một lần đo.
 
 ## 1. Phạm vi và phương pháp đo
 
@@ -47,14 +47,14 @@ Nguồn cấu hình: [Jenkinsfile](../Jenkinsfile),
 [Compose CI](../docker-compose.ci.yml).
 Commit `7494a4c` đưa vào luồng mới; `8013a3d` lấy digest từ metadata Buildx.
 
-| Bước | Công việc trong mã hiện tại | Bằng chứng ở build #55 |
+| Bước | Công việc trong mã hiện tại | Bằng chứng ở build #58 |
 |---|---|---|
-| G1 | `mvn test`, test vận hành bằng Python 3.13, test probe/snapshot bằng Node 22, `npm ci` và TypeScript typecheck | 102 test Java, 19 test Python và typecheck đạt; chưa có nhóm test Node mới |
-| Build image | Đăng nhập GHCR; build/push backend và frontend một lần cho amd64, lấy digest từ metadata và lưu `release.env` | Stage build đạt; các layer ứng dụng được tái sử dụng |
+| G1 | `mvn test`, test vận hành bằng Python 3.13, test probe/snapshot bằng Node 22, `npm ci` và TypeScript typecheck | 114 test Java, 29 test Python, 19 test Node và typecheck đạt |
+| Build image | Đăng nhập GHCR; build/push backend và frontend một lần cho amd64, lấy digest từ metadata và lưu `release.env` | Stage build đạt; tái sử dụng một số layer và build lại phần ứng dụng |
 | G2 | Compose riêng, không mở cổng và không dùng volume production; kiểm cài mới và nâng cấp V1 có dữ liệu mẫu | Hai ca đều đạt migration, 35 phép kiểm API và 3 trang SSR |
-| Deploy | Chỉ nhánh `main`, không phải PR; chuyển manifest và cấu hình release sang VPS, chạy đúng digest đã qua G2 | Không chạy vì điều kiện nhánh |
-| G3 | Readiness, image ID đúng digest, `RELEASE_ID` frontend/backend qua URL HTTPS công khai và các trang qua Caddy; đạt mới ghi `.last-good-release` | Không chạy |
-| Xử lý lỗi Production | Rollback theo `previous-good-release` đã lưu; xác minh lại. Có khóa và lệnh `status`/`recover` cho lần chạy gián đoạn | Chưa có thử nghiệm VPS trong bộ đo #55 |
+| Deploy | Chỉ nhánh `main`, không phải PR; chuyển manifest và cấu hình release sang VPS, chạy đúng digest đã qua G2 | Đạt trên VPS, 46,920 giây |
+| G3 | Readiness, image ID đúng digest, `RELEASE_ID` frontend/backend qua URL HTTPS công khai và các trang qua Caddy; đạt mới ghi `.last-good-release` | Đạt, 3,591 giây; định danh công khai và image ID khớp manifest |
+| Xử lý lỗi Production | Rollback theo `previous-good-release` đã lưu; xác minh lại. Có khóa và lệnh `status`/`recover` cho lần chạy gián đoạn | Phép thử thủ công sau #58 xác nhận G3 từ chối cấu hình frontend sai và rollback thành công; chưa có ca Jenkins tự gọi rollback |
 
 Hai ca G2 chạy cùng image ứng viên: ca đầu áp dụng migration lên DB rỗng;
 ca sau khởi tạo đến V1 với ingest tắt, chèn dữ liệu vào `instrument`,
@@ -74,7 +74,59 @@ baseline/release, test CORS và chống ingest đồng thời. Chúng thay đổ
 lượng kiểm tra hiện tại; số 102/19 và thời lượng #55 vẫn giữ đúng phiên bản
 đã đo, không tự cập nhật thành số test hoặc thời lượng của mã mới.
 
-## 3. Số đo Jenkins ngày 18/10/2026 — Build #55, Production skipped
+Kiểm tra manifest bổ sung sau #58 từ chối khóa trùng, repository không đúng,
+digest sai định dạng và khóa ngoài danh sách trước `pull`/`up`. Bộ test hiện
+tại có 36 test Python và 20 test Node; các số 29/19 của #58 giữ nguyên theo log.
+
+## 3. Số đo Jenkins ngày 18/10/2026
+
+### 3.1. Build #58 — toàn luồng trên main
+
+Nguồn: [build #58](http://localhost:8081/job/goldcast-ci/58/),
+[build.json](measurements/pipeline-new/build-58/build.json),
+[graph.json](measurements/pipeline-new/build-58/graph.json),
+[console.log](measurements/pipeline-new/build-58/console.log),
+[durations.csv](measurements/pipeline-new/build-58/durations.csv) và
+[release.env](measurements/pipeline-new/build-58/release.env).
+Graph View lấy từ `/job/goldcast-ci/58/stages/tree`, giữ phần `data` của JSON.
+
+| Điều kiện | Giá trị |
+|---|---|
+| Job / build | `goldcast-ci` / `#58` |
+| Commit | `a58f2ccc5a6478f807b7e813107b596ce82d54f5` |
+| Nhánh checkout | `main` |
+| Thời điểm bắt đầu | 18/10/2026 20:34:25,395 — Asia/Ho_Chi_Minh |
+| Nguyên nhân chạy | `Started by user Duong Tan Minh`; chủ động chạy để kiểm chứng sau khi chuyển job sang `*/main` |
+| Kết quả | `SUCCESS`; Production thực thi, không skipped |
+| Maven G1 | Biên dịch lại 66 source và 15 test source; `Total time: 5.392 s` |
+| BuildKit | Tái sử dụng một số layer, build lại phần ứng dụng; không phải mẫu cache hoàn toàn ấm như #55 |
+| Số mẫu | 1 build đầy đủ; chưa có trung bình hoặc khoảng dao động |
+
+| Stage | Kết quả | Thời lượng (giây) |
+|---|---|---:|
+| Checkout SCM | SUCCESS | 1,617 |
+| Checkout identity | SUCCESS | 0,704 |
+| G1 - code | SUCCESS | 39,301 |
+| Registry login | SUCCESS | 1,707 |
+| Build images once | SUCCESS | 174,892 |
+| G2 - isolated image tests | SUCCESS | 100,831 |
+| Production — stage cha | SUCCESS | 50,627 |
+| Deploy tested digests — con của Production | SUCCESS | 46,920 |
+| G3 - verify and promote — con của Production | SUCCESS | 3,591 |
+| Post Actions | SUCCESS | 0,288 |
+| **Toàn build đầy đủ** | **SUCCESS** | **371,948** |
+
+371,948 giây tương đương **6 phút 11,948 giây**. Tổng các stage cấp cao nhất
+là 369,967 giây, chênh 1,981 giây so với toàn build; không cộng thêm hai stage
+con vào tổng đã có Production. G2 đạt cả cài mới và nâng cấp V1 có dữ liệu:
+mỗi ca có 35 phép kiểm API, đúng định danh frontend/backend và ba trang SSR.
+
+Manifest lưu hai digest `7d239ef1…72c41` (backend), `68e67928…d3bf` (frontend).
+G3 và kiểm tra VPS xác nhận image ID cùng định danh công khai khớp artifact;
+`.last-good-release` trỏ tới release `a58f2cc…-f6650cdb917a-58`, phase `promoted`,
+không còn khóa deploy. Không dùng thời lượng #55 để tính phần Deploy/G3 của #58.
+
+### 3.2. Build #55 — mẫu cũ, Production skipped
 
 Nguồn: [build #55 của job goldcast-ci](http://localhost:8081/job/goldcast-ci/55/).
 Bản ghi gốc lưu trong repo:
@@ -134,7 +186,7 @@ job GitHub Actions/pipeline cũ có khối lượng công việc khác.
 
 ## 4. Đối chiếu Maven giữa các môi trường
 
-Bảng dưới gộp các số Maven đã ghi trong tài liệu cũ với mẫu #55. Các mẫu lịch
+Bảng dưới gộp các số Maven đã ghi trong tài liệu cũ với mẫu #55/#58. Các mẫu lịch
 sử xuất phát từ log/ảnh được ghi lại trong [nhật ký](nhat-ky.md); riêng #55 có
 [console gốc](measurements/pipeline-new/build-55/console.log) trong repo.
 Chưa có bộ log GitHub Actions mới cùng commit `81185938bbd3` để đối chiếu #55.
@@ -150,6 +202,7 @@ Chưa có bộ log GitHub Actions mới cùng commit `81185938bbd3` để đối
 | Jenkins, mẫu 102 test lịch sử | 102 | 1,705 | Workspace bền vững, không biên dịch lại |
 | Jenkins #39, 11/10 | 102 | ~1,5 | `Nothing to compile`; số được ghi làm tròn |
 | Jenkins #55, 18/10 | 102 | 1,754 | `Nothing to compile`; có log gốc |
+| Jenkins #58, 18/10 | 114 | 5,392 | Biên dịch lại source/test; có log gốc |
 
 Các số này cho thấy những mẫu tái sử dụng `target/` có thời gian Maven thấp
 hơn các mẫu phải biên dịch lại. Chưa thể tách ảnh hưởng của workspace khỏi
@@ -171,6 +224,8 @@ không phải bằng chứng mã được biên dịch lại hai lần.
 | Smoke G2, tuần 7 | Đổi 37,5 gram thành 37,0: script cũ báo 18 phép thử, 1 hỏng, mã thoát 1 | Kiểm hằng số phát hiện lỗi dù công thức vẫn tự nhất quán | Pipeline G2 mới đã chặn một release lỗi trước Deploy |
 | Test release ngày 17/10 và G1 #55 | 19 test đạt với lệnh Docker/VPS giả lập | Các chuyển trạng thái, rollback, cleanup, recovery và bootstrap trong các tình huống test | Rollback/recovery đã chạy thành công trên VPS |
 | G2 #55 | Hai ca cài mới/nâng cấp đều xanh | Image ứng viên vượt qua các kiểm tra đã triển khai trên môi trường riêng | G3 hoặc production có cùng kết quả |
+| G1/G2/Deploy/G3 #58 | Toàn bộ stage xanh, manifest và định danh HTTPS khớp | Một lần chạy đầy đủ trên main đã triển khai đúng image qua G2 | Thời lượng ổn định hoặc khả năng xử lý mọi sự cố |
+| Rollback VPS sau #58 | G3 từ chối frontend sai định danh; rollback và probe lại đều đạt | Khôi phục cấu hình runtime của bản tốt, giữ đúng con trỏ và dọn khóa trên VPS thật | Quay lui sang digest ứng dụng khác, hoàn tác migration DB, hoặc nhánh Jenkins tự động gọi rollback |
 
 Các đoạn log lịch sử dưới đây được rút gọn từ ba phép thử trong bảng, ngăn
 cách bằng dòng trống. Giữ nguyên số test của từng lần, không thay bằng số test
@@ -196,23 +251,32 @@ sai ở mọi nơi; kiểm giá trị chuẩn 37,5 mới phát hiện lỗi. Đ�
 kiểm tính nhất quán và kiểm hằng số nghiệp vụ trong smoke test. Script mới
 thêm kiểm dự báo NAIVE, trả 35 phép kiểm khi ca thành công chạy đủ.
 
-Các thử nghiệm này được thực hiện trước hoặc ngoài build #55. Khi đưa vào
-báo cáo phải gắn đúng phiên bản và môi trường, không ghép chúng thành một lần
-chạy pipeline đầy đủ. Chi tiết quá trình sửa lỗi xem trong [nhật ký](nhat-ky.md).
+Các phép thử cố tình làm hỏng G1/hợp đồng/công thức ở trên được thực hiện
+trước hoặc ngoài build #55; #58 và phép thử rollback VPS là những mẫu riêng.
+Khi đưa vào báo cáo phải gắn đúng phiên bản và môi trường, không ghép chúng
+thành một lần chạy pipeline. Chi tiết xem trong [nhật ký](nhat-ky.md).
 
 ## 6. Bằng chứng cần bổ sung
 
 Trạng thái dưới đây nói về dữ liệu **đã lưu trong repo**, không khẳng định
-các tác vụ chưa từng được chạy ở nơi khác sau build #55.
+các tác vụ chưa từng được chạy ở nơi khác ngoài những mẫu này.
 
 | Câu hỏi | Bằng chứng cần thu | Hiện có |
 |---|---|---|
-| Toàn luồng chạy được trên `main`? | Commit, URL/số build, trạng thái tất cả stage và artifact `release.env` | #55 mới xác nhận G1/build/G2 trên nhánh feature |
+| Toàn luồng chạy được trên `main`? | Commit, URL/số build, trạng thái tất cả stage và artifact `release.env` | #58 đạt toàn luồng; có log, Graph View và manifest |
 | G2 chặn release lỗi trước production? | Build G2 cố tình lỗi, Deploy bị bỏ qua, manifest production trước/sau không đổi | Có thử smoke cũ và các ca G2 thành công; chưa có ca Jenkins/VPS tương ứng |
-| Production dùng đúng image đã qua G2? | Manifest digest, image ID container và log G3 cùng release | Chưa có trong bộ đo; chưa lưu `release.env` của #55 |
-| G3 lỗi có rollback về bản trước? | Bản trước đã lưu, log G3 lỗi, rollback và xác minh, con trỏ bản tốt sau cùng | Mới có test mô phỏng |
+| Production dùng đúng image đã qua G2? | Manifest digest, image ID container và log G3 cùng release | #58 có đủ; log rollback VPS cũng ghi lại image ID/trạng thái sau khôi phục |
+| G3 lỗi có rollback về bản trước? | Bản trước đã lưu, log G3 lỗi, rollback và xác minh, con trỏ bản tốt sau cùng | Đã thử lỗi định danh frontend và rollback cấu hình thật sau #58; chưa thử digest khác hoặc Jenkins tự gọi rollback |
 | Build gián đoạn có phục hồi được? | Metadata build, `status`, xác nhận đã dừng và output `recover` | Mới có test mô phỏng |
-| Thời lượng ổn định của luồng mới? | Các lần chạy cùng commit/điều kiện cache, thời lượng từng stage và toàn build | 1 mẫu #55: G2 93,214 giây; tổng 157,211 giây; Production skipped |
+| Thời lượng ổn định của luồng mới? | Các lần chạy cùng commit/điều kiện cache, thời lượng từng stage và toàn build | 1 mẫu #55 skipped và 1 mẫu #58 đầy đủ; khác commit/cache nên không lấy trung bình chung |
+
+Bootstrap và rollback ngày 18/10 được ghi trong
+[biên bản VPS](measurements/pipeline-new/vps-2026-10-18/README.md) và
+[log rollback](measurements/pipeline-new/vps-2026-10-18/rollback-drill.log).
+Phép thử dùng lại digest đã qua G2 của #58 và chỉ thay cấu hình định danh
+frontend để gây HTTP 503 ở endpoint phiên bản. Sau khi G3 từ chối, rollback
+khôi phục cấu hình gốc, xác minh HTTPS và ba trang; backend/database không
+restart. Đây là ca vận hành thủ công, không nằm trong thời lượng pipeline #58.
 
 Khi có mẫu mới, lưu log, JSON stage, manifest và thông tin môi trường cùng
 thư mục đo tương ứng. Giữ riêng các nhóm cache nguội/ấm và các lần có/không
@@ -221,8 +285,8 @@ thành công của toàn luồng.
 
 ## 7. Giới hạn của đánh giá hiện tại
 
-- #55 chỉ là một mẫu có workspace Maven và layer build đã ấm. Chưa có trung
-  bình, khoảng dao động hoặc số đo Deploy/G3 trong bộ dữ liệu này.
+- #55 và #58 khác commit, số test, cache và phạm vi thực thi. #58 có số đo
+  Deploy/G3 nhưng chưa có các mẫu lặp tương đương để tính trung bình/dao động.
 - Migration nâng cấp mới kiểm baseline V1 và dữ liệu mẫu ở bốn bảng; chưa bao
   phủ mọi phiên bản trước hoặc phân bố dữ liệu production.
 - Rollback quay lui image/cấu hình ứng dụng, không hoàn tác migration DB.

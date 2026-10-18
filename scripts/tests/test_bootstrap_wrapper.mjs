@@ -95,6 +95,17 @@ test('wrapper refuses another Compose project without recording a baseline', t =
   assert.ok(!existsSync(join(state.root, '.release-lock')));
 });
 
+test('wrapper rejects an application from another repository and releases its lock', t => {
+  const state = setup(t);
+  state.fixture.images[1].RepoDigests = [`ghcr.io/another-owner/goldcast-backend@sha256:${'2'.repeat(64)}`];
+  const result = state.run();
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /invalid repository or SHA-256 digest for BACKEND_IMAGE/);
+  assert.ok(!existsSync(join(state.root, '.last-good-release')));
+  assert.ok(!existsSync(join(state.root, '.release-lock')));
+  assert.doesNotMatch(readFileSync(join(state.root, 'docker.log'), 'utf8'), /^compose /m);
+});
+
 test('wrapper cannot capture while another deployment owns the lock', t => {
   const state = setup(t);
   mkdirSync(join(state.root, '.release-lock'));

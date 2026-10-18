@@ -3,8 +3,9 @@
 
 Các mục theo tuần ghi lại trạng thái tại thời điểm thực hiện. Những mô tả như
 G2 chạy sau deploy, `THE_TAG`, số stage và thời lượng build ở tuần 10–11 thuộc
-pipeline cũ. Cải tiến ngày 17/10/2026 được ghi riêng ở cuối file; hướng dẫn vận
-hành hiện hành nằm trong [tutorial](tutorial.md#b10-g1--build--g2--deploy--g3).
+pipeline cũ. Các cải tiến ngày 17–18/10/2026 và lần chạy đầy đủ #58 trên main
+được ghi riêng ở cuối file; hướng dẫn vận hành hiện hành nằm trong
+[tutorial](tutorial.md#b10-g1--build--g2--deploy--g3).
 
 ## Tuần 2 — 22/09/2026
 **Mục tiêu:** chạy được goldcast trên máy cá nhân
@@ -1216,3 +1217,44 @@ container thật. Các kết quả này không phải bằng chứng G3 hoặc r
 trên VPS. Số liệu build
 #55 và các mốc lịch sử giữ nguyên; lần sửa này chưa tạo một mẫu thời lượng
 pipeline Jenkins mới.
+
+## Vận hành ngày 18/10/2026 — Jenkins main, bootstrap và rollback thật
+
+Sau khi PR #53 được merge, kiểm tra thấy job Jenkins vẫn checkout
+`ci/pre-deploy-gate`; build mới nhất khi bắt đầu là #57, chưa phải main mới.
+VPS còn chạy image `:49`, chưa có baseline của cơ chế release mới.
+
+Đã sao lưu PostgreSQL, truyền các script từ main `a58f2cc` vào thư mục bảo trì
+riêng và chạy bootstrap. Baseline
+`/opt/goldcast/releases/bootstrap-20261018203238` vượt kiểm image/readiness và
+ba trang HTTPS, giữ cấu hình thực tế và không restart production. Sau đó đổi
+job sang `*/main`, giữ Poll SCM và chủ động chạy **build #58**.
+
+#58 đạt 114 test Java, 29 test Python, 19 test Node và typecheck. Build/push
+image một lần, cả hai ca G2 đạt; Production thực thi, Deploy/G3 thành công.
+Thời lượng toàn build **371,948 giây**; Deploy **46,920 giây**, G3 **3,591 giây**.
+Định danh frontend/backend công khai và image ID VPS khớp manifest đã qua G2.
+Con trỏ bản tốt được cập nhật sau G3, không còn khóa deploy.
+
+Sau #58, chạy một phép thử rollback thủ công: giữ digest, đổi định danh
+frontend trong cấu hình drill để endpoint phiên bản trả 503. G3 từ chối,
+con trỏ bản tốt vẫn giữ #58; rollback khôi phục frontend/Caddy rồi xác minh lại
+HTTPS, định danh và ba trang. Backend/database không bị restart. Phép thử
+chứng minh khôi phục cấu hình runtime trên VPS thật; chưa phải ca Jenkins tự
+gọi rollback, quay về digest khác hoặc phục hồi database.
+
+Bằng chứng: [bộ đo #58](measurements/pipeline-new/build-58/console.log),
+[manifest](measurements/pipeline-new/build-58/release.env) và
+[biên bản/log VPS](measurements/pipeline-new/vps-2026-10-18/README.md).
+Các số #55 và nhận định giới hạn ở các mục trước là trạng thái lịch sử;
+không sửa chúng thành số đo của #58.
+
+Đồng thời siết `release.sh`: kiểm duy nhất ba khóa cho phép, định dạng định
+danh, đúng repository từng service và digest SHA-256 đủ 64 ký tự hex thường;
+từ chối khóa trùng hoặc khóa lạ trước Docker/khóa deploy. Kiểm cả baseline,
+verify và mục tiêu rollback; legacy chỉ được thiếu định danh khi có marker.
+Kiểm tra hồi quy: 36 test Python trên host và Alpine, 20 test Node. Số test
+này thuộc lần sửa manifest, không thay các số 29/19 trong log Jenkins #58.
+
+Theo yêu cầu, bỏ bước xử lý cảnh báo dependency Tailwind; không thay đổi
+`package.json` hoặc lockfile trong lần này.

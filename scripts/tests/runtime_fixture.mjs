@@ -20,6 +20,7 @@ export function runtimeFixture() {
         { Type: 'volume', Name: 'goldcast_caddy-data', Destination: '/data', RW: true },
       ] : [],
   }));
-  const images = containers.map((c, i) => ({ Id: c.Image, RepoDigests: [`example/${i}@sha256:${String(i + 1).repeat(64)}`] }));
+  const repositories = ['postgres', 'ghcr.io/duongtanminh1912/goldcast-backend', 'ghcr.io/duongtanminh1912/goldcast-frontend', 'caddy'];
+  const images = containers.map((c, i) => ({ Id: c.Image, RepoDigests: [`${repositories[i]}@sha256:${String(i + 1).repeat(64)}`] }));
   return { containers, images };
 }

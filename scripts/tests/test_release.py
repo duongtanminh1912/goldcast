@@ -6,6 +6,8 @@ import tempfile
 import unittest
 
 SCRIPT = Path(__file__).resolve().parents[1] / 'release.sh'
+BACKEND_IMAGE = 'ghcr.io/duongtanminh1912/goldcast-backend@sha256:' + 'a' * 64
+FRONTEND_IMAGE = 'ghcr.io/duongtanminh1912/goldcast-frontend@sha256:' + 'b' * 64
 
 
 class ReleaseTest(unittest.TestCase):
@@ -44,7 +46,7 @@ exec /bin/{command} "$@"
     def release(self, name):
         path = self.root / 'releases' / name
         (path / 'scripts').mkdir(parents=True)
-        (path / 'release.env').write_text(f'RELEASE_ID={name}\nBACKEND_IMAGE=test/backend@sha256:abc\nFRONTEND_IMAGE=test/frontend@sha256:def\n')
+        (path / 'release.env').write_text(f'RELEASE_ID={name}\nBACKEND_IMAGE={BACKEND_IMAGE}\nFRONTEND_IMAGE={FRONTEND_IMAGE}\n')
         (path / 'docker-compose.prod.yml').touch()
         (path / 'scripts/check-pages.mjs').touch()
         if name == 'old':
@@ -60,6 +62,101 @@ exec /bin/{command} "$@"
         self.assertEqual(self.run_release('verify').returncode, 0)
         self.assertEqual(self.marker.read_text().strip(), str(self.new))
         self.assertFalse((self.root / '.release-lock').exists())
+
+    def test_invalid_candidate_manifest_is_rejected_before_any_deploy_side_effect(self):
+        manifest = self.new / 'release.env'
+        valid = manifest.read_text()
+        invalid = {
+            'empty': '',
+            'missing_backend': valid.replace(f'BACKEND_IMAGE={BACKEND_IMAGE}\n', ''),
+            'missing_frontend': valid.replace(f'FRONTEND_IMAGE={FRONTEND_IMAGE}\n', ''),
+            'empty_digest': valid.replace('a' * 64, ''),
+            'short_digest': valid.replace('a' * 64, 'abc'),
+            'short_frontend_digest': valid.replace('b' * 64, 'def'),
+            'long_digest': valid.replace('a' * 64, 'a' * 65),
+            'non_hex_digest': valid.replace('a' * 64, 'g' * 64),
+            'uppercase_digest': valid.replace('a' * 64, 'A' * 64),
+            'tag_only': valid.replace(BACKEND_IMAGE, 'ghcr.io/duongtanminh1912/goldcast-backend:latest'),
+            'other_registry': valid.replace('ghcr.io/', 'registry.example/'),
+            'other_owner': valid.replace('duongtanminh1912/', 'another-owner/'),
+            'repository_prefix': valid.replace('goldcast-backend@', 'goldcast-backend-extra@'),
+            'swapped_service': valid.replace(BACKEND_IMAGE, FRONTEND_IMAGE),
+            'duplicate_backend': valid + f'BACKEND_IMAGE={BACKEND_IMAGE}\n',
+            'duplicate_frontend': valid + f'FRONTEND_IMAGE={FRONTEND_IMAGE}\n',
+            'conflicting_backend': valid + 'BACKEND_IMAGE=attacker/backend:latest\n',
+            'duplicate_identity': valid + 'RELEASE_ID=new\n',
+            'conflicting_identity': valid + 'RELEASE_ID=other\n',
+            'too_long_identity': valid.replace('RELEASE_ID=new', 'RELEASE_ID=' + 'a' * 129),
+            'whitespace_identity': valid.replace('RELEASE_ID=new', 'RELEASE_ID=new old'),
+            'env_override': valid + 'POSTGRES_DB=other\n',
+            'export': valid.replace('BACKEND_IMAGE=', 'export BACKEND_IMAGE='),
+            'quoted_value': valid.replace(BACKEND_IMAGE, f'"{BACKEND_IMAGE}"'),
+            'inline_comment': valid.replace(BACKEND_IMAGE, BACKEND_IMAGE + ' # comment'),
+            'shell_interpolation': valid.replace(BACKEND_IMAGE, '${BACKEND_IMAGE}'),
+            'malformed_line': valid + 'not an assignment\n',
+            'crlf': valid.replace('\n', '\r\n'),
+        }
+        for name, content in invalid.items():
+            with self.subTest(name=name):
+                manifest.write_text(content)
+                result = self.run_release('deploy')
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn('Invalid release manifest:', result.stderr)
+                self.assertFalse((self.root / '.release-lock').exists())
+                self.assertFalse((self.root / 'docker.log').exists())
+                self.assertFalse((self.new / 'runtime.env').exists())
+                self.assertEqual(self.marker.read_text().strip(), str(self.old))
+
+    def test_manifest_allows_reordered_keys_comments_and_boundary_identity(self):
+        identity = 'a' + 'b' * 127
+        (self.new / 'release.env').write_text(
+            f'# Tested images\n\nFRONTEND_IMAGE={FRONTEND_IMAGE}\n'
+            f'RELEASE_ID={identity}\nBACKEND_IMAGE={BACKEND_IMAGE}\n')
+        self.assertEqual(self.run_release('deploy').returncode, 0)
+        self.assertEqual(self.run_release('verify').returncode, 0)
+
+    def test_invalid_previous_manifest_blocks_deploy_without_taking_lock(self):
+        manifest = self.old / 'release.env'
+        manifest.write_text(manifest.read_text() + f'BACKEND_IMAGE={BACKEND_IMAGE}\n')
+        self.assertNotEqual(self.run_release('deploy').returncode, 0)
+        self.assertFalse((self.root / '.release-lock').exists())
+        self.assertFalse((self.root / 'docker.log').exists())
+
+    def test_changed_manifest_cannot_be_verified_or_promoted(self):
+        self.assertEqual(self.run_release('deploy').returncode, 0)
+        (self.root / 'docker.log').write_text('')
+        manifest = self.new / 'release.env'
+        manifest.write_text(manifest.read_text() + 'RELEASE_ID=other\n')
+        self.assertNotEqual(self.run_release('verify').returncode, 0)
+        self.assertEqual((self.root / 'docker.log').read_text(), '')
+        self.assertEqual(self.marker.read_text().strip(), str(self.old))
+        self.assertTrue((self.root / '.release-lock').exists())
+
+    def test_invalid_rollback_manifest_keeps_lock_and_does_not_run_docker(self):
+        self.assertEqual(self.run_release('deploy').returncode, 0)
+        (self.root / 'docker.log').write_text('')
+        (self.old / 'release.env').write_text('BACKEND_IMAGE=attacker/backend:latest\n')
+        self.assertNotEqual(self.run_release('rollback').returncode, 0)
+        self.assertEqual((self.root / 'docker.log').read_text(), '')
+        self.assertTrue((self.root / '.release-lock').exists())
+        self.assertEqual(self.marker.read_text().strip(), str(self.old))
+
+    def test_explicit_legacy_baseline_can_be_validated_and_rolled_back(self):
+        manifest = self.old / 'release.env'
+        manifest.write_text(manifest.read_text().replace('RELEASE_ID=old\n', ''))
+        (self.old / 'legacy-local-origin').touch()
+        self.assertEqual(self.run_release('deploy').returncode, 0)
+        self.assertEqual(self.run_release('rollback').returncode, 0)
+        self.assertIn('--legacy-local-origin', (self.root / 'docker.log').read_text())
+
+    def test_invalid_bootstrap_manifest_is_rejected_before_lock_or_docker(self):
+        self.marker.unlink()
+        manifest = self.new / 'release.env'
+        manifest.write_text(manifest.read_text() + f'FRONTEND_IMAGE={FRONTEND_IMAGE}\n')
+        self.assertNotEqual(self.run_release('bootstrap').returncode, 0)
+        self.assertFalse(self.marker.exists())
+        self.assertFalse((self.root / '.release-lock').exists())
+        self.assertFalse((self.root / 'docker.log').exists())
 
     def test_g3_failure_keeps_good_marker_then_rolls_back(self):
         self.assertEqual(self.run_release('deploy').returncode, 0)
