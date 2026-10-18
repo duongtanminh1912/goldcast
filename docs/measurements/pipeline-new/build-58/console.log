@@ -1,0 +1,1213 @@
+Started by user Duong Tan Minh
+Obtained Jenkinsfile from git https://github.com/duongtanminh1912/goldcast.git
+[Pipeline] Start of Pipeline
+[Pipeline] node
+Running on Jenkins in /var/jenkins_home/workspace/goldcast-ci
+[Pipeline] {
+[Pipeline] stage
+[Pipeline] { (Declarative: Checkout SCM)
+[Pipeline] checkout
+Selected Git installation does not exist. Using Default
+The recommended git tool is: NONE
+No credentials specified
+ > git rev-parse --resolve-git-dir /var/jenkins_home/workspace/goldcast-ci/.git # timeout=10
+Fetching changes from the remote Git repository
+ > git config remote.origin.url https://github.com/duongtanminh1912/goldcast.git # timeout=10
+Fetching upstream changes from https://github.com/duongtanminh1912/goldcast.git
+ > git --version # timeout=10
+ > git --version # 'git version 2.47.3'
+ > git fetch --tags --force --progress -- https://github.com/duongtanminh1912/goldcast.git +refs/heads/*:refs/remotes/origin/* # timeout=10
+ > git rev-parse refs/remotes/origin/main^{commit} # timeout=10
+Checking out Revision a58f2ccc5a6478f807b7e813107b596ce82d54f5 (refs/remotes/origin/main)
+ > git config core.sparsecheckout # timeout=10
+ > git checkout -f a58f2ccc5a6478f807b7e813107b596ce82d54f5 # timeout=10
+Commit message: "Merge pull request #53 from duongtanminh1912/fix/release-verification-and-g1"
+ > git rev-list --no-walk 463db17f555ffd69765e44fce9a35a46995d11d5 # timeout=10
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] withEnv
+[Pipeline] {
+[Pipeline] withEnv
+[Pipeline] {
+[Pipeline] stage
+[Pipeline] { (Checkout identity)
+[Pipeline] script
+[Pipeline] {
+[Pipeline] sh
++ git rev-parse HEAD
+[Pipeline] sh
++ printf %s goldcast-ci
++ sha256sum
++ cut -c1-12
+[Pipeline] }
+[Pipeline] // script
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (G1 - code)
+[Pipeline] dir
+Running in /var/jenkins_home/workspace/goldcast-ci/backend
+[Pipeline] {
+[Pipeline] sh
++ mvn -B test
+[INFO] Scanning for projects...
+[INFO] 
+[INFO] --------------------< vn.goldcast:goldcast-backend >--------------------
+[INFO] Building goldcast-backend 0.1.0
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ goldcast-backend ---
+[INFO] Copying 1 resource from src/main/resources to target/classes
+[INFO] Copying 2 resources from src/main/resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.13.0:compile (default-compile) @ goldcast-backend ---
+[INFO] Recompiling the module because of changed source code.
+[INFO] Compiling 66 source files with javac [debug parameters release 21] to target/classes
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ goldcast-backend ---
+[INFO] skip non existing resourceDirectory /var/jenkins_home/workspace/goldcast-ci/backend/src/test/resources
+[INFO] 
+[INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ goldcast-backend ---
+[INFO] Recompiling the module because of changed dependency.
+[INFO] Compiling 15 source files with javac [debug parameters release 21] to target/test-classes
+[INFO] 
+[INFO] --- surefire:3.2.5:test (default-test) @ goldcast-backend ---
+[INFO] Using auto detected provider org.apache.maven.surefire.junitplatform.JUnitPlatformProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running vn.goldcast.forecast.IntervalEstimatorTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.032 s -- in vn.goldcast.forecast.IntervalEstimatorTest
+[INFO] Running vn.goldcast.forecast.ForecasterTest
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.040 s -- in vn.goldcast.forecast.ForecasterTest
+[INFO] Running vn.goldcast.forecast.BacktesterTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.018 s -- in vn.goldcast.forecast.BacktesterTest
+[INFO] Running vn.goldcast.forecast.MetricsTest
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.008 s -- in vn.goldcast.forecast.MetricsTest
+[INFO] Running vn.goldcast.analytics.IndicatorsTest
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.013 s -- in vn.goldcast.analytics.IndicatorsTest
+[INFO] Running vn.goldcast.ingest.StooqCsvParserTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in vn.goldcast.ingest.StooqCsvParserTest
+[INFO] Running vn.goldcast.ingest.DateParsingTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.010 s -- in vn.goldcast.ingest.DateParsingTest
+[INFO] Running vn.goldcast.ingest.IngestConcurrencyTest
+WARNING: A Java agent has been loaded dynamically (/var/jenkins_home/.m2/repository/net/bytebuddy/byte-buddy-agent/1.14.19/byte-buddy-agent-1.14.19.jar)
+WARNING: If a serviceability tool is in use, please run with -XX:+EnableDynamicAgentLoading to hide this warning
+WARNING: If a serviceability tool is not in use, please run with -Djdk.instrument.traceUsage for more information
+WARNING: Dynamic loading of agents will be disallowed by default in a future release
+13:34:34.826 [main] INFO vn.goldcast.ingest.IngestScheduler -- Bắt đầu ingest (lịch định kỳ)
+13:34:34.828 [main] INFO vn.goldcast.ingest.IngestScheduler -- Bỏ qua ingest (lịch định kỳ): một lượt khác đang chạy
+13:34:34.832 [pool-2-thread-1] INFO vn.goldcast.ingest.IngestService -- Ingest xong trong 7ms: +0 mới, 0 cập nhật, 0 chuỗi được seed
+13:34:34.833 [main] INFO vn.goldcast.ingest.IngestService -- Ingest xong trong 0ms: +0 mới, 0 cập nhật, 0 chuỗi được seed
+13:34:34.838 [main] INFO vn.goldcast.ingest.IngestService -- Ingest xong trong 0ms: +0 mới, 0 cập nhật, 0 chuỗi được seed
+13:34:34.839 [main] INFO vn.goldcast.ingest.IngestService -- Ingest xong trong 0ms: +0 mới, 0 cập nhật, 0 chuỗi được seed
+13:34:34.847 [main] INFO vn.goldcast.ingest.IngestService -- Ingest xong trong 0ms: +0 mới, 0 cập nhật, 0 chuỗi được seed
+13:34:34.849 [main] INFO vn.goldcast.ingest.IngestService -- Ingest xong trong 0ms: +0 mới, 0 cập nhật, 0 chuỗi được seed
+13:34:34.849 [main] INFO vn.goldcast.ingest.IngestService -- Ingest xong trong 0ms: +0 mới, 0 cập nhật, 0 chuỗi được seed
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.965 s -- in vn.goldcast.ingest.IngestConcurrencyTest
+[INFO] Running vn.goldcast.ingest.SjcXmlParserTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.053 s -- in vn.goldcast.ingest.SjcXmlParserTest
+[INFO] Running vn.goldcast.api.AdminCorsTest
+13:34:35.451 [main] INFO org.hibernate.validator.internal.util.Version -- HV000001: Hibernate Validator 8.0.1.Final
+13:34:35.629 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+13:34:35.629 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+13:34:35.630 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+13:34:35.677 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+13:34:35.678 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+13:34:35.678 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 0 ms
+13:34:35.678 [main] WARN vn.goldcast.api.AdminTokenFilter -- Chan /api/v1/admin/ingest: thieu hoac sai X-Admin-Token
+13:34:35.742 [main] INFO org.springframework.mock.web.MockServletContext -- Initializing Spring TestDispatcherServlet ''
+13:34:35.742 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Initializing Servlet ''
+13:34:35.743 [main] INFO org.springframework.test.web.servlet.TestDispatcherServlet -- Completed initialization in 1 ms
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.831 s -- in vn.goldcast.api.AdminCorsTest
+[INFO] Running vn.goldcast.api.dto.ApiContractTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.017 s -- in vn.goldcast.api.dto.ApiContractTest
+[INFO] Running vn.goldcast.api.AdminTokenFilterTest
+13:34:35.763 [main] WARN vn.goldcast.api.AdminTokenFilter -- Chan /api/v1/admin/ingest: thieu hoac sai X-Admin-Token
+13:34:35.764 [main] WARN vn.goldcast.api.AdminTokenFilter -- Chan /api/v1/admin/ingest: thieu hoac sai X-Admin-Token
+13:34:35.766 [main] WARN vn.goldcast.api.AdminTokenFilter -- Chan /api/v1/admin/ingest: app.admin.token chua duoc cau hinh
+13:34:35.766 [main] WARN vn.goldcast.api.AdminTokenFilter -- Chan /api/v1/admin/ingest: thieu hoac sai X-Admin-Token
+13:34:35.767 [main] WARN vn.goldcast.api.AdminTokenFilter -- Chan /api/v1/admin/ingest: thieu hoac sai X-Admin-Token
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.006 s -- in vn.goldcast.api.AdminTokenFilterTest
+[INFO] Running vn.goldcast.api.ReleaseControllerTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.002 s -- in vn.goldcast.api.ReleaseControllerTest
+[INFO] Running vn.goldcast.market.GoldUnitsTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.007 s -- in vn.goldcast.market.GoldUnitsTest
+[INFO] Running vn.goldcast.market.TradingCalendarTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in vn.goldcast.market.TradingCalendarTest
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 114, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  5.392 s
+[INFO] Finished at: 2026-10-18T13:34:35Z
+[INFO] ------------------------------------------------------------------------
+[Pipeline] }
+[Pipeline] // dir
+[Pipeline] sh
++ COPYFILE_DISABLE=1 tar -cf - scripts
++ docker run --rm -i python:3.13-alpine sh -ec 
+                        mkdir /src; cd /src; tar -xf -;
+                        python3 -m unittest discover -s scripts/tests -v
+test_http_failure_is_not_reported_as_success (test_ingest.IngestCommandTest.test_http_failure_is_not_reported_as_success) ... ok
+test_missing_token_fails_before_request (test_ingest.IngestCommandTest.test_missing_token_fails_before_request) ... ok
+test_posts_with_token_without_printing_it (test_ingest.IngestCommandTest.test_posts_with_token_without_printing_it) ... ok
+test_bootstrap_does_not_remove_another_deploy_lock (test_release.ReleaseTest.test_bootstrap_does_not_remove_another_deploy_lock) ... ok
+test_bootstrap_verifies_before_recording_baseline (test_release.ReleaseTest.test_bootstrap_verifies_before_recording_baseline) ... ok
+test_candidate_cannot_select_legacy_verification_via_its_identity (test_release.ReleaseTest.test_candidate_cannot_select_legacy_verification_via_its_identity) ... ok
+test_candidate_without_public_identity_is_rejected_before_deploy (test_release.ReleaseTest.test_candidate_without_public_identity_is_rejected_before_deploy) ... ok
+test_deploy_failure_can_rollback (test_release.ReleaseTest.test_deploy_failure_can_rollback) ... ok
+test_failed_bootstrap_does_not_record_baseline_or_keep_lock (test_release.ReleaseTest.test_failed_bootstrap_does_not_record_baseline_or_keep_lock) ... ok
+test_failed_rollback_keeps_lock_and_good_marker (test_release.ReleaseTest.test_failed_rollback_keeps_lock_and_good_marker) ... ok
+test_foreign_deployment_cannot_rollback (test_release.ReleaseTest.test_foreign_deployment_cannot_rollback) ... ok
+test_g3_failure_keeps_good_marker_then_rolls_back (test_release.ReleaseTest.test_g3_failure_keeps_good_marker_then_rolls_back) ... ok
+test_missing_baseline_prevents_deploy (test_release.ReleaseTest.test_missing_baseline_prevents_deploy) ... ok
+test_missing_saved_target_prevents_guessing_rollback_target (test_release.ReleaseTest.test_missing_saved_target_prevents_guessing_rollback_target) ... ok
+test_old_baseline_requires_verified_refresh_before_production_changes (test_release.ReleaseTest.test_old_baseline_requires_verified_refresh_before_production_changes) ... ok
+test_only_verified_release_is_promoted (test_release.ReleaseTest.test_only_verified_release_is_promoted) ... ok
+test_promotion_cleanup_failure_is_warning_and_never_rolls_back (test_release.ReleaseTest.test_promotion_cleanup_failure_is_warning_and_never_rolls_back) ... ok
+test_public_release_identity_is_passed_to_https_probe (test_release.ReleaseTest.test_public_release_identity_is_passed_to_https_probe) ... ok
+test_recover_failed_verification_keeps_lock (test_release.ReleaseTest.test_recover_failed_verification_keeps_lock) ... ok
+test_recover_interrupted_deploy_rolls_back_saved_target (test_release.ReleaseTest.test_recover_interrupted_deploy_rolls_back_saved_target) ... ok
+test_recover_promoted_release_with_residual_lock (test_release.ReleaseTest.test_recover_promoted_release_with_residual_lock) ... ok
+test_recover_rejects_other_owner (test_release.ReleaseTest.test_recover_rejects_other_owner) ... ok
+test_recovery_requires_explicit_stopped_confirmation (test_release.ReleaseTest.test_recovery_requires_explicit_stopped_confirmation) ... ok
+test_refresh_keeps_old_good_pointer_when_verification_fails (test_release.ReleaseTest.test_refresh_keeps_old_good_pointer_when_verification_fails) ... ok
+test_refresh_records_only_a_verified_baseline_without_restarting (test_release.ReleaseTest.test_refresh_records_only_a_verified_baseline_without_restarting) ... ok
+test_release_freezes_environment_before_production_is_changed (test_release.ReleaseTest.test_release_freezes_environment_before_production_is_changed) ... ok
+test_rollback_uses_saved_target_when_good_pointer_changes (test_release.ReleaseTest.test_rollback_uses_saved_target_when_good_pointer_changes) ... ok
+test_status_records_build_and_previous_release (test_release.ReleaseTest.test_status_records_build_and_previous_release) ... ok
+test_wrong_running_version_rejects_promotion (test_release.ReleaseTest.test_wrong_running_version_rejects_promotion) ... ok
+
+----------------------------------------------------------------------
+Ran 29 tests in 0.496s
+
+OK
+[Pipeline] sh
++ COPYFILE_DISABLE=1 tar --exclude=frontend/node_modules --exclude=frontend/.next -cf - frontend scripts
++ docker run --rm -i node:22-alpine sh -ec 
+                        mkdir /src; cd /src; tar -xf -;
+                        npm ci --prefix frontend; npm run typecheck --prefix frontend;
+                        node --test scripts/tests/test_*.mjs
+npm warn deprecated recharts@2.15.0: 1.x and 2.x branches are no longer active. Bump to Recharts v3 to receive latest features and bugfixes. See https://github.com/recharts/recharts/wiki/3.0-migration-guide
+
+added 146 packages, and audited 147 packages in 24s
+
+27 packages are looking for funding
+  run `npm fund` for details
+
+7 vulnerabilities (2 moderate, 5 high)
+
+To address issues that do not require attention, run:
+  npm audit fix
+
+To address all issues (including breaking changes), run:
+  npm audit fix --force
+
+Run `npm audit` for details.
+npm notice
+npm notice New major version of npm available! 10.9.9 -> 12.2.0
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+npm notice To update run: npm install -g npm@12.2.0
+npm notice
+
+> goldcast-frontend@0.1.0 typecheck
+> tsc --noEmit
+
+TAP version 13
+# Subtest: real bootstrap wrapper captures runtime instead of the newer checkout defaults
+ok 1 - real bootstrap wrapper captures runtime instead of the newer checkout defaults
+  ---
+  duration_ms: 578.463292
+  type: 'test'
+  ...
+# Subtest: explicit refresh replaces an old baseline only after runtime verification
+ok 2 - explicit refresh replaces an old baseline only after runtime verification
+  ---
+  duration_ms: 562.612542
+  type: 'test'
+  ...
+# Subtest: wrapper marks a pre-identity baseline for direct-origin verification
+ok 3 - wrapper marks a pre-identity baseline for direct-origin verification
+  ---
+  duration_ms: 562.394125
+  type: 'test'
+  ...
+# Subtest: wrapper refuses another Compose project without recording a baseline
+ok 4 - wrapper refuses another Compose project without recording a baseline
+  ---
+  duration_ms: 58.054333
+  type: 'test'
+  ...
+# Subtest: wrapper cannot capture while another deployment owns the lock
+ok 5 - wrapper cannot capture while another deployment owns the lock
+  ---
+  duration_ms: 4.930125
+  type: 'test'
+  ...
+# OK public release candidate-123
+# OK page /
+# OK page /instruments/XAUUSD
+# OK page /forecast/XAUUSD?model=NAIVE&horizon=7
+# OK public release candidate-123
+# OK page /
+# OK page /instruments/XAUUSD
+# OK page /forecast/XAUUSD?model=NAIVE&horizon=7
+# Subtest: matching public release and all three rendered pages pass
+ok 6 - matching public release and all three rendered pages pass
+  ---
+  duration_ms: 32.782083
+  type: 'test'
+  ...
+# Subtest: old public release fails even when every page would look healthy
+ok 7 - old public release fails even when every page would look healthy
+  ---
+  duration_ms: 0.867416
+  type: 'test'
+  ...
+# Subtest: missing release endpoint is not accepted as a legacy release
+ok 8 - missing release endpoint is not accepted as a legacy release
+  ---
+  duration_ms: 0.51925
+  type: 'test'
+  ...
+# Subtest: matching identity cannot hide a rendered error page
+ok 9 - matching identity cannot hide a rendered error page
+  ---
+  duration_ms: 0.854625
+  type: 'test'
+  ...
+# Subtest: matching frontend cannot hide an old backend behind it
+ok 10 - matching frontend cannot hide an old backend behind it
+  ---
+  duration_ms: 1.761083
+  type: 'test'
+  ...
+# Subtest: legacy baseline requires HTTPS before attempting DNS or page requests
+ok 11 - legacy baseline requires HTTPS before attempting DNS or page requests
+  ---
+  duration_ms: 0.468792
+  type: 'test'
+  ...
+# Subtest: explicit legacy baseline can check the local HTTPS origin
+ok 12 - explicit legacy baseline can check the local HTTPS origin
+  ---
+  duration_ms: 2.58975
+  type: 'test'
+  ...
+# Subtest: legacy baseline cannot bless pages from a different public host
+ok 13 - legacy baseline cannot bless pages from a different public host
+  ---
+  duration_ms: 0.538417
+  type: 'test'
+  ...
+# Subtest: baseline keeps live seed=true, literal secrets and all four image digests
+ok 14 - baseline keeps live seed=true, literal secrets and all four image digests
+  ---
+  duration_ms: 3.002208
+  type: 'test'
+  ...
+# Subtest: baseline retains DB volume identity, Caddy config, healthcheck and command
+ok 15 - baseline retains DB volume identity, Caddy config, healthcheck and command
+  ---
+  duration_ms: 1.75325
+  type: 'test'
+  ...
+# Subtest: legacy mode is explicit when the running image has no release identity
+ok 16 - legacy mode is explicit when the running image has no release identity
+  ---
+  duration_ms: 0.366333
+  type: 'test'
+  ...
+# Subtest: unexpected volume, network or published application port rejects adoption
+ok 17 - unexpected volume, network or published application port rejects adoption
+  ---
+  duration_ms: 0.670709
+  type: 'test'
+  ...
+# Subtest: missing registry digest cannot create a baseline
+ok 18 - missing registry digest cannot create a baseline
+  ---
+  duration_ms: 0.332042
+  type: 'test'
+  ...
+# Subtest: snapshot CLI stores private configuration without printing its secrets
+ok 19 - snapshot CLI stores private configuration without printing its secrets
+  ---
+  duration_ms: 31.702167
+  type: 'test'
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1828.265584
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Registry login)
+[Pipeline] withCredentials
+Masking supported pattern matches of $GHCR_TOKEN
+[Pipeline] {
+[Pipeline] sh
++ echo ****
++ docker login ghcr.io -u duongtanminh1912 --password-stdin
+WARNING! Your password will be stored unencrypted in /var/jenkins_home/.docker/config.json.
+Configure a credential helper to remove this warning. See
+https://docs.docker.com/engine/reference/commandline/login/#credential-stores
+
+Login Succeeded
+[Pipeline] }
+[Pipeline] // withCredentials
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Build images once)
+[Pipeline] sh
++ set -eu
++ printf RELEASE_ID=%s\n a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
++ image=ghcr.io/duongtanminh1912/goldcast-backend:a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
++ metadata_file=build-metadata-backend.json
++ docker buildx build --platform linux/amd64 -t ghcr.io/duongtanminh1912/goldcast-backend:a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58 --metadata-file build-metadata-backend.json --push backend/
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 932B done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/maven:3.9-eclipse-temurin-21
+#2 DONE 0.0s
+
+#3 [internal] load metadata for docker.io/library/eclipse-temurin:21-jre-alpine
+#3 DONE 2.1s
+
+#4 [internal] load .dockerignore
+#4 transferring context: 64B done
+#4 DONE 0.0s
+
+#5 [build 1/6] FROM docker.io/library/maven:3.9-eclipse-temurin-21@sha256:99e61abcff91a9b1333463bd8451fb18495d6eba9250ac66a338b518f8278320
+#5 resolve docker.io/library/maven:3.9-eclipse-temurin-21@sha256:99e61abcff91a9b1333463bd8451fb18495d6eba9250ac66a338b518f8278320 0.0s done
+#5 DONE 0.0s
+
+#6 [stage-1 1/4] FROM docker.io/library/eclipse-temurin:21-jre-alpine@sha256:51ab5e3302e7141ce665ca3ea85e8b5cd648eafbc3c0c90dd79d6537684e4555
+#6 resolve docker.io/library/eclipse-temurin:21-jre-alpine@sha256:51ab5e3302e7141ce665ca3ea85e8b5cd648eafbc3c0c90dd79d6537684e4555 0.0s done
+#6 DONE 0.0s
+
+#7 [internal] load build context
+#7 transferring context: 46.48kB done
+#7 DONE 0.0s
+
+#8 [build 2/6] WORKDIR /build
+#8 CACHED
+
+#9 [build 3/6] COPY pom.xml .
+#9 CACHED
+
+#10 [build 4/6] RUN mvn -B -q dependency:go-offline
+#10 CACHED
+
+#11 [build 5/6] COPY src ./src
+#11 DONE 0.0s
+
+#12 [build 6/6] RUN mvn -B clean package -DskipTests
+#12 4.118 [INFO] Scanning for projects...
+#12 4.904 [INFO] 
+#12 4.905 [INFO] --------------------< vn.goldcast:goldcast-backend >--------------------
+#12 4.905 [INFO] Building goldcast-backend 0.1.0
+#12 4.905 [INFO]   from pom.xml
+#12 4.905 [INFO] --------------------------------[ jar ]---------------------------------
+#12 6.489 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/jboss/logging/jboss-logging/3.5.3.Final/jboss-logging-3.5.3.Final.pom
+#12 7.745 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/jboss/logging/jboss-logging/3.5.3.Final/jboss-logging-3.5.3.Final.pom (19 kB at 15 kB/s)
+#12 7.839 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/jboss/logging/logging-parent/1.0.1.Final/logging-parent-1.0.1.Final.pom
+#12 7.964 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/jboss/logging/logging-parent/1.0.1.Final/logging-parent-1.0.1.Final.pom (6.0 kB at 48 kB/s)
+#12 8.090 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/classmate/1.7.0/classmate-1.7.0.pom
+#12 8.193 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/classmate/1.7.0/classmate-1.7.0.pom (7.0 kB at 68 kB/s)
+#12 8.207 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy/1.14.19/byte-buddy-1.14.19.pom
+#12 8.294 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy/1.14.19/byte-buddy-1.14.19.pom (16 kB at 183 kB/s)
+#12 8.299 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy-parent/1.14.19/byte-buddy-parent-1.14.19.pom
+#12 8.390 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy-parent/1.14.19/byte-buddy-parent-1.14.19.pom (62 kB at 676 kB/s)
+#12 8.445 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-runtime/4.0.5/jaxb-runtime-4.0.5.pom
+#12 8.548 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-runtime/4.0.5/jaxb-runtime-4.0.5.pom (11 kB at 104 kB/s)
+#12 8.557 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/mvn/jaxb-runtime-parent/4.0.5/jaxb-runtime-parent-4.0.5.pom
+#12 8.698 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/mvn/jaxb-runtime-parent/4.0.5/jaxb-runtime-parent-4.0.5.pom (1.2 kB at 8.5 kB/s)
+#12 8.710 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/mvn/jaxb-parent/4.0.5/jaxb-parent-4.0.5.pom
+#12 8.814 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/mvn/jaxb-parent/4.0.5/jaxb-parent-4.0.5.pom (35 kB at 333 kB/s)
+#12 8.825 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/jaxb-bom-ext/4.0.5/jaxb-bom-ext-4.0.5.pom
+#12 8.902 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/jaxb-bom-ext/4.0.5/jaxb-bom-ext-4.0.5.pom (3.5 kB at 45 kB/s)
+#12 8.949 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-core/4.0.5/jaxb-core-4.0.5.pom
+#12 9.104 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-core/4.0.5/jaxb-core-4.0.5.pom (3.7 kB at 24 kB/s)
+#12 9.132 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/angus/angus-activation/2.0.2/angus-activation-2.0.2.pom
+#12 9.463 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/angus/angus-activation/2.0.2/angus-activation-2.0.2.pom (4.0 kB at 12 kB/s)
+#12 9.476 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/angus/angus-activation-project/2.0.2/angus-activation-project-2.0.2.pom
+#12 9.680 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/angus/angus-activation-project/2.0.2/angus-activation-project-2.0.2.pom (21 kB at 102 kB/s)
+#12 9.692 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/txw2/4.0.5/txw2-4.0.5.pom
+#12 9.797 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/txw2/4.0.5/txw2-4.0.5.pom (1.8 kB at 17 kB/s)
+#12 9.822 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/mvn/jaxb-txw-parent/4.0.5/jaxb-txw-parent-4.0.5.pom
+#12 9.930 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/xml/bind/mvn/jaxb-txw-parent/4.0.5/jaxb-txw-parent-4.0.5.pom (1.2 kB at 11 kB/s)
+#12 9.955 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/sun/istack/istack-commons-runtime/4.1.2/istack-commons-runtime-4.1.2.pom
+#12 10.04 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/istack/istack-commons-runtime/4.1.2/istack-commons-runtime-4.1.2.pom (1.6 kB at 19 kB/s)
+#12 10.09 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/sun/istack/istack-commons/4.1.2/istack-commons-4.1.2.pom
+#12 10.16 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/istack/istack-commons/4.1.2/istack-commons-4.1.2.pom (26 kB at 365 kB/s)
+#12 10.37 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformat-toml/2.17.2/jackson-dataformat-toml-2.17.2.pom
+#12 10.44 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformat-toml/2.17.2/jackson-dataformat-toml-2.17.2.pom (3.5 kB at 44 kB/s)
+#12 10.45 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformats-text/2.17.2/jackson-dataformats-text-2.17.2.pom
+#12 10.56 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformats-text/2.17.2/jackson-dataformats-text-2.17.2.pom (3.5 kB at 31 kB/s)
+#12 10.80 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformat-yaml/2.17.2/jackson-dataformat-yaml-2.17.2.pom
+#12 10.89 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformat-yaml/2.17.2/jackson-dataformat-yaml-2.17.2.pom (2.6 kB at 29 kB/s)
+#12 11.00 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy-agent/1.14.19/byte-buddy-agent-1.14.19.pom
+#12 11.11 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy-agent/1.14.19/byte-buddy-agent-1.14.19.pom (10 kB at 97 kB/s)
+#12 11.30 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/jboss/logging/jboss-logging/3.5.3.Final/jboss-logging-3.5.3.Final.jar
+#12 11.40 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/jboss/logging/jboss-logging/3.5.3.Final/jboss-logging-3.5.3.Final.jar (59 kB at 575 kB/s)
+#12 11.41 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/classmate/1.7.0/classmate-1.7.0.jar
+#12 11.41 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy/1.14.19/byte-buddy-1.14.19.jar
+#12 11.41 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-runtime/4.0.5/jaxb-runtime-4.0.5.jar
+#12 11.42 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-core/4.0.5/jaxb-core-4.0.5.jar
+#12 11.42 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/eclipse/angus/angus-activation/2.0.2/angus-activation-2.0.2.jar
+#12 11.87 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-runtime/4.0.5/jaxb-runtime-4.0.5.jar (920 kB at 2.0 MB/s)
+#12 11.87 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/txw2/4.0.5/txw2-4.0.5.jar
+#12 11.89 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/eclipse/angus/angus-activation/2.0.2/angus-activation-2.0.2.jar (27 kB at 57 kB/s)
+#12 11.89 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/sun/istack/istack-commons-runtime/4.1.2/istack-commons-runtime-4.1.2.jar
+#12 11.94 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/classmate/1.7.0/classmate-1.7.0.jar (69 kB at 128 kB/s)
+#12 11.94 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/2.0.16/slf4j-api-2.0.16.jar
+#12 12.02 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/txw2/4.0.5/txw2-4.0.5.jar (73 kB at 122 kB/s)
+#12 12.02 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformat-toml/2.17.2/jackson-dataformat-toml-2.17.2.jar
+#12 12.17 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformat-toml/2.17.2/jackson-dataformat-toml-2.17.2.jar (56 kB at 75 kB/s)
+#12 12.17 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformat-yaml/2.17.2/jackson-dataformat-yaml-2.17.2.jar
+#12 12.18 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/glassfish/jaxb/jaxb-core/4.0.5/jaxb-core-4.0.5.jar (139 kB at 181 kB/s)
+#12 12.18 [INFO] Downloading from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy-agent/1.14.19/byte-buddy-agent-1.14.19.jar
+#12 12.19 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/sun/istack/istack-commons-runtime/4.1.2/istack-commons-runtime-4.1.2.jar (26 kB at 33 kB/s)
+#12 12.30 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/com/fasterxml/jackson/dataformat/jackson-dataformat-yaml/2.17.2/jackson-dataformat-yaml-2.17.2.jar (55 kB at 63 kB/s)
+#12 12.31 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/org/slf4j/slf4j-api/2.0.16/slf4j-api-2.0.16.jar (69 kB at 78 kB/s)
+#12 12.55 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy-agent/1.14.19/byte-buddy-agent-1.14.19.jar (263 kB at 233 kB/s)
+#12 14.58 [INFO] Downloaded from central: https://repo.maven.apache.org/maven2/net/bytebuddy/byte-buddy/1.14.19/byte-buddy-1.14.19.jar (4.2 MB at 1.3 MB/s)
+#12 14.64 [INFO] 
+#12 14.64 [INFO] --- clean:3.3.2:clean (default-clean) @ goldcast-backend ---
+#12 15.02 [INFO] 
+#12 15.02 [INFO] --- resources:3.3.1:resources (default-resources) @ goldcast-backend ---
+#12 15.27 [INFO] Copying 1 resource from src/main/resources to target/classes
+#12 15.30 [INFO] Copying 2 resources from src/main/resources to target/classes
+#12 15.30 [INFO] 
+#12 15.30 [INFO] --- compiler:3.13.0:compile (default-compile) @ goldcast-backend ---
+#12 15.72 [INFO] Recompiling the module because of changed source code.
+#12 15.74 [INFO] Compiling 66 source files with javac [debug parameters release 21] to target/classes
+#12 21.32 [INFO] 
+#12 21.32 [INFO] --- resources:3.3.1:testResources (default-testResources) @ goldcast-backend ---
+#12 21.45 [INFO] skip non existing resourceDirectory /build/src/test/resources
+#12 21.45 [INFO] 
+#12 21.45 [INFO] --- compiler:3.13.0:testCompile (default-testCompile) @ goldcast-backend ---
+#12 21.49 [INFO] Recompiling the module because of changed dependency.
+#12 21.50 [INFO] Compiling 15 source files with javac [debug parameters release 21] to target/test-classes
+#12 24.05 [INFO] 
+#12 24.05 [INFO] --- surefire:3.2.5:test (default-test) @ goldcast-backend ---
+#12 24.90 [INFO] Tests are skipped.
+#12 24.90 [INFO] 
+#12 24.90 [INFO] --- jar:3.4.2:jar (default-jar) @ goldcast-backend ---
+#12 26.00 [INFO] Building jar: /build/target/goldcast-backend-0.1.0.jar
+#12 26.12 [INFO] 
+#12 26.12 [INFO] --- spring-boot:3.3.4:repackage (repackage) @ goldcast-backend ---
+#12 27.15 [INFO] Replacing main artifact /build/target/goldcast-backend-0.1.0.jar with repackaged archive, adding nested dependencies in BOOT-INF/.
+#12 27.15 [INFO] The original artifact has been renamed to /build/target/goldcast-backend-0.1.0.jar.original
+#12 27.15 [INFO] ------------------------------------------------------------------------
+#12 27.15 [INFO] BUILD SUCCESS
+#12 27.15 [INFO] ------------------------------------------------------------------------
+#12 27.15 [INFO] Total time:  23.072 s
+#12 27.15 [INFO] Finished at: 2026-10-18T13:35:40Z
+#12 27.15 [INFO] ------------------------------------------------------------------------
+#12 DONE 27.3s
+
+#13 [stage-1 2/4] WORKDIR /app
+#13 CACHED
+
+#14 [stage-1 3/4] RUN apk add --no-cache tzdata     && addgroup -S app     && adduser -S -G app app
+#14 CACHED
+
+#15 [stage-1 4/4] COPY --from=build --chown=app:app /build/target/*.jar app.jar
+#15 DONE 0.1s
+
+#16 exporting to image
+#16 exporting layers
+#16 exporting layers 1.1s done
+#16 exporting manifest sha256:fdd6db577126b2095e68a48857b6cf59dafa3d8caf0d4f4e81fd41033a18c41a done
+#16 exporting config sha256:acbc615e0621de5b0376a3e7cad3b127ad3e55fb7919b1dcb25813b980cdf29d done
+#16 exporting attestation manifest sha256:bebffaf29fb427942bda4084c5d56d0bccefe0a627e9dbe91fda89f33ff3e58d done
+#16 exporting manifest list sha256:7d239ef13af8d9943be9ba7d2cc2de0e8a4dece54a9f55954ce6e6efdde72c41 done
+#16 naming to ghcr.io/duongtanminh1912/goldcast-backend:a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58 done
+#16 pushing layers
+#16 ...
+
+#17 [auth] duongtanminh1912/goldcast-backend:pull,push token for ghcr.io
+#17 DONE 0.0s
+
+#16 exporting to image
+#16 pushing layers 11.9s done
+#16 pushing manifest for ghcr.io/duongtanminh1912/goldcast-backend:a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58@sha256:7d239ef13af8d9943be9ba7d2cc2de0e8a4dece54a9f55954ce6e6efdde72c41
+#16 pushing manifest for ghcr.io/duongtanminh1912/goldcast-backend:a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58@sha256:7d239ef13af8d9943be9ba7d2cc2de0e8a4dece54a9f55954ce6e6efdde72c41 2.8s done
+#16 DONE 15.9s
+
+#18 resolving provenance for metadata file
+#18 DONE 0.0s
+
+#19 pushing ghcr.io/duongtanminh1912/goldcast-backend:a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58 with docker
+#19 pushing layer 44136fa355b3
+#19 pushing layer 8d3daccf082f 0.2s
+#19 pushing layer e2de96513ba9 0.1s
+#19 pushing layer 2642fde69d04 0.1s
+#19 pushing layer 2242b49db976
+#19 pushing layer b3405c83ad56
+#19 pushing layer 100811d89157
+#19 pushing layer 28ab21650eaf
+#19 pushing layer 5abc2579d091
+#19 pushing layer 6a96f70e4252 0.1s
+#19 pushing layer 5abc2579d091 1.1s done
+#19 pushing layer 44136fa355b3 2.5s done
+#19 pushing layer 8d3daccf082f 2.5s done
+#19 pushing layer e2de96513ba9 2.5s done
+#19 pushing layer 2642fde69d04 2.5s done
+#19 pushing layer 2242b49db976 1.2s done
+#19 pushing layer b3405c83ad56 1.2s done
+#19 pushing layer 100811d89157 1.1s done
+#19 pushing layer 28ab21650eaf 1.1s done
+#19 pushing layer 6a96f70e4252 0.9s done
+#19 DONE 2.6s
++ docker run --rm -i python:3.13-alpine python3 -c import json,sys; print(json.load(sys.stdin)["containerimage.digest"])
++ digest=sha256:7d239ef13af8d9943be9ba7d2cc2de0e8a4dece54a9f55954ce6e6efdde72c41
++ echo sha256:7d239ef13af8d9943be9ba7d2cc2de0e8a4dece54a9f55954ce6e6efdde72c41
++ grep -Eq ^sha256:[a-f0-9]{64}$
++ printf %s backend
++ tr [:lower:] [:upper:]
++ key=BACKEND
++ printf %s_IMAGE=%s/goldcast-%s@%s\n BACKEND ghcr.io/duongtanminh1912 backend sha256:7d239ef13af8d9943be9ba7d2cc2de0e8a4dece54a9f55954ce6e6efdde72c41
++ image=ghcr.io/duongtanminh1912/goldcast-frontend:a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
++ metadata_file=build-metadata-frontend.json
++ docker buildx build --platform linux/amd64 -t ghcr.io/duongtanminh1912/goldcast-frontend:a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58 --metadata-file build-metadata-frontend.json --push frontend/
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.19kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/node:22-alpine
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context: 85B done
+#3 DONE 0.0s
+
+#4 [deps 1/4] FROM docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402
+#4 resolve docker.io/library/node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 done
+#4 DONE 0.0s
+
+#5 [internal] load build context
+#5 transferring context: 13.41kB done
+#5 DONE 0.0s
+
+#6 [deps 4/4] RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+#6 CACHED
+
+#7 [deps 2/4] WORKDIR /app
+#7 CACHED
+
+#8 [deps 3/4] COPY package.json package-lock.json* ./
+#8 CACHED
+
+#9 [build 3/5] COPY --from=deps /app/node_modules ./node_modules
+#9 CACHED
+
+#10 [build 4/5] COPY . .
+#10 DONE 0.0s
+
+#11 [build 5/5] RUN npm run build
+#11 1.391 
+#11 1.391 > goldcast-frontend@0.1.0 build
+#11 1.391 > next build
+#11 1.391 
+#11 3.081    ▲ Next.js 15.5.28
+#11 3.081 
+#11 3.176    Creating an optimized production build ...
+#11 30.62  ✓ Compiled successfully in 21.2s
+#11 30.62    Skipping linting
+#11 30.62    Checking validity of types ...
+#11 38.42    Collecting page data ...
+#11 42.71    Generating static pages (0/5) ...
+#11 44.98    Generating static pages (1/5) 
+#11 44.98    Generating static pages (2/5) 
+#11 44.98    Generating static pages (3/5) 
+#11 44.98  ✓ Generating static pages (5/5)
+#11 46.04    Finalizing page optimization ...
+#11 46.04    Collecting build traces ...
+#11 82.36 
+#11 82.37 Route (app)                                 Size  First Load JS
+#11 82.37 ┌ ƒ /                                      166 B         106 kB
+#11 82.37 ├ ○ /_not-found                            131 B         103 kB
+#11 82.37 ├ ƒ /api/release                           131 B         103 kB
+#11 82.37 ├ ƒ /forecast/[code]                       180 B         218 kB
+#11 82.37 ├ ○ /icon.svg                                0 B            0 B
+#11 82.37 ├ ƒ /instruments/[code]                    179 B         218 kB
+#11 82.37 └ ○ /methodology                           166 B         106 kB
+#11 82.37 + First Load JS shared by all             102 kB
+#11 82.37   ├ chunks/255-51cc180f6c33fa39.js       46.3 kB
+#11 82.37   ├ chunks/4bd1b696-409494caf8c83275.js  54.2 kB
+#11 82.37   └ other shared chunks (total)          1.98 kB
+#11 82.37 
+#11 82.37 
+#11 82.37 ○  (Static)   prerendered as static content
+#11 82.37 ƒ  (Dynamic)  server-rendered on demand
+#11 82.37 
+#11 82.45 npm notice
+#11 82.45 npm notice New major version of npm available! 10.9.9 -> 12.2.0
+#11 82.45 npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.0
+#11 82.45 npm notice To update run: npm install -g npm@12.2.0
+#11 82.45 npm notice
+#11 DONE 82.6s
+
+#12 [runner 3/6] RUN apk add --no-cache tzdata     && addgroup -g 1001 -S nodejs     && adduser -S nextjs -u 1001
+#12 CACHED
+
+#13 [runner 4/6] COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
+#13 DONE 0.3s
+
+#14 [runner 5/6] COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
+#14 DONE 0.0s
+
+#15 [runner 6/6] COPY --from=build --chown=nextjs:nodejs /app/public ./public
+#15 DONE 0.0s
+
+#16 exporting to image
+#16 exporting layers
+#16 exporting layers 1.4s done
+#16 exporting manifest sha256:914656b81e6e6dcbe6c0312c7f7f50fd39c2f492cf9b332bbeb14b4a6de626ca done
+#16 exporting config sha256:a9e1a5ec56037b36c58389fa335eec95185f6f595d9d54a1478b9ea865d4a25f done
+#16 exporting attestation manifest sha256:9ce2487f80f05867d1fbd6a2c25c21d4a68038f2a0f60018b35a0f13f8a75cc0 done
+#16 exporting manifest list sha256:68e67928649981f22ed5181b523563d831fc254a4229ed17b3039bf2d267d3bf done
+#16 naming to ghcr.io/duongtanminh1912/goldcast-frontend:a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58 done
+#16 pushing layers
+#16 ...
+
+#17 [auth] duongtanminh1912/goldcast-frontend:pull,push token for ghcr.io
+#17 DONE 0.0s
+
+#16 exporting to image
+#16 pushing layers 30.7s done
+#16 pushing manifest for ghcr.io/duongtanminh1912/goldcast-frontend:a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58@sha256:68e67928649981f22ed5181b523563d831fc254a4229ed17b3039bf2d267d3bf
+#16 pushing manifest for ghcr.io/duongtanminh1912/goldcast-frontend:a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58@sha256:68e67928649981f22ed5181b523563d831fc254a4229ed17b3039bf2d267d3bf 2.4s done
+#16 DONE 34.7s
+
+#18 resolving provenance for metadata file
+#18 DONE 0.0s
+
+#19 pushing ghcr.io/duongtanminh1912/goldcast-frontend:a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58 with docker
+#19 pushing layer 955ad9cbbf75
+#19 pushing layer 44136fa355b3
+#19 pushing layer f7f2d304681a
+#19 pushing layer e2de96513ba9 0.1s
+#19 pushing layer d39db1cf9caa
+#19 pushing layer e554276b05e6 0.1s
+#19 pushing layer 86bac05a2825 0.1s
+#19 pushing layer 360c8886b3c0 0.2s
+#19 pushing layer f03f5525b648 0.1s
+#19 pushing layer 46421a599972
+#19 pushing layer a6ac3d4a847b
+#19 pushing layer e2de96513ba9 2.7s done
+#19 pushing layer 955ad9cbbf75 2.7s done
+#19 pushing layer 44136fa355b3 2.7s done
+#19 pushing layer f7f2d304681a 2.7s done
+#19 pushing layer d39db1cf9caa 1.4s done
+#19 pushing layer e554276b05e6 1.4s done
+#19 pushing layer 86bac05a2825 1.2s done
+#19 pushing layer 360c8886b3c0 1.2s done
+#19 pushing layer f03f5525b648 1.2s done
+#19 pushing layer 46421a599972 1.1s done
+#19 pushing layer a6ac3d4a847b 1.1s done
+#19 DONE 2.8s
++ docker run --rm -i python:3.13-alpine python3 -c import json,sys; print(json.load(sys.stdin)["containerimage.digest"])
++ digest=sha256:68e67928649981f22ed5181b523563d831fc254a4229ed17b3039bf2d267d3bf
++ grep -Eq ^sha256:[a-f0-9]{64}$
++ echo sha256:68e67928649981f22ed5181b523563d831fc254a4229ed17b3039bf2d267d3bf
++ printf %s frontend
++ tr [:lower:] [:upper:]
++ key=FRONTEND
++ printf %s_IMAGE=%s/goldcast-%s@%s\n FRONTEND ghcr.io/duongtanminh1912 frontend sha256:68e67928649981f22ed5181b523563d831fc254a4229ed17b3039bf2d267d3bf
+[Pipeline] archiveArtifacts
+Archiving artifacts
+Recording fingerprints
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (G2 - isolated image tests)
+[Pipeline] sh
++ sh scripts/g2.sh
+ Network g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58_default  Creating
+ Network g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58_default  Created
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Creating
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Created
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Creating
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Created
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Creating
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Created
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Starting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Started
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Waiting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Healthy
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Starting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Started
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Waiting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Healthy
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Starting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Started
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Waiting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Waiting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Waiting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Healthy
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Healthy
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Healthy
+DO
+Smoke test GoldCast  --  BASE_URL = http://backend:8080
+
+[1] GET /api/v1/instruments
+  OK    tra ve mang khong rong
+  OK    moi kind nam trong InstrumentKind
+  OK    moi instrument co code va name
+
+[2] GET /api/v1/market/summary
+  OK    world.usdPerOunce > 0
+  OK    fx.vndPerUsd > 0
+  OK    domestic khong rong
+  OK    moi gia vang trong nuoc deu duong
+  OK    quy doi: tael = gram x taelInGrams
+  OK    quy doi: gram = usdPerOunce x vndPerUsd / troyOunceInGrams
+  OK    quy doi: chi = tael / 10  (kien thuc ngoai)
+  OK    hang so: taelInGrams = 37,5  (kien thuc ngoai)
+  OK    hang so: troyOunceInGrams = 31,1034768  (kien thuc ngoai)
+  OK    generatedAt doc duoc va cach hien tai duoi 24h
+
+[3] GET /api/v1/models
+  OK    tra ve mang khong rong
+        id tra ve: ["NAIVE","DRIFT","SMA","HOLT_DAMPED","AR_DIFF","AUTO"]
+  OK    moi id co dang hang enum CHU_HOA_GACH_DUOI
+  OK    co it nhat 5 mo hinh
+  OK    co mo hinh NAIVE lam moc so sanh
+  OK    moi mo hinh co label
+
+[4] Forecast contract and prediction intervals
+  OK    forecast instrument/model/horizon
+  OK    forecast has seven steps
+  OK    forecast accuracy and warnings contract
+  OK    forecast step 1: finite ordered intervals
+  OK    NAIVE step 1: equals last close
+  OK    forecast step 2: finite ordered intervals
+  OK    NAIVE step 2: equals last close
+  OK    forecast step 3: finite ordered intervals
+  OK    NAIVE step 3: equals last close
+  OK    forecast step 4: finite ordered intervals
+  OK    NAIVE step 4: equals last close
+  OK    forecast step 5: finite ordered intervals
+  OK    NAIVE step 5: equals last close
+  OK    forecast step 6: finite ordered intervals
+  OK    NAIVE step 6: equals last close
+  OK    forecast step 7: finite ordered intervals
+  OK    NAIVE step 7: equals last close
+
+35 phep thu, 0 hong.
+Tat ca dat.
+OK public release a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
+OK page /
+OK page /instruments/XAUUSD
+OK page /forecast/XAUUSD?model=NAIVE&horizon=7
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Stopping
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Stopped
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Removing
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Removed
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Stopping
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Stopped
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Removing
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Removed
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Stopping
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Stopped
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Removing
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Removed
+ Network g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58_default  Removing
+ Network g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58_default  Removed
+ Network g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58_default  Creating
+ Network g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58_default  Created
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Creating
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Created
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Creating
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Created
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Starting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Started
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Waiting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Healthy
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Starting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Started
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Waiting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Waiting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Healthy
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Healthy
+DO
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Stopping
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Stopped
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Recreate
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Recreated
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Creating
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Created
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Starting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Started
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Waiting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Healthy
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Starting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Started
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Waiting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Waiting
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Healthy
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Healthy
+DO
+Smoke test GoldCast  --  BASE_URL = http://backend:8080
+
+[1] GET /api/v1/instruments
+  OK    tra ve mang khong rong
+  OK    moi kind nam trong InstrumentKind
+  OK    moi instrument co code va name
+
+[2] GET /api/v1/market/summary
+  OK    world.usdPerOunce > 0
+  OK    fx.vndPerUsd > 0
+  OK    domestic khong rong
+  OK    moi gia vang trong nuoc deu duong
+  OK    quy doi: tael = gram x taelInGrams
+  OK    quy doi: gram = usdPerOunce x vndPerUsd / troyOunceInGrams
+  OK    quy doi: chi = tael / 10  (kien thuc ngoai)
+  OK    hang so: taelInGrams = 37,5  (kien thuc ngoai)
+  OK    hang so: troyOunceInGrams = 31,1034768  (kien thuc ngoai)
+  OK    generatedAt doc duoc va cach hien tai duoi 24h
+
+[3] GET /api/v1/models
+  OK    tra ve mang khong rong
+        id tra ve: ["NAIVE","DRIFT","SMA","HOLT_DAMPED","AR_DIFF","AUTO"]
+  OK    moi id co dang hang enum CHU_HOA_GACH_DUOI
+  OK    co it nhat 5 mo hinh
+  OK    co mo hinh NAIVE lam moc so sanh
+  OK    moi mo hinh co label
+
+[4] Forecast contract and prediction intervals
+  OK    forecast instrument/model/horizon
+  OK    forecast has seven steps
+  OK    forecast accuracy and warnings contract
+  OK    forecast step 1: finite ordered intervals
+  OK    NAIVE step 1: equals last close
+  OK    forecast step 2: finite ordered intervals
+  OK    NAIVE step 2: equals last close
+  OK    forecast step 3: finite ordered intervals
+  OK    NAIVE step 3: equals last close
+  OK    forecast step 4: finite ordered intervals
+  OK    NAIVE step 4: equals last close
+  OK    forecast step 5: finite ordered intervals
+  OK    NAIVE step 5: equals last close
+  OK    forecast step 6: finite ordered intervals
+  OK    NAIVE step 6: equals last close
+  OK    forecast step 7: finite ordered intervals
+  OK    NAIVE step 7: equals last close
+
+35 phep thu, 0 hong.
+Tat ca dat.
+OK public release a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
+OK page /
+OK page /instruments/XAUUSD
+OK page /forecast/XAUUSD?model=NAIVE&horizon=7
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Stopping
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Stopped
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Removing
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-frontend-1  Removed
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Stopping
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Stopped
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Removing
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-backend-1  Removed
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Stopping
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Stopped
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Removing
+ Container g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58-db-1  Removed
+ Network g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58_default  Removing
+ Network g2-a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58_default  Removed
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Production)
+[Pipeline] stage
+[Pipeline] { (Deploy tested digests)
+[Pipeline] withCredentials
+Masking supported pattern matches of $SSH_KEY
+[Pipeline] {
+[Pipeline] sh
++ set -eu
++ mkdir -p /var/jenkins_home/.ssh
++ ssh -i **** -o StrictHostKeyChecking=accept-new deploy@103.175.248.236 mkdir -p '/opt/goldcast/releases/a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58'
++ COPYFILE_DISABLE=1 tar -cf - release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs
++ ssh -i **** -o StrictHostKeyChecking=accept-new deploy@103.175.248.236 tar -xf - -C '/opt/goldcast/releases/a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58'
++ ssh -i **** -o StrictHostKeyChecking=accept-new deploy@103.175.248.236 sh '/opt/goldcast/releases/a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58/scripts/release.sh' deploy '/opt/goldcast/releases/a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58' 'http://localhost:8081/job/goldcast-ci/58/'
+ Image ghcr.io/duongtanminh1912/goldcast-backend@sha256:7d239ef13af8d9943be9ba7d2cc2de0e8a4dece54a9f55954ce6e6efdde72c41 Pulling 
+ Image ghcr.io/duongtanminh1912/goldcast-frontend@sha256:68e67928649981f22ed5181b523563d831fc254a4229ed17b3039bf2d267d3bf Pulling 
+ Image caddy:2-alpine Pulling 
+ Image postgres:16-alpine Pulling 
+ 6a96f70e4252 Pulling fs layer 0B
+ e2de96513ba9 Pulling fs layer 0B
+ 8d3daccf082f Pulling fs layer 0B
+ 2242b49db976 Pulling fs layer 0B
+ b3405c83ad56 Pulling fs layer 0B
+ 5abc2579d091 Pulling fs layer 0B
+ 28ab21650eaf Pulling fs layer 0B
+ 100811d89157 Pulling fs layer 0B
+ 2242b49db976 Already exists 0B
+ b3405c83ad56 Already exists 0B
+ 5abc2579d091 Already exists 0B
+ 28ab21650eaf Already exists 0B
+ 100811d89157 Already exists 0B
+ e2de96513ba9 Already exists 0B
+ 8d3daccf082f Already exists 0B
+ Image caddy:2-alpine Pulled 
+ Image postgres:16-alpine Pulled 
+ a6ac3d4a847b Pulling fs layer 0B
+ e2de96513ba9 Pulling fs layer 0B
+ f7f2d304681a Pulling fs layer 0B
+ e554276b05e6 Pulling fs layer 0B
+ d39db1cf9caa Pulling fs layer 0B
+ 86bac05a2825 Pulling fs layer 0B
+ 360c8886b3c0 Pulling fs layer 0B
+ f03f5525b648 Pulling fs layer 0B
+ 46421a599972 Pulling fs layer 0B
+ 44136fa355b3 Already exists 0B
+ e2de96513ba9 Already exists 0B
+ e554276b05e6 Already exists 0B
+ d39db1cf9caa Already exists 0B
+ 86bac05a2825 Already exists 0B
+ 360c8886b3c0 Already exists 0B
+ f7f2d304681a Already exists 0B
+ 6a96f70e4252 Downloading 1.049MB
+ 6a96f70e4252 Downloading 3.146MB
+ 6a96f70e4252 Downloading 3.146MB
+ a6ac3d4a847b Download complete 0B
+ 6a96f70e4252 Downloading 4.194MB
+ 6a96f70e4252 Downloading 6.214MB
+ 6a96f70e4252 Downloading 6.291MB
+ 6a96f70e4252 Downloading 6.291MB
+ 6a96f70e4252 Downloading 8.389MB
+ 6a96f70e4252 Downloading 9.437MB
+ 6a96f70e4252 Downloading 10.49MB
+ 46421a599972 Download complete 0B
+ 6a96f70e4252 Downloading 10.49MB
+ 6a96f70e4252 Downloading 10.49MB
+ 6a96f70e4252 Downloading 11.53MB
+ f03f5525b648 Downloading 1.049MB
+ 6a96f70e4252 Downloading 12.58MB
+ f03f5525b648 Downloading 1.049MB
+ 6a96f70e4252 Downloading 13.63MB
+ f03f5525b648 Downloading 1.049MB
+ 6a96f70e4252 Downloading 14.74MB
+ f03f5525b648 Downloading 2.097MB
+ 955ad9cbbf75 Download complete 0B
+ 6a96f70e4252 Downloading 16.78MB
+ f03f5525b648 Downloading 3.146MB
+ 6a96f70e4252 Downloading 17.83MB
+ f03f5525b648 Downloading 4.194MB
+ 6a96f70e4252 Downloading 19.92MB
+ 44136fa355b3 Already exists 0B
+ f03f5525b648 Downloading 5.243MB
+ 6a96f70e4252 Downloading 20.97MB
+ f03f5525b648 Downloading 7.184MB
+ 6a96f70e4252 Downloading 20.97MB
+ f03f5525b648 Downloading 9.437MB
+ 6a96f70e4252 Downloading 20.97MB
+ f03f5525b648 Downloading 10.49MB
+ 6a96f70e4252 Downloading 22.02MB
+ f03f5525b648 Downloading 10.49MB
+ f03f5525b648 Downloading 11.53MB
+ 6a96f70e4252 Downloading 22.02MB
+ f03f5525b648 Downloading 12.58MB
+ 6a96f70e4252 Downloading 24.12MB
+ f03f5525b648 Downloading 14.68MB
+ 6a96f70e4252 Downloading 25.17MB
+ 6a96f70e4252 Downloading 26.21MB
+ f03f5525b648 Downloading 15.73MB
+ 2642fde69d04 Download complete 0B
+ 6a96f70e4252 Downloading 26.21MB
+ f03f5525b648 Download complete 0B
+ f03f5525b648 Extracting 1B
+ 6a96f70e4252 Downloading 29.36MB
+ f03f5525b648 Extracting 1B
+ 6a96f70e4252 Downloading 31.46MB
+ f03f5525b648 Extracting 1B
+ 6a96f70e4252 Downloading 31.46MB
+ f03f5525b648 Extracting 1B
+ 6a96f70e4252 Downloading 31.46MB
+ f03f5525b648 Extracting 1B
+ 6a96f70e4252 Downloading 31.46MB
+ f03f5525b648 Extracting 1B
+ 6a96f70e4252 Downloading 31.46MB
+ f03f5525b648 Extracting 1B
+ 6a96f70e4252 Downloading 32.31MB
+ 6a96f70e4252 Downloading 34.6MB
+ f03f5525b648 Extracting 1B
+ 6a96f70e4252 Downloading 35.65MB
+ f03f5525b648 Extracting 1B
+ 6a96f70e4252 Downloading 36.7MB
+ f03f5525b648 Extracting 2B
+ 6a96f70e4252 Downloading 38.8MB
+ f03f5525b648 Extracting 2B
+ 6a96f70e4252 Downloading 40.89MB
+ f03f5525b648 Extracting 2B
+ 6a96f70e4252 Downloading 40.89MB
+ f03f5525b648 Extracting 2B
+ 6a96f70e4252 Downloading 40.89MB
+ f03f5525b648 Extracting 2B
+ 6a96f70e4252 Downloading 41.94MB
+ f03f5525b648 Extracting 2B
+ 6a96f70e4252 Downloading 41.94MB
+ f03f5525b648 Extracting 2B
+ 6a96f70e4252 Downloading 41.94MB
+ f03f5525b648 Extracting 2B
+ 6a96f70e4252 Downloading 41.94MB
+ f03f5525b648 Extracting 2B
+ 6a96f70e4252 Downloading 41.94MB
+ f03f5525b648 Extracting 2B
+ 6a96f70e4252 Downloading 41.94MB
+ f03f5525b648 Extracting 3B
+ 6a96f70e4252 Downloading 41.94MB
+ f03f5525b648 Extracting 3B
+ 6a96f70e4252 Downloading 41.94MB
+ f03f5525b648 Pull complete 0B
+ 6a96f70e4252 Downloading 42.99MB
+ 46421a599972 Pull complete 0B
+ 6a96f70e4252 Downloading 42.99MB
+ a6ac3d4a847b Pull complete 0B
+ 6a96f70e4252 Downloading 42.99MB
+ Image ghcr.io/duongtanminh1912/goldcast-frontend@sha256:68e67928649981f22ed5181b523563d831fc254a4229ed17b3039bf2d267d3bf Pulled 
+ 6a96f70e4252 Downloading 42.99MB
+ 6a96f70e4252 Downloading 42.99MB
+ 6a96f70e4252 Downloading 42.99MB
+ 6a96f70e4252 Downloading 42.99MB
+ 6a96f70e4252 Downloading 44.04MB
+ 6a96f70e4252 Downloading 44.04MB
+ 6a96f70e4252 Downloading 44.04MB
+ 6a96f70e4252 Downloading 44.04MB
+ 6a96f70e4252 Downloading 44.04MB
+ 6a96f70e4252 Downloading 44.04MB
+ 6a96f70e4252 Downloading 44.04MB
+ 6a96f70e4252 Downloading 45.09MB
+ 6a96f70e4252 Downloading 45.09MB
+ 6a96f70e4252 Downloading 45.09MB
+ 6a96f70e4252 Downloading 46.14MB
+ 6a96f70e4252 Downloading 46.14MB
+ 6a96f70e4252 Downloading 46.14MB
+ 6a96f70e4252 Downloading 46.14MB
+ 6a96f70e4252 Downloading 46.14MB
+ 6a96f70e4252 Downloading 46.14MB
+ 6a96f70e4252 Downloading 47.19MB
+ 6a96f70e4252 Downloading 47.19MB
+ 6a96f70e4252 Downloading 47.19MB
+ 6a96f70e4252 Downloading 47.19MB
+ 6a96f70e4252 Downloading 47.19MB
+ 6a96f70e4252 Downloading 47.19MB
+ 6a96f70e4252 Downloading 48.23MB
+ 6a96f70e4252 Downloading 48.23MB
+ 6a96f70e4252 Downloading 48.23MB
+ 6a96f70e4252 Downloading 48.23MB
+ 6a96f70e4252 Downloading 48.23MB
+ 6a96f70e4252 Downloading 48.23MB
+ 6a96f70e4252 Downloading 48.23MB
+ 6a96f70e4252 Downloading 49.28MB
+ 6a96f70e4252 Downloading 49.28MB
+ 6a96f70e4252 Downloading 49.28MB
+ 6a96f70e4252 Downloading 49.28MB
+ 6a96f70e4252 Downloading 49.28MB
+ 6a96f70e4252 Downloading 49.28MB
+ 6a96f70e4252 Downloading 50.33MB
+ 6a96f70e4252 Downloading 50.33MB
+ 6a96f70e4252 Download complete 0B
+ 6a96f70e4252 Extracting 1B
+ 6a96f70e4252 Extracting 1B
+ 6a96f70e4252 Extracting 1B
+ 6a96f70e4252 Extracting 1B
+ 6a96f70e4252 Extracting 1B
+ 6a96f70e4252 Extracting 1B
+ 6a96f70e4252 Extracting 1B
+ 6a96f70e4252 Extracting 1B
+ 6a96f70e4252 Extracting 1B
+ 6a96f70e4252 Extracting 1B
+ 6a96f70e4252 Extracting 1B
+ 6a96f70e4252 Extracting 2B
+ 6a96f70e4252 Extracting 2B
+ 6a96f70e4252 Pull complete 0B
+ Image ghcr.io/duongtanminh1912/goldcast-backend@sha256:7d239ef13af8d9943be9ba7d2cc2de0e8a4dece54a9f55954ce6e6efdde72c41 Pulled 
+ Container goldcast-db Running 
+ Container goldcast-backend Recreate 
+ Container goldcast-backend Recreated 
+ Container goldcast-frontend Recreate 
+ Container goldcast-frontend Recreated 
+ Container goldcast-caddy Recreate 
+ Container goldcast-caddy Recreated 
+ Container goldcast-db Waiting 
+ Container goldcast-db Healthy 
+ Container goldcast-backend Starting 
+ Container goldcast-backend Started 
+ Container goldcast-backend Waiting 
+ Container goldcast-backend Healthy 
+ Container goldcast-frontend Starting 
+ Container goldcast-frontend Started 
+ Container goldcast-caddy Starting 
+ Container goldcast-caddy Started 
+ Container goldcast-backend Waiting 
+ Container goldcast-frontend Waiting 
+ Container goldcast-caddy Waiting 
+ Container goldcast-db Waiting 
+ Container goldcast-db Healthy 
+ Container goldcast-caddy Healthy 
+ Container goldcast-backend Healthy 
+ Container goldcast-frontend Healthy 
+[Pipeline] }
+[Pipeline] // withCredentials
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (G3 - verify and promote)
+[Pipeline] withCredentials
+Masking supported pattern matches of $SSH_KEY
+[Pipeline] {
+[Pipeline] sh
++ ssh -i **** -o StrictHostKeyChecking=accept-new deploy@103.175.248.236 sh '/opt/goldcast/releases/a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58/scripts/release.sh' verify '/opt/goldcast/releases/a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58'
+OK public release a58f2ccc5a6478f807b7e813107b596ce82d54f5-f6650cdb917a-58
+OK page /
+OK page /instruments/XAUUSD
+OK page /forecast/XAUUSD?model=NAIVE&horizon=7
+[Pipeline] }
+[Pipeline] // withCredentials
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Declarative: Post Actions)
+[Pipeline] sh
++ docker logout ghcr.io
+Removing login credentials for ghcr.io
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] End of Pipeline
+Finished: SUCCESS

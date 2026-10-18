@@ -1,0 +1,12 @@
+stage,state,duration_ms,duration_seconds
+Checkout SCM,success,1617,1.617
+Checkout identity,success,704,0.704
+G1 - code,success,39301,39.301
+Registry login,success,1707,1.707
+Build images once,success,174892,174.892
+G2 - isolated image tests,success,100831,100.831
+Production,success,50627,50.627
+Deploy tested digests,success,46920,46.920
+G3 - verify and promote,success,3591,3.591
+Post Actions,success,288,0.288
+TOTAL,SUCCESS,371948,371.948

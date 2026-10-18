@@ -182,6 +182,8 @@ REGISTRY=ghcr.io/duongtanminh1912
 
 Thay năm giá trị bằng của bạn. `REG` và `VPS` trong Jenkinsfile cũng phải khớp;
 nếu đổi domain, sửa cả Caddyfile và URL kiểm HTTPS trong `scripts/release.sh`.
+Nếu đổi tài khoản/registry, sửa hai repository cho phép trong `validate_manifest`
+của `scripts/release.sh` để khớp image backend/frontend do Jenkins build.
 
 ## B1. Thuê máy chủ
 
@@ -495,6 +497,15 @@ thấy, và nó hiện nguyên trong log.
 lưu hai digest và `RELEASE_ID` vào artifact `release.env`. G2 và production dùng cùng digest;
 không build lại, không dùng `latest`. Cấu hình từng release được giữ trong
 `/opt/goldcast/releases/<commit>-<job>-<build>/`.
+
+Trước khi lấy khóa hoặc chạy Docker, `release.sh deploy` kiểm manifest:
+mỗi khóa `RELEASE_ID`, `BACKEND_IMAGE`, `FRONTEND_IMAGE` xuất hiện đúng một lần;
+không nhận khóa khác. Image phải thuộc đúng repository của từng service và có
+digest `sha256` gồm 64 ký tự hex thường; không nhận tag, nội suy hoặc giá trị
+có dấu nháy. Cho phép dòng trống và comment riêng. Baseline và rollback cũng
+được kiểm trước khi chạy Compose; chỉ baseline đã có marker legacy mới được
+thiếu `RELEASE_ID`. Manifest lỗi bị từ chối trước `pull`/`up` và không được
+ghi nhận thành bản tốt.
 
 **Chuẩn bị một lần khi chuyển từ pipeline cũ:** trên VPS, cập nhật checkout
 chứa các script mới rồi chạy `sh scripts/bootstrap-release.sh` tại
