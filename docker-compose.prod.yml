@@ -34,6 +34,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
+      APP_RELEASE_ID: ${RELEASE_ID:?Set RELEASE_ID from release.env}
       # Ingest thu du lieu tu provider; seed mo phong chi bat khi chu dong chon.
       APP_INGEST_ENABLED: ${APP_INGEST_ENABLED:-true}
       APP_INGEST_SEED_ON_EMPTY: ${APP_INGEST_SEED_ON_EMPTY:-false}
@@ -58,6 +59,7 @@ services:
         condition: service_healthy
     environment:
       API_BASE_URL_INTERNAL: http://backend:8080
+      GOLDCAST_RELEASE_ID: ${RELEASE_ID:?Set RELEASE_ID from release.env}
       TZ: Asia/Ho_Chi_Minh
     restart: unless-stopped
 

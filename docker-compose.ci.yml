@@ -21,6 +21,7 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/goldcast
       SPRING_DATASOURCE_USERNAME: goldcast
       SPRING_DATASOURCE_PASSWORD: ci-only
+      APP_RELEASE_ID: ${RELEASE_ID:?Set RELEASE_ID from release.env}
       APP_PROVIDERS_STOOQ_ENABLED: "false"
       APP_PROVIDERS_SJC_ENABLED: "false"
       SPRING_FLYWAY_TARGET: ${MIGRATION_TARGET:-latest}
@@ -40,6 +41,7 @@ services:
         condition: service_healthy
     environment:
       API_BASE_URL_INTERNAL: http://backend:8080
+      GOLDCAST_RELEASE_ID: ${RELEASE_ID:?Set RELEASE_ID from release.env}
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s

@@ -49,11 +49,11 @@ Commit `7494a4c` đưa vào luồng mới; `8013a3d` lấy digest từ metadata 
 
 | Bước | Công việc trong mã hiện tại | Bằng chứng ở build #55 |
 |---|---|---|
-| G1 | `mvn test`, test release/rollback/recovery/bootstrap bằng Python 3.13 container, `npm ci` và TypeScript typecheck | 102 test Java, 19 test Python và typecheck đạt |
+| G1 | `mvn test`, test vận hành bằng Python 3.13, test probe/snapshot bằng Node 22, `npm ci` và TypeScript typecheck | 102 test Java, 19 test Python và typecheck đạt; chưa có nhóm test Node mới |
 | Build image | Đăng nhập GHCR; build/push backend và frontend một lần cho amd64, lấy digest từ metadata và lưu `release.env` | Stage build đạt; các layer ứng dụng được tái sử dụng |
 | G2 | Compose riêng, không mở cổng và không dùng volume production; kiểm cài mới và nâng cấp V1 có dữ liệu mẫu | Hai ca đều đạt migration, 35 phép kiểm API và 3 trang SSR |
 | Deploy | Chỉ nhánh `main`, không phải PR; chuyển manifest và cấu hình release sang VPS, chạy đúng digest đã qua G2 | Không chạy vì điều kiện nhánh |
-| G3 | Readiness, image ID đúng digest và các trang HTTPS qua Caddy; đạt mới ghi `.last-good-release` | Không chạy |
+| G3 | Readiness, image ID đúng digest, `RELEASE_ID` frontend/backend qua URL HTTPS công khai và các trang qua Caddy; đạt mới ghi `.last-good-release` | Không chạy |
 | Xử lý lỗi Production | Rollback theo `previous-good-release` đã lưu; xác minh lại. Có khóa và lệnh `status`/`recover` cho lần chạy gián đoạn | Chưa có thử nghiệm VPS trong bộ đo #55 |
 
 Hai ca G2 chạy cùng image ứng viên: ca đầu áp dụng migration lên DB rỗng;
@@ -62,11 +62,17 @@ ca sau khởi tạo đến V1 với ingest tắt, chèn dữ liệu vào `instru
 nhất và kiểm dữ liệu còn nguyên. Mỗi ca chạy lại cùng bộ smoke API/trang;
 không tính thành 70 loại bất biến khác nhau.
 
-GitHub Actions hiện chỉ chạy test Maven khi push `main` hoặc mở/cập nhật PR
-vào `main`; Jenkins còn có build image và G2, cùng Deploy/G3 có điều kiện.
+GitHub Actions hiện chạy toàn bộ G1 khi push `main` hoặc mở/cập nhật PR vào
+`main`: Java, Python, Node và TypeScript đều phải đạt trong required check
+`backend-test`. Jenkins còn có build image và G2, cùng Deploy/G3 có điều kiện.
 Đây là phân công của cấu hình dự án, không phải giới hạn cố hữu của công cụ.
 Jenkins đã build nhánh `ci/pre-deploy-gate` ở #55, nên mô tả cũ “Jenkins chỉ
 thấy main” không còn phù hợp.
+
+Các bổ sung sau #55 gồm kiểm phiên bản qua HTTP, snapshot runtime riêng cho
+baseline/release, test CORS và chống ingest đồng thời. Chúng thay đổi khối
+lượng kiểm tra hiện tại; số 102/19 và thời lượng #55 vẫn giữ đúng phiên bản
+đã đo, không tự cập nhật thành số test hoặc thời lượng của mã mới.
 
 ## 3. Số đo Jenkins ngày 18/10/2026 — Build #55, Production skipped
 

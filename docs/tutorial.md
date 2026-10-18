@@ -75,7 +75,7 @@ chuỗi rỗng. Kiểm nhãn nguồn trên giao diện. Tắt seed không xoá d
 ```bash
 # Chạy từ thư mục gốc repo; không cần Maven/JDK trên máy cá nhân.
 backend_test() {
-  tar --exclude=backend/target --exclude=frontend/node_modules --exclude=frontend/.next -cf - backend frontend |
+  COPYFILE_DISABLE=1 tar --exclude=backend/target --exclude=frontend/node_modules --exclude=frontend/.next -cf - backend frontend |
     docker run --rm -i maven:3.9-eclipse-temurin-21 sh -ec '
       mkdir /src; cd /src; tar -xf -
       mvn -B -f backend/pom.xml "$@"
@@ -158,8 +158,8 @@ Git mỗi 5 phút xem có commit mới không.
 Bấm **Build Now**.
 
 **Kiểm:** G1, Registry login, Build images once và G2 đều đạt; **Production
-`SKIPPED`**. Có artifact `release.env` chứa hai digest. G1 gồm test Java,
-typecheck và bộ test vận hành Python; chỉ thấy test Java đạt chưa đủ kết luận
+`SKIPPED`**. Có artifact `release.env` chứa hai digest và `RELEASE_ID`.
+G1 gồm test Java, typecheck và bộ test vận hành Python/Node; chỉ thấy test Java đạt chưa đủ kết luận
 toàn bộ pipeline xanh.
 
 Tới đây bạn đã có ứng dụng, CI và hai cổng G1/G2 trước deploy. Production
@@ -373,13 +373,15 @@ Từ thư mục gốc repo trên máy cá nhân:
 RELEASE_COMMIT='SHA_CUA_BUILD_DA_QUA_G2'
 RELEASE_DIR="/opt/goldcast/releases/initial-$RELEASE_COMMIT"
 grep -Ec '^(BACKEND|FRONTEND)_IMAGE=[^[:space:]]+@sha256:[a-f0-9]{64}$' release.env
+grep '^RELEASE_ID=' release.env
 ssh deploy@$IP "mkdir -p '$RELEASE_DIR'"
 git archive "$RELEASE_COMMIT" docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs |
   ssh deploy@$IP "tar -xf - -C '$RELEASE_DIR'"
 scp release.env "deploy@$IP:$RELEASE_DIR/release.env"
 ```
 
-**Kiểm:** lệnh `grep` phải ra `2`, hai image dùng `@sha256:`, không phải tag.
+**Kiểm:** phép đếm image phải ra `2`, hai image dùng `@sha256:`, không phải tag;
+có `RELEASE_ID` của đúng build đã qua G2.
 Commit đã chọn phải chứa domain/Caddyfile đúng cho môi trường của bạn.
 VPS phải kéo được các package GHCR: đặt Public hoặc đăng nhập registry trên
 VPS bằng token có quyền đọc. Không thay digest bằng `latest` khi gặp lỗi kéo.
@@ -490,19 +492,33 @@ Nháy đơn nên Groovy không nội suy; shell mới mở biến, và Jenkins c
 thấy, và nó hiện nguyên trong log.
 
 **Deploy đúng image đã kiểm thử:** mỗi build tạo tag `<commit>-<job>-<build>`, rồi
-lưu hai digest vào artifact `release.env`. G2 và production dùng cùng digest;
+lưu hai digest và `RELEASE_ID` vào artifact `release.env`. G2 và production dùng cùng digest;
 không build lại, không dùng `latest`. Cấu hình từng release được giữ trong
 `/opt/goldcast/releases/<commit>-<job>-<build>/`.
 
 **Chuẩn bị một lần khi chuyển từ pipeline cũ:** trên VPS, cập nhật checkout
 chứa các script mới rồi chạy `sh scripts/bootstrap-release.sh` tại
-`/opt/goldcast`. Script chụp digest của hai container đang chạy, giữ cấu hình
-Caddy từ container đang chạy, kiểm project Compose `goldcast` và volume DB
-`goldcast_goldcast-pgdata`, rồi kiểm readiness, phiên bản và các trang HTTPS trước khi ghi
-`.last-good-release`. Không restart production. Nếu kiểm tra thất bại, sửa
-production trước khi chạy lại; pipeline sẽ từ chối deploy khi chưa có baseline.
+`/opt/goldcast`. Script chụp digest, môi trường, lệnh, healthcheck, volume và
+cấu hình Caddy của container đang chạy; không lấy Compose mới để giả định cấu
+hình cũ. Kiểm project `goldcast`, volume `goldcast_goldcast-pgdata`, readiness
+và HTTPS trước khi ghi `.last-good-release`. Không restart production.
+
+Nếu đã có baseline tạo trước cơ chế định danh/snapshot này, khi production
+đang khỏe và không có deploy đang chạy, dùng:
+
+```bash
+cd /opt/goldcast
+sh scripts/bootstrap-release.sh --refresh
+```
+
+Refresh chỉ thay con trỏ sau xác minh; thất bại giữ bản tốt cũ. Các snapshot
+và `runtime.env` có thể chứa token/password, được ghi quyền 600. Image cũ chưa
+có `/api/release` chỉ được adopt bằng chế độ `legacy-local-origin`: DNS HTTPS
+phải trỏ trực tiếp vào IP thuộc VPS đó, frontend phải gọi backend nội bộ.
+Chế độ này không hỗ trợ CDN/NAT; release mới luôn phải khớp định danh công khai.
+Pipeline từ chối deploy khi baseline cũ chưa được refresh an toàn.
 Sau khi chuyển sang release theo digest, thao tác Compose thủ công cũng phải dùng
-`--env-file /opt/goldcast/.env --env-file <release>/release.env -p goldcast
+`--env-file <release>/runtime.env --env-file <release>/release.env -p goldcast
 -f <release>/docker-compose.prod.yml`; không dùng riêng `THE_TAG` cũ để cập nhật.
 
 VPS phải kéo được image GHCR, và có Docker Compose
@@ -540,8 +556,9 @@ phải khớp artifact Jenkins. Nhánh khác `main` vẫn chạy G1/build/G2 nh�
 ## B10. G1 → build → G2 → deploy → G3
 
 - **G1:** chạy test Java (gồm hợp đồng API và công thức), TypeScript typecheck
-  và bộ test release/rollback/recovery bằng `python:3.13-alpine`. Python chỉ
-  cần thư viện chuẩn; container test không được gắn Docker socket.
+  và bộ test release/rollback/recovery bằng `python:3.13-alpine`, test probe và
+  snapshot bằng Node 22. Container test không được gắn Docker socket.
+  GitHub Actions chạy cùng nhóm kiểm tra trong required check `backend-test`.
 - **Build:** build/push một lần cho `linux/amd64`, chốt digest vào `release.env`.
 - **G2:** `scripts/g2.sh` dựng `docker-compose.ci.yml` trên Docker của Jenkins,
   với project riêng cho build, DB rỗng riêng, không publish cổng, không dùng
@@ -557,10 +574,13 @@ phải khớp artifact Jenkins. Nhánh khác `main` vẫn chạy G1/build/G2 nh�
   truyền từ workspace Jenkins qua SSH; không `git pull` mã mới trên VPS.
 - **G3:** đợi ứng dụng sẵn sàng, so image ID container với digest mong đợi,
   kiểm readiness backend và HTTPS qua Caddy đến các trang có nội dung thực.
+  `/api/release` phải trả `releaseId` và `backendReleaseId` bằng `RELEASE_ID`
+  trong manifest; endpoint thiếu, backend sai bản hoặc trang từ bản cũ đều lỗi.
   Chỉ khi tất cả đạt mới ghi nguyên tử `.last-good-release`.
 
 Khi bắt đầu deploy, đường dẫn bản tốt trước đó được lưu cố định trong
-`<release>/previous-good-release`. Nếu Deploy hoặc G3 lỗi, rollback dùng bản
+`<release>/previous-good-release`, `.env` được giữ riêng trong `runtime.env`.
+Nếu Deploy hoặc G3 lỗi, rollback dùng bản
 đã lưu này, đợi sẵn sàng và xác minh lại; không lấy mục tiêu từ con trỏ
 `.last-good-release` có thể đã thay đổi. Build vẫn đỏ sau rollback. Khóa trên
 VPS ngăn các job khác deploy chồng nhau. Nếu rollback cũng lỗi, khóa được giữ

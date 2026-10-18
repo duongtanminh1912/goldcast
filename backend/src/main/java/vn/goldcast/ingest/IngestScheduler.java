@@ -8,14 +8,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import vn.goldcast.config.AppProperties;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
 /**
  * Drives {@link IngestService} on a schedule and once at startup.
  *
- * <p>A guard flag keeps overlapping passes out: the cron fires hourly but a cold backfill
- * over years of history can take longer than that, and two concurrent passes would fight
- * over the same unique constraint.
+ * <p>IngestService guards the whole transaction against overlapping manual,
+ * scheduled and startup calls.
  */
 @Component
 public class IngestScheduler {
@@ -24,7 +21,6 @@ public class IngestScheduler {
 
     private final IngestService ingestService;
     private final AppProperties properties;
-    private final AtomicBoolean running = new AtomicBoolean(false);
 
     public IngestScheduler(IngestService ingestService, AppProperties properties) {
         this.ingestService = ingestService;
@@ -50,18 +46,14 @@ public class IngestScheduler {
     }
 
     private void trigger(String reason) {
-        if (!running.compareAndSet(false, true)) {
-            log.info("Bỏ qua ingest ({}): một lượt khác đang chạy", reason);
-            return;
-        }
         try {
             log.info("Bắt đầu ingest ({})", reason);
             ingestService.run();
+        } catch (IngestAlreadyRunningException ex) {
+            log.info("Bỏ qua ingest ({}): một lượt khác đang chạy", reason);
         } catch (RuntimeException ex) {
             // Never let a scheduled task die from an upstream problem.
             log.error("Ingest thất bại ({}): {}", reason, ex.getMessage(), ex);
-        } finally {
-            running.set(false);
         }
     }
 }

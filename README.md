@@ -26,7 +26,7 @@ Nếu bạn tới đây để xem cách dựng một pipeline CI/CD từ con s�
 git push
    │
    ├──► GitHub Actions ───────────────────────────────────┐
-   │      mvn test  (gồm cổng G1)                         │
+   │      G1: Java + Python/Node + TypeScript             │
    │                                                      ├──► xanh / đỏ trên pull request
    │                                                       ┘
    │
@@ -45,7 +45,7 @@ Không phải hai lựa chọn thay thế nhau:
 
 | | GitHub Actions | Jenkins |
 |---|---|---|
-| Tín hiệu trên pull request | workflow kiểm backend, dùng làm required check | job hiện tại poll một nhánh; Jenkinsfile hỗ trợ nhận diện PR khi có multibranch job |
+| Tín hiệu trên pull request | toàn bộ G1 trong required check `backend-test` | job hiện tại poll một nhánh; Jenkinsfile hỗ trợ nhận diện PR khi có multibranch job |
 | Môi trường | sạch mỗi lần | bền vững — giữ `~/.m2` và `target/` giữa các lần chạy |
 | Sản phẩm | tín hiệu xanh hoặc đỏ | **image Docker đẩy lên GHCR + triển khai thật** |
 | Chạy ở đâu | hạ tầng GitHub | máy cá nhân, sau router gia đình |
@@ -53,12 +53,15 @@ Không phải hai lựa chọn thay thế nhau:
 Jenkins trong thiết lập này dùng Poll SCM `H/5 * * * *`. Nhánh được chọn ở cấu hình
 job, không bị cố định bởi Jenkinsfile. Build #55 đã chạy nhánh `ci/pre-deploy-gate`;
 chỉ khi `SOURCE_BRANCH=main` và không phải PR thì stage Production mới được chạy.
-GitHub Actions hiện chỉ chạy test Maven; kiểm TypeScript và test vận hành nằm trong G1 Jenkins.
+GitHub Actions chạy Java, Python 3.13, Node 22 và TypeScript trong cùng check
+`backend-test` đang được bảo vệ. Check chỉ xanh khi tất cả bước đạt. Jenkins
+chạy cùng nhóm kiểm tra trước khi build image.
 
 ### Các cổng chất lượng
 
 **G1 — kiểm code.** Chạy test Java, TypeScript typecheck và test Python cho các lệnh
-vận hành/release. Trong đó, hợp đồng API đối chiếu DTO Java với khai báo TypeScript. Kiểu
+vận hành/release, cùng test Node cho probe phiên bản và snapshot. Trong đó,
+hợp đồng API đối chiếu DTO Java với khai báo TypeScript. Kiểu
 TypeScript bị xoá lúc biên dịch nên không gì đối chiếu chúng với JSON thật: đổi tên một
 trường ở backend thì `mvn test` xanh, `tsc` xanh, còn người dùng thấy ô trống. Cổng chạy
 hai chặng — so tên kiểu, rồi duyệt đồ thị kiểu để **so tên từng trường**. Nằm trong
@@ -68,14 +71,17 @@ hai chặng — so tên kiểu, rồi duyệt đồ thị kiểu để **so tên
 
 **G2 — kiểm image trước deploy.** Dùng cùng digest sẽ triển khai, dựng Compose riêng
 để kiểm cài mới và nâng cấp từ schema V1 có dữ liệu mẫu. Mỗi ca kiểm 35 bất biến API
-và ba trang SSR, với provider ngoài tắt và seed mô phỏng bật. Ví dụ:
+và ba trang SSR, đối chiếu `RELEASE_ID` của frontend/backend qua `/api/release`,
+với provider ngoài tắt và seed mô phỏng bật. Ví dụ:
 `worldVndPerGram × troyOunceInGrams` phải bằng `usdPerOunce × vndPerUsd` — nối ba trường ở
 ba khối khác nhau của cùng một phản hồi, nên công thức quy đổi sai là lộ ngay.
 
 → [`scripts/g2.sh`](scripts/g2.sh) · [`scripts/smoke.mjs`](scripts/smoke.mjs)
 
 **G3 — xác minh production.** Kiểm readiness, image ID đúng digest và các trang HTTPS
-qua Caddy. Chỉ ghi bản tốt khi đạt; lỗi thì quay lại bản tốt đã lưu ở đầu deploy và kiểm lại.
+qua Caddy. `/api/release` phải trả đúng `RELEASE_ID` của cả frontend và backend
+so với manifest; trang từ bản cũ không được chấp nhận. Chỉ ghi bản tốt khi đạt;
+lỗi thì quay lại bản tốt đã lưu ở đầu deploy và kiểm lại.
 Xem cách chuẩn bị baseline và giới hạn rollback DB trong [tutorial](docs/tutorial.md#b10-g1--build--g2--deploy--g3).
 
 Các kiểm tra hợp đồng G1 và công thức G2 đã được **kiểm chứng bằng cách cố tình làm hỏng**: đổi tên một trường DTO
@@ -235,6 +241,7 @@ dựng context, và thay được bằng implementation ML sau này mà không �
 | GET | `/api/v1/models` | Danh mục mô hình và mô tả |
 | POST | `/api/v1/admin/ingest` | Chạy ingest ngay |
 | GET | `/api/v1/admin/providers` | Trạng thái các nguồn dữ liệu |
+| GET | `/api/v1/release` | Định danh backend; frontend đối chiếu qua `/api/release` |
 
 Mã chuỗi mặc định: `XAUUSD`, `USDVND`, `SJC_HCM`, `SJC_HN`, `SJC_RING`.
 Mô hình: `AUTO` (mặc định), `NAIVE`, `DRIFT`, `SMA`, `HOLT_DAMPED`, `AR_DIFF`.
@@ -353,6 +360,7 @@ Mọi thứ nằm trong `.env` hoặc biến môi trường:
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Origin được phép gọi API |
 | `APP_ADMIN_TOKEN` | rỗng | Header `X-Admin-Token` cho `/api/v1/admin/**`; rỗng thì khoá endpoint |
 | `BACKEND_IMAGE`, `FRONTEND_IMAGE` | bắt buộc với Compose production | Hai digest từ artifact `release.env` của build đã qua G2 |
+| `RELEASE_ID` | bắt buộc với Compose CI/production | Cùng định danh truyền tới frontend/backend và được G2/G3 kiểm qua HTTP |
 | `API_BASE_URL_INTERNAL` | Compose: `http://backend:8080`; ngoài Docker: `http://localhost:8080` | URL backend mà **frontend gọi từ phía máy chủ** |
 
 Frontend gọi API hoàn toàn ở phía máy chủ, bên trong mạng của compose. Trình duyệt không bao
@@ -387,10 +395,21 @@ Từ thư mục gốc:
 ```bash
 mvn -f backend/pom.xml test
 python3 -m unittest discover -s scripts/tests -v
+node --test scripts/tests/test_*.mjs
 ```
 
 Bộ test release/rollback/recovery/bootstrap cũng chạy trong G1 bằng Python 3.13
 container, với Docker được giả lập bằng lệnh cục bộ; không truy cập VPS.
+
+Baseline chụp image digest của cả bốn service, môi trường, command, healthcheck
+và volume thực tế từ Docker. Các snapshot và `runtime.env` có thể chứa bí mật,
+được lưu quyền 600 trên VPS. Nếu baseline được tạo trước cơ chế này, dùng
+`sh scripts/bootstrap-release.sh --refresh` khi production đang khỏe và không
+có deploy đang chạy; xác minh lỗi thì con trỏ cũ được giữ nguyên. Mỗi deploy
+mới cũng giữ bản riêng của `.env` để rollback dùng lại cấu hình của release.
+
+Ingest thủ công và scheduler dùng chung khóa trong service, giữ qua cả commit
+hoặc rollback transaction. Yêu cầu thủ công chạy chồng được trả HTTP 409.
 
 Bộ test tập trung vào phần toán và phần parse — hai nơi lỗi âm thầm gây thiệt hại nhất:
 

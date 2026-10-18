@@ -70,6 +70,7 @@ logging:
     org.hibernate.SQL: WARN
 
 app:
+  release-id: ${APP_RELEASE_ID:}
   cors:
     allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:3000}
 

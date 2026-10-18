@@ -28,16 +28,18 @@ pipeline {
                 dir('backend') { sh 'mvn -B test' }
                 // Tests use only Python's standard library and POSIX sh; no Docker socket.
                 sh '''
-                    tar -cf - scripts |
+                    COPYFILE_DISABLE=1 tar -cf - scripts |
                       docker run --rm -i python:3.13-alpine sh -ec '
                         mkdir /src; cd /src; tar -xf -;
                         python3 -m unittest discover -s scripts/tests -v'
                 '''
                 // Jenkins has Docker and Maven; Node runs in a disposable container.
                 sh '''
-                    tar -C frontend --exclude=node_modules --exclude=.next -cf - . |
+                    COPYFILE_DISABLE=1 tar --exclude=frontend/node_modules --exclude=frontend/.next -cf - frontend scripts |
                       docker run --rm -i node:22-alpine sh -ec '
-                        mkdir /src; cd /src; tar -xf -; npm ci; npm run typecheck'
+                        mkdir /src; cd /src; tar -xf -;
+                        npm ci --prefix frontend; npm run typecheck --prefix frontend;
+                        node --test scripts/tests/test_*.mjs'
                 '''
             }
         }
@@ -52,7 +54,7 @@ pipeline {
             steps {
                 sh '''
                     set -eu
-                    : > release.env
+                    printf 'RELEASE_ID=%s\\n' "$RELEASE_ID" > release.env
 
                     for service in backend frontend; do
                         image="$REG/goldcast-$service:$RELEASE_ID"
@@ -64,23 +66,23 @@ pipeline {
                             --metadata-file "$metadata_file" \
                             --push "$service/"
 
-                    digest=$(
-                        docker run --rm -i python:3.13-alpine \
-                            python3 -c 'import json,sys; print(json.load(sys.stdin)["containerimage.digest"])' \
-                            < "$metadata_file"
-                )
+                        digest=$(
+                            docker run --rm -i python:3.13-alpine \
+                                python3 -c 'import json,sys; print(json.load(sys.stdin)["containerimage.digest"])' \
+                                < "$metadata_file"
+                        )
 
-                    echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
+                        echo "$digest" | grep -Eq '^sha256:[a-f0-9]{64}$'
 
-                    key=$(printf '%s' "$service" | tr '[:lower:]' '[:upper:]')
+                        key=$(printf '%s' "$service" | tr '[:lower:]' '[:upper:]')
 
-                    printf '%s_IMAGE=%s/goldcast-%s@%s\\n' \
-                        "$key" "$REG" "$service" "$digest" >> release.env
-                done
-            '''
-            archiveArtifacts artifacts: 'release.env', fingerprint: true
-    }
-}
+                        printf '%s_IMAGE=%s/goldcast-%s@%s\\n' \
+                            "$key" "$REG" "$service" "$digest" >> release.env
+                    done
+                '''
+                archiveArtifacts artifacts: 'release.env', fingerprint: true
+            }
+        }
         stage('G2 - isolated image tests') {
             steps { sh 'sh scripts/g2.sh' }
         }
@@ -94,7 +96,7 @@ pipeline {
                                 set -eu
                                 mkdir -p ~/.ssh
                                 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "mkdir -p '$RELEASE_DIR'"
-                                tar -cf - release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs |
+                                COPYFILE_DISABLE=1 tar -cf - release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs |
                                   ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "tar -xf - -C '$RELEASE_DIR'"
                                 ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "sh '$RELEASE_DIR/scripts/release.sh' deploy '$RELEASE_DIR' '$BUILD_URL'"
                             '''
