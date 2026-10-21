@@ -1,0 +1,168 @@
+{
+  "rule_files": [
+    "alerts.yml"
+  ],
+  "evaluation_interval": "1m",
+  "tests": [
+    {
+      "name": "brief outage does not page",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{job=\"public\"}",
+          "values": "1 0 1 1 1"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastWebsiteUnavailable\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "sustained outage fires then resolves",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{job=\"public\"}",
+          "values": "0 0 0 0 1 1 1"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastWebsiteUnavailable\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "3m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastWebsiteUnavailable\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "6m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "backup age counts from verified success",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "goldcast_jenkins_job_last_success_timestamp_seconds{job_name=\"goldcast-backup\"}",
+          "values": "0+0x1920"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastBackupStale\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "29h",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastBackupStale\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "31h",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "deploy lock suppresses transition mismatch",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "goldcast_public_release_matches_manifest{job=\"vps-node\",instance=\"vps\"}",
+          "values": "0+0x6"
+        },
+        {
+          "series": "goldcast_public_identity_probe_success{job=\"vps-node\",instance=\"vps\"}",
+          "values": "1+0x6"
+        },
+        {
+          "series": "goldcast_release_lock_exists{job=\"vps-node\",instance=\"vps\"}",
+          "values": "1 1 1 0 0 0 0"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastPublicVersionMismatch\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "2m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastPublicVersionMismatch\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "6m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "disabled provider does not page",
+      "interval": "1h",
+      "input_series": [
+        {
+          "series": "goldcast_ingest_provider_last_success_timestamp{provider=\"stooq\",job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "0+0x5"
+        },
+        {
+          "series": "goldcast_ingest_provider_enabled{provider=\"stooq\",job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "0+0x5"
+        },
+        {
+          "series": "goldcast_ingest_enabled{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "1+0x5"
+        },
+        {
+          "series": "process_start_time_seconds{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "0+0x5"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastProviderUnavailable\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "4h",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

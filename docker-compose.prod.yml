@@ -37,11 +37,15 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Metrics are reachable only via localhost/SSH, never the public interface.
+    ports:
+      - "127.0.0.1:9091:9091"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       APP_RELEASE_ID: ${RELEASE_ID:?Set RELEASE_ID from release.env}
+      MANAGEMENT_SERVER_PORT: "9091"
       # Ingest thu du lieu tu provider; seed mo phong chi bat khi chu dong chon.
       APP_INGEST_ENABLED: ${APP_INGEST_ENABLED:-true}
       APP_INGEST_SEED_ON_EMPTY: ${APP_INGEST_SEED_ON_EMPTY:-false}
@@ -50,7 +54,7 @@ services:
       APP_ADMIN_TOKEN: ${APP_ADMIN_TOKEN}
       TZ: Asia/Ho_Chi_Minh
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:9091/actuator/health/readiness"]
       interval: 10s
       timeout: 5s
       retries: 20

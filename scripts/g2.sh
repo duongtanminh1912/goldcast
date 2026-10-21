@@ -21,6 +21,7 @@ compose up -d --wait --wait-timeout 300 db backend frontend caddy
 compose exec -T db psql -U goldcast -d goldcast -v ON_ERROR_STOP=1 -c \
   "DO \$\$ BEGIN IF (SELECT count(*) FROM flyway_schema_history WHERE success) < 2 OR EXISTS (SELECT 1 FROM flyway_schema_history WHERE NOT success) THEN RAISE EXCEPTION 'Flyway migration failed'; END IF; END \$\$;"
 compose run --rm -T probe http://backend:8080 < scripts/smoke.mjs
+compose run --rm -T probe http://backend:9091 "$tested_release" < monitoring/check-metrics.mjs
 compose run --rm -T probe http://caddy:8080 "$tested_release" < scripts/check-pages.mjs
 
 # Separate upgrade scenario: V1 schema with existing rows in every domain table.
@@ -37,4 +38,5 @@ compose up -d --no-deps --force-recreate --wait --wait-timeout 300 backend front
 compose up -d --wait --wait-timeout 60 caddy
 compose exec -T db psql -U goldcast -d goldcast -v ON_ERROR_STOP=1 < scripts/fixtures/assert-upgrade.sql
 compose run --rm -T probe http://backend:8080 < scripts/smoke.mjs
+compose run --rm -T probe http://backend:9091 "$tested_release" < monitoring/check-metrics.mjs
 compose run --rm -T probe http://caddy:8080 "$tested_release" < scripts/check-pages.mjs

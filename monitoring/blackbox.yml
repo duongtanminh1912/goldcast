@@ -1,0 +1,20 @@
+modules:
+  https_release:
+    prober: http
+    timeout: 8s
+    http:
+      method: GET
+      preferred_ip_protocol: ip4
+      follow_redirects: false
+      fail_if_not_ssl: true
+      headers: {Cache-Control: no-cache}
+      fail_if_body_not_matches_regexp:
+        - '"releaseId"\s*:\s*"[A-Za-z0-9][A-Za-z0-9_.-]+"'
+        - '"backendReleaseId"\s*:\s*"[A-Za-z0-9][A-Za-z0-9_.-]+"'
+  http_ok:
+    prober: http
+    timeout: 8s
+    http:
+      preferred_ip_protocol: ip4
+      follow_redirects: false
+      fail_if_body_not_matches_regexp: ['"status"\s*:\s*"UP"']

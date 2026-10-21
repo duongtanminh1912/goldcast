@@ -26,6 +26,8 @@ jobs:
           python-version: '3.13'
       - name: Test release, rollback and operator commands
         run: python3 -m unittest discover -s scripts/tests -v
+      - name: Validate monitoring configuration and alert behavior
+        run: sh monitoring/check.sh
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

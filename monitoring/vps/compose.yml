@@ -1,0 +1,24 @@
+name: goldcast-monitoring-agent
+services:
+  node-exporter:
+    image: ${NODE_EXPORTER_IMAGE:?}
+    network_mode: host
+    pid: host
+    command:
+      - --web.listen-address=127.0.0.1:9100
+      - --path.rootfs=/host
+      - --path.procfs=/host/proc
+      - --path.sysfs=/host/sys
+      - --collector.textfile.directory=/textfile
+      - --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|run/docker/.+)($|/)
+    volumes:
+      - /:/host:ro,rslave
+      - /opt/goldcast/monitoring/textfile:/textfile:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    restart: unless-stopped
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options: {max-size: '10m', max-file: '3'}

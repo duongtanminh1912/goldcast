@@ -97,7 +97,10 @@ export function captureRelease(containers, images) {
         target: Number(port.split('/')[0]), protocol: port.split('/')[1],
         published: binding.HostPort, host_ip: binding.HostIp || '0.0.0.0',
       })));
-    if (service !== 'caddy' && ports.length) throw new Error(`Unexpected published port on ${service}`);
+    const monitoringOnly = service === 'backend' && ports.every(port =>
+      port.target === 9091 && port.published === '9091' && port.protocol === 'tcp' && port.host_ip === '127.0.0.1')
+      && env.MANAGEMENT_SERVER_PORT === '9091';
+    if (service !== 'caddy' && ports.length && !monitoringOnly) throw new Error(`Unexpected published port on ${service}`);
     if (ports.length) captured.ports = ports;
     compose.services[service] = captured;
     if (service === 'backend' || service === 'frontend') manifest[`${service.toUpperCase()}_IMAGE`] = digest;
@@ -117,7 +120,7 @@ export function captureRelease(containers, images) {
     if (!databaseEnv[key]) throw new Error(`Missing live ${key}`);
     runtimeEnv[key] = databaseEnv[key];
   }
-  for (const key of ['APP_INGEST_ENABLED', 'APP_INGEST_SEED_ON_EMPTY', 'APP_INGEST_CRON', 'APP_CORS_ALLOWED_ORIGINS', 'APP_ADMIN_TOKEN']) {
+  for (const key of ['APP_INGEST_ENABLED', 'APP_INGEST_SEED_ON_EMPTY', 'APP_INGEST_CRON', 'APP_CORS_ALLOWED_ORIGINS', 'APP_ADMIN_TOKEN', 'MANAGEMENT_SERVER_PORT']) {
     if (backendEnv[key] !== undefined) runtimeEnv[key] = backendEnv[key];
   }
   if (!manifest.RELEASE_ID && compose.services.frontend.environment.API_BASE_URL_INTERNAL !== 'http://backend:8080') {

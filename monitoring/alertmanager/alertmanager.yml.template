@@ -1,0 +1,38 @@
+global:
+  resolve_timeout: 5m
+route:
+  receiver: telegram
+  group_by: [site, alertname]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 6h
+  routes:
+    - receiver: dashboard-only
+      matchers: ['severity="info"']
+    - receiver: telegram
+      matchers: ['alertname="GoldcastMonitoringTest"']
+      group_wait: 0s
+      group_interval: 10s
+receivers:
+  - name: dashboard-only
+  - name: telegram
+    telegram_configs:
+      - bot_token_file: /run/secrets/telegram_bot_token
+        chat_id: __CHAT_ID__
+        send_resolved: true
+        parse_mode: HTML
+        message: |
+          <b>GoldCast {{ .Status | toUpper }}</b>
+          {{ range .Alerts }}
+          <b>{{ .Labels.alertname | html }}</b> [{{ .Labels.severity | html }}]
+          {{ .Annotations.summary | html }}
+          {{ .Annotations.description | html }}
+          Runbook: {{ .Annotations.runbook | html }}
+          {{ end }}
+inhibit_rules:
+  - source_matchers: ['alertname="GoldcastMonitoringTunnelUnavailable"']
+    target_matchers: ['alertname=~"GoldcastBackendMetricsUnavailable|GoldcastBackendNotReady|GoldcastRuntimeCollectorStale|GoldcastRuntimeCollectorFailed"']
+    equal: [site]
+  - source_matchers: ['alertname="GoldcastRuntimeCollectorStale"']
+    target_matchers: ['alertname=~"GoldcastContainerNotReady|GoldcastPublicVersionMismatch|GoldcastImageMismatch|GoldcastReleaseLockStuck"']
+    equal: [site]
