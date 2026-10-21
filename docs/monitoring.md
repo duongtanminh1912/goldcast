@@ -29,6 +29,10 @@ flowchart LR
 | CI/backup | Kết quả job `goldcast-ci`, `goldcast-backup`; backup thành công quá 30 giờ, job chạy quá lâu |
 | Bộ giám sát | SSH mất, exporter lỗi, collector ngừng cập nhật; không coi cache cũ là healthy |
 
+Exporter Jenkins cũng xuất thời điểm poll hoàn tất; HTTP scrape còn trả 200
+nhưng poll ngừng cập nhật quá 120 giây vẫn bị cảnh báo. Timestamp của VPS và
+backend được kiểm độc lập, không suy ra dữ liệu mới chỉ từ `up=1`.
+
 31 luật trong [alerts.yml](../monitoring/prometheus/alerts.yml). Luật `info`
 chỉ hiện trên dashboard. Cảnh báo `warning`/`critical` gửi Telegram, có tin
 phục hồi; gom nhóm theo site/alertname, lặp sau 6 giờ. Khi mất tunnel/collector,
@@ -82,6 +86,7 @@ trong cả cài mới lẫn nâng cấp schema có dữ liệu.
 
 ```sh
 python3 monitoring/start.py
+python3 monitoring/install-macos-keep-awake.py
 curl -fsS http://127.0.0.1:9090/-/ready
 curl -fsS http://127.0.0.1:9090/api/v1/targets
 curl -fsS http://127.0.0.1:3001/api/health
@@ -101,8 +106,8 @@ python3 monitoring/test-notification.py resolve
 # Chờ nhận RESOLVED; /metrics của Alertmanager phải ghi nhận hai lần gửi.
 ```
 
-CI chạy 5 kịch bản promtool: lỗi thoáng qua, lỗi kéo dài rồi phục hồi, backup
-quá hạn, khóa deploy chặn sai phiên bản chuyển tiếp, provider tắt. Ngoài ra
+CI chạy 6 kịch bản promtool: lỗi thoáng qua, lỗi kéo dài rồi phục hồi, backup
+quá hạn, khóa deploy chặn sai phiên bản chuyển tiếp, provider tắt, poll Jenkins ngừng dù HTTP còn trả 200. Ngoài ra
 có unit test Java cho lịch cuối tuần/mất DB/ngày tương lai và Python cho
 Jenkins/VPS lỗi, sai digest, định danh và ghi textfile nguyên tử. Các phép
 thử luật không gửi Telegram và không làm thay đổi production.
@@ -136,6 +141,12 @@ Internet của Mac ngừng hoạt động, toàn bộ bộ giám sát cũng ng�
 dead-man check ở máy/dịch vụ độc lập nếu yêu cầu phát hiện được cả trường hợp này.
 Giữ 7 ngày phục vụ đồ án, không phải kho số liệu dài hạn hoặc HA. Dashboard
 hiển thị metrics tổng hợp, chưa có log tập trung/tracing và chưa có SLO/error budget.
+
+Helper LaunchAgent giữ máy thức khi cắm sạc, không đổi `pmset` toàn máy và vẫn
+cho màn hình tắt. Khi chuyển sang pin, assertion hết hạn tối đa sau 60 giây;
+nắp máy phải mở. Agent tự chạy lại sau đăng nhập, nhưng Docker Desktop vẫn
+phải được bật. Nếu cần tắt helper: `launchctl bootout gui/$(id -u)/vn.goldcast.monitoring-awake`;
+chạy lại installer để bật. Đây không phải cơ chế tự khởi động Mac khi mất điện.
 
 Lịch freshness mới bỏ cuối tuần cho spot/FX, chưa có ngày lễ. Telemetry ingest
 reset sau restart, nên luật provider có khoảng chờ 3 giờ. Timestamp được giữ

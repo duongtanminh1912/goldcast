@@ -1330,3 +1330,9 @@ giữ số đo riêng, không trộn với #58/#61. Đã xác minh key monitorin
 bị chặn lệnh và cổng ngoài danh sách; 24 truy vấn panel không lỗi cú pháp.
 Backend metrics/readiness production vẫn chờ image mới; probe HTTPS=1,
 collector=1 và public/last-good khớp=1 ở thời điểm kiểm tra.
+
+Rà soát cuối bổ sung timestamp riêng cho poll Jenkins: exporter HTTP trả
+200 nhưng poll treo vẫn báo stale; promtool hiện có 6 kịch bản. Phát hiện
+Mac đặt idle sleep 1 phút và cài LaunchAgent giữ thức khi cắm sạc, cho màn
+hình tắt và nhả assertion trong tối đa 60 giây sau khi chuyển sang pin;
+không thay pmset toàn hệ thống.

@@ -186,7 +186,7 @@ groups:
           description: "Kiểm DB/constraint; telemetry không ghi thành công trước commit."
           runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
       - alert: GoldcastJenkinsUnavailable
-        expr: "goldcast_jenkins_scrape_success == 0 or up{job=\"jenkins-operations\"} == 0"
+        expr: "goldcast_jenkins_scrape_success == 0 or up{job=\"jenkins-operations\"} == 0 or time() - goldcast_jenkins_collector_last_run_timestamp_seconds > 120 or absent(goldcast_jenkins_collector_last_run_timestamp_seconds)"
         for: 2m
         labels: {severity: warning, site: goldcast}
         annotations:

@@ -39,7 +39,8 @@ def collect(fetch, now=None):
         except Exception:
             return f'goldcast_jenkins_scrape_success{{job_name="{job}"}} 0\n'
     with ThreadPoolExecutor(max_workers=2) as pool:
-        return ''.join(pool.map(one, JOBS))
+        body = ''.join(pool.map(one, JOBS))
+    return body + f'goldcast_jenkins_collector_last_run_timestamp_seconds {now:.17g}\n'
 
 
 def main():

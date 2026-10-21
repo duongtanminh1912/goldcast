@@ -177,6 +177,46 @@
           ]
         }
       ]
+    },
+    {
+      "name": "stuck poll does not remain green when HTTP exporter is up",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "goldcast_jenkins_collector_last_run_timestamp_seconds{job=\"jenkins-operations\",instance=\"exporter\"}",
+          "values": "0+0x6"
+        },
+        {
+          "series": "goldcast_jenkins_scrape_success{job=\"jenkins-operations\",instance=\"exporter\",job_name=\"goldcast-ci\"}",
+          "values": "1+0x6"
+        },
+        {
+          "series": "up{job=\"jenkins-operations\",instance=\"exporter\"}",
+          "values": "1+0x6"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastJenkinsUnavailable\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "1m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastJenkinsUnavailable\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "6m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
     }
   ]
 }

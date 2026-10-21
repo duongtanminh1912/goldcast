@@ -33,6 +33,7 @@ class JenkinsMetricsTest(unittest.TestCase):
         self.assertIn('goldcast_jenkins_job_last_result_success{job_name="goldcast-ci"} 0', output)
         self.assertIn('goldcast_jenkins_job_last_success_timestamp_seconds{job_name="goldcast-backup"} 105', output)
         self.assertIn('goldcast_jenkins_job_running_seconds{job_name="goldcast-ci"} 50', output)
+        self.assertIn('goldcast_jenkins_collector_last_run_timestamp_seconds 250', output)
 
     def test_api_error_never_exports_a_cached_success(self):
         def fetch(job):
