@@ -1309,7 +1309,7 @@ PR #55 đã merge thành `73c7d8f`. Jenkins `goldcast-ci #61` thành công trong
 release #61, last-good đúng bản mới, không còn khóa. Các số #58/#60 và
 phép diễn tập ở trên là bằng chứng lịch sử, không đổi thành số của #61.
 
-### Monitoring — đang bổ sung trên nhánh feature
+### Monitoring — kiểm chứng trước merge
 
 Theo lựa chọn của người vận hành, bộ giám sát trung tâm đặt trên máy Mac
 chạy Jenkins, nhận cảnh báo Telegram. Thêm metrics ứng dụng, node_exporter
@@ -1328,7 +1328,7 @@ Production skipped. Cả hai ca G2 đều đạt metrics/release_id/tách manage
 port. [Bằng chứng monitoring](measurements/monitoring-2026-10-21/README.md)
 giữ số đo riêng, không trộn với #58/#61. Đã xác minh key monitoring riêng
 bị chặn lệnh và cổng ngoài danh sách; 24 truy vấn panel không lỗi cú pháp.
-Backend metrics/readiness production vẫn chờ image mới; probe HTTPS=1,
+Ở lượt kiểm chứng feature, backend metrics/readiness production chờ image mới; probe HTTPS=1,
 collector=1 và public/last-good khớp=1 ở thời điểm kiểm tra.
 
 Rà soát cuối bổ sung timestamp riêng cho poll Jenkins: exporter HTTP trả
@@ -1336,3 +1336,7 @@ Rà soát cuối bổ sung timestamp riêng cho poll Jenkins: exporter HTTP tr�
 Mac đặt idle sleep 1 phút và cài LaunchAgent giữ thức khi cắm sạc, cho màn
 hình tắt và nhả assertion trong tối đa 60 giây sau khi chuyển sang pin;
 không thay pmset toàn hệ thống.
+
+Kết quả merge/Deploy/G3 của bản monitoring được cập nhật trong
+[PR #56](https://github.com/duongtanminh1912/goldcast/pull/56); các số của job
+feature ở trên giữ nguyên phạm vi trước production.
