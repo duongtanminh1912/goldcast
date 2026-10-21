@@ -1301,3 +1301,42 @@ Job diễn tập ghim `3a20500` và chỉ chạy thủ công.
 JSON stage và artifact theo từng job/build. Cả hai bản dùng schema V2, không
 coi phép thử này là kiểm mọi migration hay rollback DB. Chưa merge/deploy
 runtime PR #55; VPS vẫn release #60, job `goldcast-ci` vẫn `*/main` và Poll SCM.
+
+### Cập nhật sau khi merge PR #55
+
+PR #55 đã merge thành `73c7d8f`. Jenkins `goldcast-ci #61` thành công trong
+224,488 giây: G1/G2 đạt, Production chạy Deploy/G3; VPS được xác minh ở
+release #61, last-good đúng bản mới, không còn khóa. Các số #58/#60 và
+phép diễn tập ở trên là bằng chứng lịch sử, không đổi thành số của #61.
+
+### Monitoring — kiểm chứng trước merge
+
+Theo lựa chọn của người vận hành, bộ giám sát trung tâm đặt trên máy Mac
+chạy Jenkins, nhận cảnh báo Telegram. Thêm metrics ứng dụng, node_exporter
+qua SSH, bộ thu trạng thái VPS/Jenkins, dashboard Grafana và 31 luật cảnh báo.
+Token/mật khẩu lưu ngoài repo. G1 kiểm cấu hình và mô phỏng hành vi luật;
+G2 bổ sung kiểm metrics thật và việc tách management port.
+
+Kiểm tra local: 122 Java, 54 Python, 23 Node và 5 kịch bản promtool đạt.
+Telegram đã thử một FIRING và một RESOLVED qua Alertmanager, 2 lần gửi,
+0 lỗi gửi. Bộ thu VPS/timer đã cài, không thay ứng dụng production trong
+bước cài đó. Chưa coi metrics backend production đã hoạt động trước khi
+candidate qua G2 và pipeline triển khai image mới. Chi tiết [monitoring](monitoring.md).
+
+Jenkins `goldcast-monitoring-ci #1` đã đạt G1/Build/G2 trong 357,961 giây,
+Production skipped. Cả hai ca G2 đều đạt metrics/release_id/tách management
+port. [Bằng chứng monitoring](measurements/monitoring-2026-10-21/README.md)
+giữ số đo riêng, không trộn với #58/#61. Đã xác minh key monitoring riêng
+bị chặn lệnh và cổng ngoài danh sách; 24 truy vấn panel không lỗi cú pháp.
+Ở lượt kiểm chứng feature, backend metrics/readiness production chờ image mới; probe HTTPS=1,
+collector=1 và public/last-good khớp=1 ở thời điểm kiểm tra.
+
+Rà soát cuối bổ sung timestamp riêng cho poll Jenkins: exporter HTTP trả
+200 nhưng poll treo vẫn báo stale; promtool hiện có 6 kịch bản. Phát hiện
+Mac đặt idle sleep 1 phút và cài LaunchAgent giữ thức khi cắm sạc, cho màn
+hình tắt và nhả assertion trong tối đa 60 giây sau khi chuyển sang pin;
+không thay pmset toàn hệ thống.
+
+Kết quả merge/Deploy/G3 của bản monitoring được cập nhật trong
+[PR #56](https://github.com/duongtanminh1912/goldcast/pull/56); các số của job
+feature ở trên giữ nguyên phạm vi trước production.

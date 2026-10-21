@@ -1,0 +1,15 @@
+[Unit]
+Description=Collect GoldCast operational metrics (read only)
+After=docker.service network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+User=deploy
+Group=deploy
+ExecStart=/usr/bin/python3 /opt/goldcast/monitoring/vps/collect.py
+TimeoutStartSec=45
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/goldcast/monitoring/textfile

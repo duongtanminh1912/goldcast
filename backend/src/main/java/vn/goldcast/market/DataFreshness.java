@@ -14,6 +14,14 @@ public final class DataFreshness {
         if (observed == null) return code + ": chưa có dữ liệu quan sát.";
         long days = ChronoUnit.DAYS.between(observed, today);
         if (days < 0) return code + ": ngày quan sát " + observed + " nằm trong tương lai.";
+        long lag = publicationDaysBehind(kind, observed, today);
+        return lag > 2 ? code + ": dữ liệu cũ, quan sát gần nhất " + observed
+                + ", chậm " + lag + " ngày công bố (chưa tính ngày lễ)." : null;
+    }
+
+    public static long publicationDaysBehind(InstrumentKind kind, LocalDate observed, LocalDate today) {
+        long days = ChronoUnit.DAYS.between(observed, today);
+        if (days < 0) return 0;
         long lag = days;
         if (kind.businessDaysOnly()) {
             lag = (days / 7) * 5;
@@ -21,7 +29,6 @@ public final class DataFreshness {
                 if (!TradingCalendar.isWeekend(observed.plusDays(offset))) lag++;
             }
         }
-        return lag > 2 ? code + ": dữ liệu cũ, quan sát gần nhất " + observed
-                + ", chậm " + lag + " ngày công bố (chưa tính ngày lễ)." : null;
+        return lag;
     }
 }

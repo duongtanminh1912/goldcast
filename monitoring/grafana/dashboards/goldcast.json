@@ -1,0 +1,717 @@
+{
+  "uid": "goldcast-operations",
+  "title": "GoldCast — Operations",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "tags": [
+    "goldcast",
+    "devops"
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTPS sẵn sàng",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "probe_success{job=\"public\"}",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 2,
+      "title": "TLS còn lại (ngày)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(probe_ssl_earliest_cert_expiry{job=\"public\"}-time())/86400",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "d"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Cảnh báo đang firing",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 7,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 4,
+      "title": "Phiên bản ứng dụng",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 7,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast_release_info",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "displayName": "${__field.labels.release_id}"
+        },
+        "overrides": []
+      },
+      "options": {
+        "textMode": "name"
+      }
+    },
+    {
+      "id": 5,
+      "title": "CPU VPS",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1-avg(rate(node_cpu_seconds_total{job=\"vps-node\",mode=\"idle\"}[5m]))",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 6,
+      "title": "RAM khả dụng",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_memory_MemAvailable_bytes{job=\"vps-node\"}",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Đĩa còn trống",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 21,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "node_filesystem_avail_bytes{job=\"vps-node\",mountpoint=\"/\"}",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "title": "Container ready",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 21,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast_container_ready",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 9,
+      "title": "API request/giây",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 28,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"goldcast-backend\",uri!~\"/actuator.*\"}[5m]))",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 10,
+      "title": "API 5xx/giây",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 28,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(rate(http_server_requests_seconds_count{job=\"goldcast-backend\",status=~\"5..\",uri!~\"/actuator.*\"}[5m])) or vector(0)",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 11,
+      "title": "API latency p95",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 35,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95,sum by(le)(rate(http_server_requests_seconds_bucket{job=\"goldcast-backend\",uri!~\"/actuator.*\"}[5m])))",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 12,
+      "title": "JVM heap",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 35,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(jvm_memory_used_bytes{job=\"goldcast-backend\",area=\"heap\"})",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 13,
+      "title": "Hikari đang dùng",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 42,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "hikaricp_connections_active{job=\"goldcast-backend\"}",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 14,
+      "title": "Hikari đang chờ",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 42,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "hikaricp_connections_pending{job=\"goldcast-backend\"}",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 15,
+      "title": "Độ trễ ngày công bố",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 49,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast_market_observation_lag_days",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 16,
+      "title": "Dữ liệu synthetic",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 49,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast_market_observation_synthetic",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 17,
+      "title": "Provider nhận dữ liệu cách đây",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 56,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time()-goldcast_ingest_provider_last_success_timestamp",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 18,
+      "title": "Trạng thái refresh dữ liệu",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 56,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast_market_refresh_success",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 19,
+      "title": "Backup thành công cách đây",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 63,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time()-goldcast_jenkins_job_last_success_timestamp_seconds{job_name=\"goldcast-backup\"}",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 20,
+      "title": "Kết quả job gần nhất",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 63,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast_jenkins_job_last_result_success",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 21,
+      "title": "Đúng phiên bản công khai",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 70,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast_public_release_matches_manifest",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 22,
+      "title": "Khóa release tồn tại (giây)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 70,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast_release_lock_age_seconds",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 23,
+      "title": "Trạng thái bộ thu Jenkins",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 77,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast_jenkins_scrape_success * on(job,instance) group_left() (time() - goldcast_jenkins_collector_last_run_timestamp_seconds < bool 120)",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 24,
+      "title": "Trạng thái bộ thu VPS",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 77,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "time()-goldcast_vps_collector_last_run_timestamp_seconds",
+          "legendFormat": "{{instrument}}{{provider}}{{service}}{{job_name}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}

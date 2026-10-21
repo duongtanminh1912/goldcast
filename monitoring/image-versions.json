@@ -1,0 +1,8 @@
+{
+  "PROMETHEUS_IMAGE": "prom/prometheus:v3.15.0",
+  "ALERTMANAGER_IMAGE": "prom/alertmanager:v0.34.1",
+  "BLACKBOX_IMAGE": "prom/blackbox-exporter:v0.29.0",
+  "NODE_EXPORTER_IMAGE": "prom/node-exporter:v1.12.1",
+  "GRAFANA_IMAGE": "grafana/grafana:13.2.4",
+  "PYTHON_IMAGE": "python:3.13-alpine"
+}

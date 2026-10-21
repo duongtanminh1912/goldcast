@@ -55,6 +55,17 @@ test('missing registry digest cannot create a baseline', () => {
   assert.throws(() => captureRelease(containers, images), /Registry digest required/);
 });
 
+test('management port adoption requires backend env and loopback binding only', () => {
+  const state = runtimeFixture();
+  state.containers[1].Config.Env.push('MANAGEMENT_SERVER_PORT=9091');
+  state.containers[1].HostConfig.PortBindings = { '9091/tcp': [{HostIp: '127.0.0.1', HostPort: '9091'}] };
+  assert.equal(captureRelease(state.containers, state.images).runtimeEnv.MANAGEMENT_SERVER_PORT, '9091');
+  for (const ip of ['', '0.0.0.0', '::']) {
+    state.containers[1].HostConfig.PortBindings['9091/tcp'][0].HostIp = ip;
+    assert.throws(() => captureRelease(state.containers, state.images));
+  }
+});
+
 test('snapshot CLI stores private configuration without printing its secrets', t => {
   const directory = mkdtempSync(join(tmpdir(), 'goldcast-snapshot-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));

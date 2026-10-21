@@ -30,11 +30,12 @@ pipeline {
                 dir('backend') { sh 'mvn -B test' }
                 // Tests use only Python's standard library and POSIX sh; no Docker socket.
                 sh '''
-                    COPYFILE_DISABLE=1 tar -cf - scripts |
+                    COPYFILE_DISABLE=1 tar -cf - scripts monitoring |
                       docker run --rm -i python:3.13-alpine sh -ec '
                         mkdir /src; cd /src; tar -xf -;
                         python3 -m unittest discover -s scripts/tests -v'
                 '''
+                sh 'sh monitoring/check.sh'
                 // Jenkins has Docker and Maven; Node runs in a disposable container.
                 sh '''
                     COPYFILE_DISABLE=1 tar --exclude=frontend/node_modules --exclude=frontend/.next -cf - frontend scripts |

@@ -21,6 +21,12 @@ thay thời lượng #58 bằng các build feature/diễn tập hoặc kết qu�
 
 ## 1. Phạm vi và phương pháp đo
 
+Bổ sung trạng thái sau PR #55: Jenkins `goldcast-ci #61`, commit `73c7d8f`,
+thành công 224,488 giây, G1/G2 và Production Deploy/G3 đều chạy. Đây là lần
+xác minh runtime mới, chưa thay bảng stage #58 khi chưa bổ sung bộ số đo
+cùng phạm vi. Monitoring có [tài liệu riêng](monitoring.md);
+kết quả thử luật/cảnh báo không được tính thành thời lượng pipeline #58/#61.
+
 | Đại lượng | Cách sử dụng |
 |---|---|
 | Toàn build Jenkins | `build.json.duration`, đổi mili giây sang giây; ghi cả kết quả và stage bị bỏ qua |

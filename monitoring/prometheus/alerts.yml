@@ -1,0 +1,251 @@
+groups:
+  - name: goldcast
+    rules:
+      - alert: GoldcastWebsiteUnavailable
+        expr: "probe_success{job=\"public\"} == 0 or absent(probe_success{job=\"public\"})"
+        for: 2m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "HTTPS công khai không sẵn sàng"
+          description: "Kiểm DNS, TLS, Caddy và /api/release. Không tự rollback chỉ từ cảnh báo."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastTLSExpiring
+        expr: "probe_ssl_earliest_cert_expiry{job=\"public\"} - time() < 14 * 86400"
+        for: 10m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Chứng chỉ TLS còn dưới 14 ngày"
+          description: "Kiểm Caddy, DNS và gia hạn chứng chỉ; không xóa volume Caddy."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastMonitoringTunnelUnavailable
+        expr: "max(up{job=~\"goldcast-backend|vps-node\"}) == 0"
+        for: 2m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "Mất đường thu metrics VPS"
+          description: "Kiểm SSH tunnel và kết nối VPS. HTTPS công khai được đo độc lập với tunnel."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastBackendMetricsUnavailable
+        expr: "up{job=\"goldcast-backend\"} == 0"
+        for: 2m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Không thu được metrics backend"
+          description: "Kiểm management port 9091, tunnel và JVM. Không mở cổng metrics ra Internet."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastBackendNotReady
+        expr: "probe_success{job=\"backend-readiness\"} == 0 or absent(probe_success{job=\"backend-readiness\"})"
+        for: 2m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "Backend/DB chưa ready"
+          description: "Kiểm backend readiness, kết nối PostgreSQL và trạng thái deploy."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastRuntimeCollectorStale
+        expr: "time() - goldcast_vps_collector_last_run_timestamp_seconds > 180 or absent(goldcast_vps_collector_last_run_timestamp_seconds)"
+        for: 2m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Bộ thu trạng thái VPS ngừng cập nhật"
+          description: "Kiểm goldcast-monitoring.timer/service và node exporter textfile; dữ liệu cũ không chứng minh healthy."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastRuntimeCollectorFailed
+        expr: "goldcast_vps_collector_success == 0"
+        for: 2m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Không đọc được trạng thái runtime"
+          description: "Kiểm quyền Docker và last-good manifest; không sửa con trỏ/khóa để che lỗi."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastContainerNotReady
+        expr: "goldcast_container_ready == 0"
+        for: 2m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "Container {{ $labels.service }} không sẵn sàng"
+          description: "Kiểm docker logs/health. Caddy ở đây chỉ kiểm process running; HTTPS có probe riêng."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastContainerRestarting
+        expr: "increase(goldcast_container_restarts_total[15m]) > 2"
+        for: 2m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Container {{ $labels.service }} restart nhiều lần"
+          description: "Kiểm lỗi ứng dụng, RAM và Docker events."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastContainerOOM
+        expr: "goldcast_container_oom_killed == 1"
+        for: 1m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "Container {{ $labels.service }} bị OOM"
+          description: "Kiểm RAM/swap và giới hạn container; không tăng giới hạn thiếu kiểm chứng."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastHostDiskLow
+        expr: "node_filesystem_avail_bytes{job=\"vps-node\",mountpoint=\"/\"} / node_filesystem_size_bytes{job=\"vps-node\",mountpoint=\"/\"} < 0.15"
+        for: 5m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "VPS còn dưới 15% dung lượng đĩa"
+          description: "Xem log rotation/retention. Giữ active release, rollback và backup; không Docker prune toàn máy."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastHostMemoryLow
+        expr: "node_memory_MemAvailable_bytes{job=\"vps-node\"} / node_memory_MemTotal_bytes{job=\"vps-node\"} < 0.10"
+        for: 5m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "VPS thiếu RAM khả dụng"
+          description: "Dùng MemAvailable thay cho MemFree; kiểm JVM, PostgreSQL, swap và tiến trình."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastHostCPUHigh
+        expr: "1 - avg by(instance)(rate(node_cpu_seconds_total{job=\"vps-node\",mode=\"idle\"}[5m])) > 0.90"
+        for: 10m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "CPU VPS trên 90% kéo dài"
+          description: "Kiểm ingest/forecast, lưu lượng và tiến trình; đối chiếu latency trước khi thay cấu hình."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastAPIErrors
+        expr: "sum(rate(http_server_requests_seconds_count{job=\"goldcast-backend\",status=~\"5..\",uri!~\"/actuator.*\"}[5m])) / clamp_min(sum(rate(http_server_requests_seconds_count{job=\"goldcast-backend\",uri!~\"/actuator.*\"}[5m])),0.001) > 0.05 and sum(increase(http_server_requests_seconds_count{job=\"goldcast-backend\",uri!~\"/actuator.*\"}[5m])) >= 10"
+        for: 5m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "Tỷ lệ API 5xx trên 5%"
+          description: "Có ít nhất 10 request/5 phút. Kiểm log backend, DB và release vừa triển khai."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastAPISlow
+        expr: "histogram_quantile(0.95,sum by(le)(rate(http_server_requests_seconds_bucket{job=\"goldcast-backend\",uri!~\"/actuator.*\"}[5m]))) > 2 and sum(increase(http_server_requests_seconds_count{job=\"goldcast-backend\",uri!~\"/actuator.*\"}[5m])) >= 20"
+        for: 10m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "API p95 vượt 2 giây"
+          description: "Chỉ cảnh báo khi đủ mẫu; kiểm forecast, pool DB và CPU."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastMarketMetricsStale
+        expr: "goldcast_market_refresh_success == 0 or time() - goldcast_market_refresh_timestamp > 180 or absent(goldcast_market_refresh_timestamp)"
+        for: 3m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Không cập nhật được metrics dữ liệu"
+          description: "Kiểm DB và collector trong backend. Không coi cache cũ là dữ liệu mới."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastMarketDataStale
+        expr: "goldcast_market_observation_lag_days > 2 and on(job,instance) goldcast_market_refresh_success == 1"
+        for: 10m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Dữ liệu {{ $labels.instrument }} đã cũ"
+          description: "Đã loại cuối tuần cho spot/FX; ngày lễ chưa được mô hình hóa. Kiểm provider và ngày quan sát."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastMarketDataMissing
+        expr: "goldcast_market_observation_present == 0 and on(job,instance) goldcast_market_refresh_success == 1"
+        for: 10m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Chưa có quan sát cho {{ $labels.instrument }}"
+          description: "Kiểm ingest và cấu hình provider; không bật synthetic để che mất dữ liệu thật."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastMarketDataFuture
+        expr: "goldcast_market_observation_future == 1 and on(job,instance) goldcast_market_refresh_success == 1"
+        for: 5m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Ngày quan sát {{ $labels.instrument }} ở tương lai"
+          description: "Kiểm parser ngày, múi giờ và dữ liệu nguồn."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastMarketDataSynthetic
+        expr: "goldcast_market_observation_synthetic == 1"
+        for: 15m
+        labels: {severity: info, site: goldcast}
+        annotations:
+          summary: "{{ $labels.instrument }} đang dùng dữ liệu mô phỏng"
+          description: "Hiển thị trên dashboard, không nhắn Telegram như sự cố availability; không coi là giá thị trường thật."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastIngestStopped
+        expr: "time() - goldcast_ingest_last_attempt_timestamp > 7200 and on(job,instance) goldcast_ingest_enabled == 1 and on(job,instance) time() - process_start_time_seconds > 7200"
+        for: 10m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Ingest chưa chạy lại trong hai giờ"
+          description: "Ngưỡng theo cron hourly mặc định; điều chỉnh nếu đổi lịch ingest."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastProviderUnavailable
+        expr: "time() - goldcast_ingest_provider_last_success_timestamp > 10800 and on(provider,job,instance) goldcast_ingest_provider_enabled == 1 and on(job,instance) goldcast_ingest_enabled == 1 and on(job,instance) time() - process_start_time_seconds > 10800"
+        for: 10m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Nguồn {{ $labels.provider }} không nhận dữ liệu trong ba giờ"
+          description: "Thành công là nhận được dữ liệu và commit; không đồng nghĩa giá mới. Telemetry reset khi restart."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastIngestTransactionFailed
+        expr: "goldcast_ingest_last_transaction_failed == 1"
+        for: 5m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Transaction ingest gần nhất thất bại"
+          description: "Kiểm DB/constraint; telemetry không ghi thành công trước commit."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastJenkinsUnavailable
+        expr: "goldcast_jenkins_scrape_success == 0 or up{job=\"jenkins-operations\"} == 0 or time() - goldcast_jenkins_collector_last_run_timestamp_seconds > 120 or absent(goldcast_jenkins_collector_last_run_timestamp_seconds)"
+        for: 2m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Không đọc được trạng thái Jenkins"
+          description: "Kiểm Jenkins URL, token và quyền Job/Read. Không dùng dữ liệu cache để khẳng định backup tốt."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastPipelineFailed
+        expr: "goldcast_jenkins_job_last_result_success{job_name=\"goldcast-ci\"} == 0 and on(job_name) goldcast_jenkins_job_has_completed_build == 1"
+        for: 1m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "Pipeline production gần nhất không thành công"
+          description: "Mở Jenkins, kiểm G1/G2/Deploy/G3 và kết quả rollback. Job diễn tập cố ý đỏ không được giám sát bằng luật này."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastBackupFailed
+        expr: "goldcast_jenkins_job_last_result_success{job_name=\"goldcast-backup\"} == 0 and on(job_name) goldcast_jenkins_job_has_completed_build == 1"
+        for: 1m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "Lần backup gần nhất thất bại"
+          description: "Kiểm truyền, checksum, restore và registry. Giữ backup tốt trước đó."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastBackupStale
+        expr: "time() - goldcast_jenkins_job_last_success_timestamp_seconds{job_name=\"goldcast-backup\"} > 108000"
+        for: 10m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "Chưa có backup đã kiểm chứng trong 30 giờ"
+          description: "Kiểm cron và job backup/restore; file dump tồn tại chưa đủ chứng minh phục hồi được."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastJenkinsJobStuck
+        expr: "goldcast_jenkins_job_running_seconds{job_name=\"goldcast-ci\"} > 3900 or goldcast_jenkins_job_running_seconds{job_name=\"goldcast-backup\"} > 1500"
+        for: 5m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Job {{ $labels.job_name }} chạy vượt giới hạn dự kiến"
+          description: "Kiểm executor/SSH; không xóa release lock theo tuổi."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastPublicVersionMismatch
+        expr: "goldcast_public_release_matches_manifest == 0 and on(job,instance) goldcast_public_identity_probe_success == 1 and on(job,instance) goldcast_release_state_read_success == 1 and on(job,instance) goldcast_release_lock_exists == 0"
+        for: 2m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "Phiên bản HTTPS khác last-good"
+          description: "So manifest, frontend/backend và Caddy. Trong Deploy/G3, khóa ngăn cảnh báo nhầm chuyển tiếp."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastImageMismatch
+        expr: "goldcast_container_image_matches_manifest == 0 and on(job,instance) goldcast_release_lock_exists == 0"
+        for: 2m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "Image {{ $labels.service }} khác manifest"
+          description: "Không sửa manifest theo container lỗi; xác minh release và dùng quy trình phục hồi."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastReleaseLockStuck
+        expr: "goldcast_release_lock_age_seconds > 1200"
+        for: 5m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Khóa release/backup tồn tại quá 20 phút"
+          description: "Kiểm owner, build và tiến trình đã dừng; chỉ sau đó mới recover, không tự xóa khóa."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
