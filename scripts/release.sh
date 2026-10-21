@@ -63,10 +63,15 @@ validate_manifest() {
     ' "$manifest_release/release.env"
 }
 compose() {
+    (
+    # Compose gives exported variables precedence over --env-file. The tested
+    # manifest must remain authoritative, including when rolling back in CI.
+    unset BACKEND_IMAGE FRONTEND_IMAGE RELEASE_ID
     validate_manifest "$release" --allow-legacy
     runtime_env="$release/runtime.env"
     test -f "$runtime_env" || runtime_env="$root/.env"
     docker compose --env-file "$runtime_env" --env-file "$release/release.env" -p "$project" -f "$release/docker-compose.prod.yml" "$@"
+    )
 }
 freeze_env() {
     if [ ! -f "$release/runtime.env" ]; then

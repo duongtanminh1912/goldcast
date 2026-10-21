@@ -24,6 +24,10 @@ class ReleaseTest(unittest.TestCase):
         docker.write_text('''#!/bin/sh
 printf '%s\\n' "$*" >> "$GOLDCAST_ROOT/docker.log"
 case "$*" in
+  'compose '*)
+    if [ "${MOCK_ENFORCE_MANIFEST_ENV:-0}" = 1 ] && [ -n "${BACKEND_IMAGE:-}${FRONTEND_IMAGE:-}${RELEASE_ID:-}" ]; then exit 1; fi;;
+esac
+case "$*" in
   *'ps -q backend'*) echo backend;;
   *'ps -q frontend'*) echo frontend;;
   *'health/readiness'*) echo '{"status":"UP"}';;
@@ -69,6 +73,12 @@ exec /bin/{command} "$@"
         self.assertNotEqual(self.run_release('validate').returncode, 0)
         self.assertFalse((self.root / '.release-lock').exists())
         self.assertFalse((self.root / 'docker.log').exists())
+
+    def test_exported_image_and_identity_cannot_override_the_manifest(self):
+        result = self.run_release('deploy', MOCK_ENFORCE_MANIFEST_ENV='1',
+                                  BACKEND_IMAGE='untrusted:latest', FRONTEND_IMAGE='wrong:latest',
+                                  RELEASE_ID='wrong-release')
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_invalid_candidate_manifest_is_rejected_before_any_deploy_side_effect(self):
         manifest = self.new / 'release.env'

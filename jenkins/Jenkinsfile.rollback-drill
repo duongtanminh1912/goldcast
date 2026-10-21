@@ -38,7 +38,8 @@ pipeline {
     }
     post {
         unsuccessful { sh 'sh scripts/rollback-drill.sh rollback' }
-        always {
+        // Declarative always runs BEFORE unsuccessful; cleanup runs last.
+        cleanup {
             sh 'sh scripts/rollback-drill.sh cleanup'
             archiveArtifacts artifacts: 'rollback-evidence.txt,rollback-containers.log', allowEmptyArchive: true
         }

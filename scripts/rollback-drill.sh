@@ -2,6 +2,8 @@
 # An isolated, real-Docker rehearsal. No VPS, host ports or production volumes.
 set -eu
 operation=${1:?prepare|fail-g3|rollback|cleanup}
+# Jenkins parameters are exported; they must not override the baseline manifest.
+unset BACKEND_IMAGE FRONTEND_IMAGE RELEASE_ID
 : "${WORKSPACE:?Run in a Jenkins workspace}"
 : "${BUILD_NUMBER:?}"
 case "$BUILD_NUMBER" in ''|*[!0-9]*) exit 2;; esac
