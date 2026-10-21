@@ -3,7 +3,7 @@
 
 Các mục theo tuần ghi lại trạng thái tại thời điểm thực hiện. Những mô tả như
 G2 chạy sau deploy, `THE_TAG`, số stage và thời lượng build ở tuần 10–11 thuộc
-pipeline cũ. Các cải tiến ngày 17–18/10/2026 và lần chạy đầy đủ #58 trên main
+pipeline cũ. Các cải tiến ngày 17–21/10/2026 và lần chạy đầy đủ #58 trên main
 được ghi riêng ở cuối file; hướng dẫn vận hành hiện hành nằm trong
 [tutorial](tutorial.md#b10-g1--build--g2--deploy--g3).
 
@@ -1258,3 +1258,46 @@ này thuộc lần sửa manifest, không thay các số 29/19 trong log Jenkins
 
 Theo yêu cầu, bỏ bước xử lý cảnh báo dependency Tailwind; không thay đổi
 `package.json` hoặc lockfile trong lần này.
+
+## Cải tiến vận hành ngày 21/10/2026
+
+Thực hiện lần lượt các mục đã rà soát: ghim PostgreSQL/Caddy theo digest của
+release #60; healthcheck định danh frontend và retry probe; cảnh báo dữ liệu
+cũ theo lịch giao dịch, trạng thái ingest chỉ cập nhật sau commit; giới hạn
+pipeline/SSH/lệnh remote, xoay vòng log và retention có bảo vệ bản rollback;
+script backup ngoài VPS có restore test; job Jenkins diễn tập rollback riêng.
+Chi tiết và giới hạn: [vận hành production](van-hanh-production.md).
+
+Kiểm tra local sau bản sửa: 119 test Java trên JDK 21, 46 test Python, 22 test Node và
+TypeScript typecheck đạt. Cả ba Jenkinsfile được API Jenkins xác nhận cú pháp.
+Java trong sandbox ban đầu lỗi agent attach của Mockito; chạy lại trên cùng
+JDK 21 ngoài sandbox đạt, không thay đổi test để bỏ qua lỗi.
+
+Script backup mới được chạy trên release #60: checksum, manifest, định danh
+công khai, hai manifest GHCR đạt; dump phục hồi trong PostgreSQL 16.15 tạm,
+không có mạng/cổng, có 5 instrument và 5.317 price_point, 0 forecast_run/point,
+2 migration thành công, 0 thất bại. Dữ liệu/cấu hình bí mật lưu ngoài repo.
+Đây là backup thủ công bằng script, chưa tự chứng minh lịch backup đã chạy.
+
+Diễn tập Docker local dùng baseline #58 và candidate #60 có digest khác:
+G3 từ chối định danh sai; harness local gọi rollback; image, định danh, ba
+trang, 35 phép kiểm API, con trỏ và khóa đều được xác minh. Không gọi đó là
+Jenkins tự rollback. Production vẫn giữ #60 trong các phép thử này.
+
+Tiếp đó chạy job riêng trên Jenkins: `goldcast-operations-ci #2` đạt G1/G2,
+146,355 giây, Production skipped. `goldcast-backup #1` đạt trong 33,087 giây,
+backup nằm trong named volume riêng trên máy Jenkins; cron `H 2 * * *` đã đăng
+ký. Job backup ghim commit đã kiểm chứng `c077a88`, không phụ thuộc nhánh feature.
+
+`goldcast-rollback-drill #1` ban đầu fail khi chuẩn bị baseline, phát hiện
+parameter Jenkins ghi đè env-file và `post.always` dọn trước unsuccessful.
+Bản sửa `3a20500` bảo vệ manifest khỏi biến môi trường và dọn ở `post.cleanup`.
+Diễn tập #2, FAIL_AT=G2, dừng trước deploy. #3, FAIL_AT=G3, cố ý fail tại G3,
+Jenkins tự rollback về bộ digest #60, API/ba trang/con trỏ/khóa đạt; có artifact
+PASS rồi mới dọn tài nguyên. Job #3 vẫn FAILURE theo chủ đích, 227,939 giây.
+Job diễn tập ghim `3a20500` và chỉ chạy thủ công.
+
+[Bằng chứng ngày 21/10](measurements/operations-2026-10-21/README.md) giữ log,
+JSON stage và artifact theo từng job/build. Cả hai bản dùng schema V2, không
+coi phép thử này là kiểm mọi migration hay rollback DB. Chưa merge/deploy
+runtime PR #55; VPS vẫn release #60, job `goldcast-ci` vẫn `*/main` và Poll SCM.

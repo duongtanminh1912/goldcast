@@ -2,9 +2,19 @@
 # Runs on VPS. Each release contains its own compose, Caddyfile and digest manifest.
 set -eu
 umask 077
-operation=${1:?deploy|verify|rollback|bootstrap|status|recover}
+operation=${1:?validate|deploy|verify|rollback|bootstrap|status|recover}
 release=${2:?release directory}
 root=${GOLDCAST_ROOT:-/opt/goldcast}
+# Alternate project/network/base are only for the isolated rollback rehearsal.
+# The production root always uses the production project, host network and HTTPS.
+project=goldcast
+probe_network=host
+public_base=https://goldcast.click
+if [ "$root" != /opt/goldcast ]; then
+    project=${GOLDCAST_COMPOSE_PROJECT:-goldcast}
+    probe_network=${GOLDCAST_PROBE_NETWORK:-host}
+    public_base=${GOLDCAST_PUBLIC_BASE:-https://goldcast.click}
+fi
 case "$release" in "$root"/releases/*) ;; *) echo 'Invalid release directory' >&2; exit 1;; esac
 validate_manifest() {
     manifest_release=$1
@@ -53,10 +63,15 @@ validate_manifest() {
     ' "$manifest_release/release.env"
 }
 compose() {
+    (
+    # Compose gives exported variables precedence over --env-file. The tested
+    # manifest must remain authoritative, including when rolling back in CI.
+    unset BACKEND_IMAGE FRONTEND_IMAGE RELEASE_ID
     validate_manifest "$release" --allow-legacy
     runtime_env="$release/runtime.env"
     test -f "$runtime_env" || runtime_env="$root/.env"
-    docker compose --env-file "$runtime_env" --env-file "$release/release.env" -p goldcast -f "$release/docker-compose.prod.yml" "$@"
+    docker compose --env-file "$runtime_env" --env-file "$release/release.env" -p "$project" -f "$release/docker-compose.prod.yml" "$@"
+    )
 }
 freeze_env() {
     if [ ! -f "$release/runtime.env" ]; then
@@ -86,8 +101,8 @@ verify() {
         echo 'Invalid public release identity' >&2
         return 1
     fi
-    docker run --rm -i --network host --entrypoint node "$probe_image" \
-      --input-type=module - https://goldcast.click "$public_release" < "$release/scripts/check-pages.mjs"
+    docker run --rm -i --network "$probe_network" --entrypoint node "$probe_image" \
+      --input-type=module - "$public_base" "$public_release" < "$release/scripts/check-pages.mjs"
 }
 set_phase() {
     printf '%s\n' "$1" > "$release/deploy-phase.tmp"
@@ -97,6 +112,9 @@ cleanup_lock() {
     rm "$root/.release-lock/owner" && rmdir "$root/.release-lock"
 }
 case "$operation" in
+  validate)
+    validate_manifest "$release"
+    ;;
   deploy)
     validate_manifest "$release"
     test -s "$root/.last-good-release" || { echo 'Run bootstrap against the current healthy production first' >&2; exit 1; }

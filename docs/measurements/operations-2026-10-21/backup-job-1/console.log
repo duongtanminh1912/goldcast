@@ -1,0 +1,112 @@
+Started by user Duong Tan Minh
+Obtained jenkins/Jenkinsfile.backup from git https://github.com/duongtanminh1912/goldcast.git
+[Pipeline] Start of Pipeline
+[Pipeline] node
+Running on Jenkins in /var/jenkins_home/workspace/goldcast-backup
+[Pipeline] {
+[Pipeline] stage
+[Pipeline] { (Declarative: Checkout SCM)
+[Pipeline] checkout
+Selected Git installation does not exist. Using Default
+The recommended git tool is: NONE
+No credentials specified
+Cloning the remote Git repository
+Cloning repository https://github.com/duongtanminh1912/goldcast.git
+ > git init /var/jenkins_home/workspace/goldcast-backup # timeout=10
+Fetching upstream changes from https://github.com/duongtanminh1912/goldcast.git
+ > git --version # timeout=10
+ > git --version # 'git version 2.47.3'
+ > git fetch --tags --force --progress -- https://github.com/duongtanminh1912/goldcast.git +refs/heads/*:refs/remotes/origin/* # timeout=10
+ > git config remote.origin.url https://github.com/duongtanminh1912/goldcast.git # timeout=10
+ > git config --add remote.origin.fetch +refs/heads/*:refs/remotes/origin/* # timeout=10
+Avoid second fetch
+ > git rev-parse refs/remotes/origin/fix/production-operations^{commit} # timeout=10
+Checking out Revision c077a889a75a26665f11abe5eb8bd7f55c5b35d3 (refs/remotes/origin/fix/production-operations)
+ > git config core.sparsecheckout # timeout=10
+ > git checkout -f c077a889a75a26665f11abe5eb8bd7f55c5b35d3 # timeout=10
+Commit message: "Harden release operations, data freshness and recovery verification"
+First time build. Skipping changelog.
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] withEnv
+[Pipeline] {
+[Pipeline] timeout
+Timeout set to expire in 20 min
+[Pipeline] {
+[Pipeline] stage
+[Pipeline] { (Backup and restore verification)
+[Pipeline] withCredentials
+Masking supported pattern matches of $SSH_KEY
+[Pipeline] {
+[Pipeline] sh
++ set -eu
++ docker build -f jenkins/backup.Dockerfile -t goldcast-backup-runner jenkins
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from backup.Dockerfile
+#1 transferring dockerfile: 280B 0.0s done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/python:3.13-alpine
+#2 DONE 0.0s
+
+#3 [internal] load .dockerignore
+#3 transferring context:
+#3 transferring context: 2B done
+#3 DONE 0.0s
+
+#4 [1/2] FROM docker.io/library/python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
+#4 resolve docker.io/library/python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a 0.0s done
+#4 DONE 0.0s
+
+#5 [2/2] RUN apk add --no-cache openssh-client docker-cli
+#5 1.244 (1/5) Installing docker-cli (29.8.2-r1)
+#5 1.543 (2/5) Installing openssh-keygen (10.3_p1-r1)
+#5 1.612 (3/5) Installing libedit (20260508.3.1-r1)
+#5 1.691 (4/5) Installing openssh-client-common (10.3_p1-r1)
+#5 1.789 (5/5) Installing openssh-client-default (10.3_p1-r1)
+#5 1.859 Executing busybox-1.37.0-r31.trigger
+#5 1.903 OK: 45.5 MiB in 34 packages
+#5 DONE 2.1s
+
+#6 exporting to image
+#6 exporting layers
+#6 exporting layers 1.0s done
+#6 exporting manifest sha256:59c8187adc33a64a7b87b9a9f9f67dc6f3e5ac9e7a9847bea3fb71426856f921 0.0s done
+#6 exporting config sha256:c79cbd602b84fa9eae214571a2cf1daf9234a006aca5f1b35f52fee1e745f93c 0.0s done
+#6 exporting attestation manifest sha256:f37557c5266db0164dbfa9cb45ae7e2c23ff5f5f8ef63724589efa28eba22de5 done
+#6 exporting manifest list sha256:992f259e3167afd52e41828f4361bc8cf87c7d78c53fa1240d6a1a0f38be10bd done
+#6 naming to docker.io/library/goldcast-backup-runner:latest done
+#6 unpacking to docker.io/library/goldcast-backup-runner:latest
+#6 unpacking to docker.io/library/goldcast-backup-runner:latest 0.2s done
+#6 DONE 1.3s
++ basename ****
++ BACKUP_KEY_NAME=file15897408262714242506.tmp
++ export BACKUP_KEY_NAME
++ dirname ****
++ docker run --rm -i -e BACKUP_KEY_NAME -v /var/run/docker.sock:/var/run/docker.sock -v goldcast-private-backups:/backups goldcast-backup-runner sh -ec 
+                              mkdir /src; cd /src; tar -xf -
+                              chmod 600 "$BACKUP_KEY_NAME"
+                              python3 scripts/backup.py --key "/src/$BACKUP_KEY_NAME" --known-hosts /src/.ssh/known_hosts --destination /backups/goldcast
+                              python3 scripts/retention.py backup /backups/goldcast --keep 14 --apply
++ COPYFILE_DISABLE=1 tar -cf - scripts -C /var/jenkins_home .ssh/known_hosts -C /var/jenkins_home/workspace/goldcast-backup@tmp/secretFiles/302a4784-da2d-4e46-bbdb-e3b105273cab file15897408262714242506.tmp
+BACKUP_DIRECTORY=/backups/goldcast/goldcast-backup-20261021T115950Z
+Capturing release and database under the deployment lock...
+Remote backup complete: /opt/goldcast/backups/offsite-20261021T115951Z.yz1CU8
+Archive, configuration, release identity and SHA-256 checks passed.
+Restoring into a temporary PostgreSQL 16 container; no network or published ports...
+Restore check passed: {"server_version": "16.15", "instrument": 5, "price_point": 5317, "forecast_run": 0, "forecast_point": 0, "flyway_successes": 2, "flyway_failures": 0}
+GHCR manifest checks: both accessible
+VERIFIED_BACKUP_DIRECTORY=/backups/goldcast/goldcast-backup-20261021T115950Z
+[Pipeline] }
+[Pipeline] // withCredentials
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // timeout
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] End of Pipeline
+Finished: SUCCESS

@@ -16,7 +16,8 @@ sang cơ chế release cần bootstrap một lần; xem [tutorial](docs/tutorial
 
 Nếu bạn tới đây để xem cách dựng một pipeline CI/CD từ con số không:
 [Quy trình DevOps](#quy-trình-devops) · [nhật ký từng tuần](docs/nhat-ky.md) ·
-[số liệu đo được](docs/so-lieu-chuong-3.md) · [hướng dẫn dựng lại từ đầu](docs/tutorial.md)
+[số liệu đo được](docs/so-lieu-chuong-3.md) · [hướng dẫn dựng lại từ đầu](docs/tutorial.md) ·
+[vận hành và backup](docs/van-hanh-production.md)
 
 ---
 

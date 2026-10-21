@@ -1,14 +1,23 @@
 # Số liệu chương 3 — Đánh giá pipeline G1/G2/G3 và đối chiếu Jenkins với GitHub Actions
 
-Cập nhật theo cấu hình trong repo ngày **18/10/2026**. Tài liệu tập trung vào
+Cập nhật cấu hình ngày **21/10/2026**; các số đo Jenkins dưới đây giữ nguyên
+thời điểm thực hiện, không gán cho bản sửa mới. Tài liệu tập trung vào
 luồng **G1 → build image → G2 → Deploy → G3**, kết quả đã đo và giới hạn của
 bằng chứng. Quá trình thử nghiệm theo tuần nằm trong [nhật ký](nhat-ky.md);
 hướng dẫn vận hành nằm trong [tutorial](tutorial.md#b10-g1--build--g2--deploy--g3).
 
-Bằng chứng Jenkins mới được lưu trong repo là **build #58 trên `main`**, commit
+Bằng chứng Deploy/G3 production được lưu trong repo là **build #58 trên `main`**, commit
 `a58f2cc`: G1, build image, G2, Deploy và G3 đều thành công. Có thêm phép thử
 rollback thật trên VPS khi cấu hình định danh frontend sai. Build #55 và các
 bảng pipeline cũ được giữ để truy nguyên, không ghép thành cùng một lần đo.
+
+Đợt cải tiến vận hành bổ sung pin PostgreSQL/Caddy, healthcheck frontend,
+retry G3 có giới hạn, cảnh báo dữ liệu cũ, timeout/retention, script backup
+và job rollback biệt lập. Xem [phạm vi và bằng chứng](van-hanh-production.md).
+Các job mới đã chạy và lưu riêng trong
+[bộ kiểm chứng 21/10](measurements/operations-2026-10-21/README.md): CI nhánh
+mới, backup có restore, G2 chặn trước deploy và G3 tự rollback biệt lập. Không
+thay thời lượng #58 bằng các build feature/diễn tập hoặc kết quả local.
 
 ## 1. Phạm vi và phương pháp đo
 
@@ -264,9 +273,9 @@ các tác vụ chưa từng được chạy ở nơi khác ngoài những mẫu 
 | Câu hỏi | Bằng chứng cần thu | Hiện có |
 |---|---|---|
 | Toàn luồng chạy được trên `main`? | Commit, URL/số build, trạng thái tất cả stage và artifact `release.env` | #58 đạt toàn luồng; có log, Graph View và manifest |
-| G2 chặn release lỗi trước production? | Build G2 cố tình lỗi, Deploy bị bỏ qua, manifest production trước/sau không đổi | Có thử smoke cũ và các ca G2 thành công; chưa có ca Jenkins/VPS tương ứng |
+| G2 chặn release lỗi trước production? | Build G2 cố tình lỗi, Deploy bị bỏ qua, manifest production trước/sau không đổi | Job diễn tập #2 ngày 21/10 chặn định danh không hợp lệ ở G2, Deploy/G3 skipped; chưa tiêm lỗi trong job main trên VPS |
 | Production dùng đúng image đã qua G2? | Manifest digest, image ID container và log G3 cùng release | #58 có đủ; log rollback VPS cũng ghi lại image ID/trạng thái sau khôi phục |
-| G3 lỗi có rollback về bản trước? | Bản trước đã lưu, log G3 lỗi, rollback và xác minh, con trỏ bản tốt sau cùng | Đã thử lỗi định danh frontend và rollback cấu hình thật sau #58; chưa thử digest khác hoặc Jenkins tự gọi rollback |
+| G3 lỗi có rollback về bản trước? | Bản trước đã lưu, log G3 lỗi, rollback và xác minh, con trỏ bản tốt sau cùng | Thủ công trên VPS sau #58; thêm job diễn tập #3 ngày 21/10 tự rollback sang digest khác và có artifact PASS, trong môi trường riêng |
 | Build gián đoạn có phục hồi được? | Metadata build, `status`, xác nhận đã dừng và output `recover` | Mới có test mô phỏng |
 | Thời lượng ổn định của luồng mới? | Các lần chạy cùng commit/điều kiện cache, thời lượng từng stage và toàn build | 1 mẫu #55 skipped và 1 mẫu #58 đầy đủ; khác commit/cache nên không lấy trung bình chung |
 
@@ -295,7 +304,28 @@ thành công của toàn luồng.
   trình duyệt và chưa thay thế giám sát dài hạn.
 - Khóa không tự hết hạn; recovery cần xác nhận build/deploy đã dừng. Khóa
   thiếu owner ở một số trạng thái cần điều tra thủ công.
-- Chưa có số đo lưu trữ hoặc chính sách dọn release/image cũ cho luồng mới.
+- Có retention bảo vệ release/backup và giới hạn log/build; chưa đo hiệu quả
+  dung lượng dài hạn, chưa tự xóa Docker image/package còn có thể cần phục hồi.
+
+## 8. Kiểm chứng vận hành ngày 21/10/2026
+
+| Job/build | Phạm vi | Kết quả | Giây |
+|---|---|---|---:|
+| `goldcast-operations-ci #2`, `3a20500` | G1, build, hai ca G2 qua Caddy HTTP; Production skipped | SUCCESS; 119 Java, 46 Python, 22 Node, typecheck | 146,355 |
+| `goldcast-backup #1`, `c077a88` | Release #60, truyền ngoài VPS và restore PostgreSQL riêng | SUCCESS; 5 instrument, 5.317 price_point, 2 migration thành công | 33,087 |
+| `goldcast-rollback-drill #2`, `3a20500` | Cố ý lỗi định danh đầu vào G2 | FAILURE chủ đích; Deploy/G3 skipped | 4,273 |
+| `goldcast-rollback-drill #3`, `3a20500` | Candidate của CI #2, baseline production #60 dựng trong mạng/DB riêng | FAILURE chủ đích ở G3; post.unsuccessful tự rollback và artifact PASS | 227,939 |
+
+Nguồn [log/API/artifact](measurements/operations-2026-10-21/README.md). Ca G3
+có hai bộ digest khác nhau, kiểm lại image, định danh, ba trang, 35 phép kiểm
+API, con trỏ và khóa trước dọn tài nguyên. Không cộng thời lượng ca lỗi này
+vào trung bình build thành công. Baseline/candidate cùng schema V2; chưa đo
+một thay đổi schema mới hay nhánh SSH rollback tự động trên VPS.
+
+Lần diễn tập #1 thất bại ở chuẩn bị baseline, phát hiện lỗi ưu tiên env và thứ
+tự post; giữ log riêng, không tính là diễn tập đạt. Backup cron đã đăng ký
+nhưng #1 được khởi chạy thủ công, chưa có mẫu cron. Production vẫn #60,
+chưa merge/deploy runtime PR #55. Các số đo #55/#58 ở trên là lịch sử riêng.
 
 ## Phụ lục A — Thời lượng pipeline cũ
 

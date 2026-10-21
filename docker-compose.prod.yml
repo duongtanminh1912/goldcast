@@ -6,9 +6,15 @@
 #   - khong build, chi keo image tu GHCR
 #   - KHONG publish cong nao cho db/backend/frontend
 #   - chi Caddy publish 80 va 443
+# Bound per-container logs; release retention is an explicit maintenance command.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     container_name: goldcast-db
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -22,6 +28,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    logging: *logging
     restart: unless-stopped
 
   backend:
@@ -49,6 +56,7 @@ services:
       retries: 20
       # 60s chu khong 40s: 1 vCPU khoi dong JVM cham hon may ca nhan.
       start_period: 60s
+    logging: *logging
     restart: unless-stopped
 
   frontend:
@@ -61,13 +69,21 @@ services:
       API_BASE_URL_INTERNAL: http://backend:8080
       GOLDCAST_RELEASE_ID: ${RELEASE_ID:?Set RELEASE_ID from release.env}
       TZ: Asia/Ho_Chi_Minh
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/release',{signal:AbortSignal.timeout(5000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 8s
+      retries: 30
+      start_period: 15s
+    logging: *logging
     restart: unless-stopped
 
   caddy:
-    image: caddy:2-alpine
+    image: caddy@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
     container_name: goldcast-caddy
     depends_on:
-      - frontend
+      frontend:
+        condition: service_healthy
     ports:
       - "80:80"
       - "443:443"
@@ -75,6 +91,7 @@ services:
       - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
+    logging: *logging
     restart: unless-stopped
 
 volumes:

@@ -581,6 +581,8 @@ phải khớp artifact Jenkins. Nhánh khác `main` vẫn chạy G1/build/G2 nh�
   cùng image ở target mới nhất. `assert-upgrade.sql` kiểm migration và dữ liệu
   cũ còn nguyên; smoke API và các trang cũng phải đạt sau nâng cấp.
   Log được in khi lỗi; container, mạng và dữ liệu tạm được dọn khi kết thúc.
+  PostgreSQL/Caddy được ghim digest như production; kiểm trang đi qua Caddy
+  HTTP trong mạng CI. HTTPS thật được kiểm ở G3.
 - **Deploy:** chỉ `main`, dùng đúng hai digest đã qua G2, cấu hình release được
   truyền từ workspace Jenkins qua SSH; không `git pull` mã mới trên VPS.
 - **G3:** đợi ứng dụng sẵn sàng, so image ID container với digest mong đợi,
@@ -588,6 +590,10 @@ phải khớp artifact Jenkins. Nhánh khác `main` vẫn chạy G1/build/G2 nh�
   `/api/release` phải trả `releaseId` và `backendReleaseId` bằng `RELEASE_ID`
   trong manifest; endpoint thiếu, backend sai bản hoặc trang từ bản cũ đều lỗi.
   Chỉ khi tất cả đạt mới ghi nguyên tử `.last-good-release`.
+
+Frontend production có healthcheck định danh, Caddy đợi frontend healthy.
+Giới hạn thời gian, retention, cảnh báo dữ liệu cũ, backup định kỳ và job diễn
+tập rollback riêng được mô tả trong [vận hành production](van-hanh-production.md).
 
 Khi bắt đầu deploy, đường dẫn bản tốt trước đó được lưu cố định trong
 `<release>/previous-good-release`, `.env` được giữ riêng trong `runtime.env`.

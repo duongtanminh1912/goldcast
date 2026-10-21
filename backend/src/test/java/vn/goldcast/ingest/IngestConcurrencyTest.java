@@ -8,10 +8,13 @@ import org.springframework.transaction.support.SimpleTransactionStatus;
 import vn.goldcast.api.AdminController;
 import vn.goldcast.api.ApiExceptionHandler;
 import vn.goldcast.config.AppProperties;
+import vn.goldcast.domain.Instrument;
 import vn.goldcast.repository.InstrumentRepository;
 import vn.goldcast.repository.PricePointRepository;
 
 import java.util.List;
+import java.time.LocalDate;
+import java.math.BigDecimal;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -87,12 +90,46 @@ class IngestConcurrencyTest {
     void failedCommitDoesNotLeaveIngestPermanentlyLocked() {
         doThrow(new TransactionSystemException("commit failed")).doNothing().when(transactions).commit(any());
         assertThrows(TransactionSystemException.class, service::run);
+        assertTrue(service.status().lastTransactionFailed());
+        assertNull(service.status().lastCommittedReport());
+        assertTrue(service.status().lastProviderSuccess().isEmpty());
         assertNotNull(service.run());
+        assertFalse(service.status().lastTransactionFailed());
+        assertNotNull(service.status().lastAttempt());
+        assertNotNull(service.status().lastCommittedReport());
     }
 
     @Test
     void busyManualRequestMapsToHttp409() {
         var problem = new ApiExceptionHandler().ingestInProgress(new IngestAlreadyRunningException());
         assertEquals(409, problem.getStatus());
+    }
+
+    @Test
+    void emptyOrFailedFeedDoesNotOverwriteLastSuccessfulFetch() {
+        var instrument = mock(Instrument.class);
+        when(instrument.getCode()).thenReturn("XAUUSD");
+        when(instrument.getSource()).thenReturn("feed");
+        when(instrument.getId()).thenReturn(1L);
+        when(instruments.findByActiveTrueOrderBySortOrderAscCodeAsc()).thenReturn(List.of(instrument));
+        var provider = mock(PriceProvider.class);
+        when(provider.id()).thenReturn("feed");
+        when(provider.enabled()).thenReturn(true);
+        when(provider.fetch(any(), anyInt()))
+                .thenReturn(List.of(ProviderQuote.single("XAUUSD", LocalDate.now(), BigDecimal.TEN)))
+                .thenReturn(List.of())
+                .thenThrow(new IllegalStateException("feed unavailable"));
+        service = new IngestService(instruments, mock(PricePointRepository.class), List.of(provider),
+                mock(SyntheticSeedGenerator.class), properties, transactions);
+        service.run();
+        var success = service.status().lastProviderSuccess().get("feed");
+        assertNotNull(success);
+        service.run();
+        assertEquals(success, service.status().lastProviderSuccess().get("feed"));
+        assertEquals(0, service.status().lastCommittedReport().providers().getFirst().quotes());
+        service.run();
+        assertEquals(success, service.status().lastProviderSuccess().get("feed"));
+        assertFalse(service.status().lastTransactionFailed());
+        assertTrue(service.status().lastCommittedReport().providers().getFirst().message().startsWith("Lỗi:"));
     }
 }

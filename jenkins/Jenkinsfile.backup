@@ -1,0 +1,38 @@
+// Separate job on the Jenkins host, outside the VPS failure domain.
+pipeline {
+    agent any
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 20, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '30'))
+    }
+    triggers { cron('H 2 * * *') }
+    stages {
+        stage('Backup and restore verification') {
+            steps {
+                withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
+                    // Never archive private configuration or database dumps as public artifacts.
+                    sh '''
+                        set -eu
+                        docker build -f jenkins/backup.Dockerfile -t goldcast-backup-runner jenkins
+                        BACKUP_KEY_NAME=$(basename "$SSH_KEY")
+                        export BACKUP_KEY_NAME
+                        COPYFILE_DISABLE=1 tar -cf - scripts -C "$HOME" .ssh/known_hosts -C "$(dirname "$SSH_KEY")" "$BACKUP_KEY_NAME" |
+                          docker run --rm -i -e BACKUP_KEY_NAME \
+                            -v /var/run/docker.sock:/var/run/docker.sock \
+                            -v goldcast-private-backups:/backups goldcast-backup-runner sh -ec '
+                              mkdir /src; cd /src; tar -xf -
+                              chmod 600 "$BACKUP_KEY_NAME"
+                              python3 scripts/backup.py --key "/src/$BACKUP_KEY_NAME" --known-hosts /src/.ssh/known_hosts --destination /backups/goldcast
+                              python3 scripts/retention.py backup /backups/goldcast --keep 14 --apply'
+                    '''
+                }
+            }
+        }
+    }
+    post {
+        unsuccessful {
+            echo 'BACKUP FAILED: inspect this job; the last verified backups have been retained.'
+        }
+    }
+}

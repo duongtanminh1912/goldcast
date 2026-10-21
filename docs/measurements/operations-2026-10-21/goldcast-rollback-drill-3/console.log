@@ -1,0 +1,493 @@
+Started by user Duong Tan Minh
+Obtained jenkins/Jenkinsfile.rollback-drill from git https://github.com/duongtanminh1912/goldcast.git
+[Pipeline] Start of Pipeline
+[Pipeline] node
+Running on Jenkins in /var/jenkins_home/workspace/goldcast-rollback-drill
+[Pipeline] {
+[Pipeline] stage
+[Pipeline] { (Declarative: Checkout SCM)
+[Pipeline] checkout
+Selected Git installation does not exist. Using Default
+The recommended git tool is: NONE
+No credentials specified
+ > git rev-parse --resolve-git-dir /var/jenkins_home/workspace/goldcast-rollback-drill/.git # timeout=10
+Fetching changes from the remote Git repository
+ > git config remote.origin.url https://github.com/duongtanminh1912/goldcast.git # timeout=10
+Fetching upstream changes from https://github.com/duongtanminh1912/goldcast.git
+ > git --version # timeout=10
+ > git --version # 'git version 2.47.3'
+ > git fetch --tags --force --progress -- https://github.com/duongtanminh1912/goldcast.git +refs/heads/*:refs/remotes/origin/* # timeout=10
+ > git rev-parse refs/remotes/origin/fix/production-operations^{commit} # timeout=10
+Checking out Revision 3a205000928fe863404e0d501ad6f4a5c3e07c5f (refs/remotes/origin/fix/production-operations)
+ > git config core.sparsecheckout # timeout=10
+ > git checkout -f 3a205000928fe863404e0d501ad6f4a5c3e07c5f # timeout=10
+Commit message: "Preserve manifest authority and roll back before rehearsal cleanup"
+ > git rev-list --no-walk 3a205000928fe863404e0d501ad6f4a5c3e07c5f # timeout=10
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] withEnv
+[Pipeline] {
+[Pipeline] timeout
+Timeout set to expire in 25 min
+[Pipeline] {
+[Pipeline] stage
+[Pipeline] { (Recheck candidate G2)
+[Pipeline] sh
++ set -eu
++ rm -f rollback-evidence.txt rollback-containers.log
++ printf RELEASE_ID=%s\nBACKEND_IMAGE=%s\nFRONTEND_IMAGE=%s\n 3a205000928fe863404e0d501ad6f4a5c3e07c5f-0b98c4011c3d-2 ghcr.io/duongtanminh1912/goldcast-backend@sha256:9da3c031730a30b0501a86d00afdfbf3445578de600c2684071450db6fc80e7a ghcr.io/duongtanminh1912/goldcast-frontend@sha256:bbbd727bb8871471ac83825ee4cbc9cf6bccda1471c1ac41faa2ecddc97e6770
++ [ G3 = G2 ]
++ printf %s goldcast-rollback-drill
++ cksum
++ awk {print $1}
++ job_key=2636603361
++ export CI_PROJECT=drill-g2-2636603361-3
++ sh scripts/g2.sh
+ Network drill-g2-2636603361-3_default  Creating
+ Network drill-g2-2636603361-3_default  Created
+ Container drill-g2-2636603361-3-db-1  Creating
+ Container drill-g2-2636603361-3-db-1  Created
+ Container drill-g2-2636603361-3-backend-1  Creating
+ Container drill-g2-2636603361-3-backend-1  Created
+ Container drill-g2-2636603361-3-frontend-1  Creating
+ Container drill-g2-2636603361-3-frontend-1  Created
+ Container drill-g2-2636603361-3-caddy-1  Creating
+ Container drill-g2-2636603361-3-caddy-1  Created
+ Container drill-g2-2636603361-3-db-1  Starting
+ Container drill-g2-2636603361-3-db-1  Started
+ Container drill-g2-2636603361-3-db-1  Waiting
+ Container drill-g2-2636603361-3-db-1  Healthy
+ Container drill-g2-2636603361-3-backend-1  Starting
+ Container drill-g2-2636603361-3-backend-1  Started
+ Container drill-g2-2636603361-3-backend-1  Waiting
+ Container drill-g2-2636603361-3-backend-1  Healthy
+ Container drill-g2-2636603361-3-frontend-1  Starting
+ Container drill-g2-2636603361-3-frontend-1  Started
+ Container drill-g2-2636603361-3-frontend-1  Waiting
+ Container drill-g2-2636603361-3-frontend-1  Healthy
+ Container drill-g2-2636603361-3-caddy-1  Starting
+ Container drill-g2-2636603361-3-caddy-1  Started
+ Container drill-g2-2636603361-3-frontend-1  Waiting
+ Container drill-g2-2636603361-3-caddy-1  Waiting
+ Container drill-g2-2636603361-3-db-1  Waiting
+ Container drill-g2-2636603361-3-backend-1  Waiting
+ Container drill-g2-2636603361-3-caddy-1  Healthy
+ Container drill-g2-2636603361-3-frontend-1  Healthy
+ Container drill-g2-2636603361-3-backend-1  Healthy
+ Container drill-g2-2636603361-3-db-1  Healthy
+DO
+Smoke test GoldCast  --  BASE_URL = http://backend:8080
+
+[1] GET /api/v1/instruments
+  OK    tra ve mang khong rong
+  OK    moi kind nam trong InstrumentKind
+  OK    moi instrument co code va name
+
+[2] GET /api/v1/market/summary
+  OK    world.usdPerOunce > 0
+  OK    fx.vndPerUsd > 0
+  OK    domestic khong rong
+  OK    moi gia vang trong nuoc deu duong
+  OK    quy doi: tael = gram x taelInGrams
+  OK    quy doi: gram = usdPerOunce x vndPerUsd / troyOunceInGrams
+  OK    quy doi: chi = tael / 10  (kien thuc ngoai)
+  OK    hang so: taelInGrams = 37,5  (kien thuc ngoai)
+  OK    hang so: troyOunceInGrams = 31,1034768  (kien thuc ngoai)
+  OK    generatedAt doc duoc va cach hien tai duoi 24h
+
+[3] GET /api/v1/models
+  OK    tra ve mang khong rong
+        id tra ve: ["NAIVE","DRIFT","SMA","HOLT_DAMPED","AR_DIFF","AUTO"]
+  OK    moi id co dang hang enum CHU_HOA_GACH_DUOI
+  OK    co it nhat 5 mo hinh
+  OK    co mo hinh NAIVE lam moc so sanh
+  OK    moi mo hinh co label
+
+[4] Forecast contract and prediction intervals
+  OK    forecast instrument/model/horizon
+  OK    forecast has seven steps
+  OK    forecast accuracy and warnings contract
+  OK    forecast step 1: finite ordered intervals
+  OK    NAIVE step 1: equals last close
+  OK    forecast step 2: finite ordered intervals
+  OK    NAIVE step 2: equals last close
+  OK    forecast step 3: finite ordered intervals
+  OK    NAIVE step 3: equals last close
+  OK    forecast step 4: finite ordered intervals
+  OK    NAIVE step 4: equals last close
+  OK    forecast step 5: finite ordered intervals
+  OK    NAIVE step 5: equals last close
+  OK    forecast step 6: finite ordered intervals
+  OK    NAIVE step 6: equals last close
+  OK    forecast step 7: finite ordered intervals
+  OK    NAIVE step 7: equals last close
+
+35 phep thu, 0 hong.
+Tat ca dat.
+OK public release 3a205000928fe863404e0d501ad6f4a5c3e07c5f-0b98c4011c3d-2
+OK page /
+OK page /instruments/XAUUSD
+OK page /forecast/XAUUSD?model=NAIVE&horizon=7
+ Container drill-g2-2636603361-3-caddy-1  Stopping
+ Container drill-g2-2636603361-3-caddy-1  Stopped
+ Container drill-g2-2636603361-3-caddy-1  Removing
+ Container drill-g2-2636603361-3-caddy-1  Removed
+ Container drill-g2-2636603361-3-frontend-1  Stopping
+ Container drill-g2-2636603361-3-frontend-1  Stopped
+ Container drill-g2-2636603361-3-frontend-1  Removing
+ Container drill-g2-2636603361-3-frontend-1  Removed
+ Container drill-g2-2636603361-3-backend-1  Stopping
+ Container drill-g2-2636603361-3-backend-1  Stopped
+ Container drill-g2-2636603361-3-backend-1  Removing
+ Container drill-g2-2636603361-3-backend-1  Removed
+ Container drill-g2-2636603361-3-db-1  Stopping
+ Container drill-g2-2636603361-3-db-1  Stopped
+ Container drill-g2-2636603361-3-db-1  Removing
+ Container drill-g2-2636603361-3-db-1  Removed
+ Network drill-g2-2636603361-3_default  Removing
+ Network drill-g2-2636603361-3_default  Removed
+ Network drill-g2-2636603361-3_default  Creating
+ Network drill-g2-2636603361-3_default  Created
+ Container drill-g2-2636603361-3-db-1  Creating
+ Container drill-g2-2636603361-3-db-1  Created
+ Container drill-g2-2636603361-3-backend-1  Creating
+ Container drill-g2-2636603361-3-backend-1  Created
+ Container drill-g2-2636603361-3-db-1  Starting
+ Container drill-g2-2636603361-3-db-1  Started
+ Container drill-g2-2636603361-3-db-1  Waiting
+ Container drill-g2-2636603361-3-db-1  Healthy
+ Container drill-g2-2636603361-3-backend-1  Starting
+ Container drill-g2-2636603361-3-backend-1  Started
+ Container drill-g2-2636603361-3-db-1  Waiting
+ Container drill-g2-2636603361-3-backend-1  Waiting
+ Container drill-g2-2636603361-3-db-1  Healthy
+ Container drill-g2-2636603361-3-backend-1  Healthy
+DO
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+INSERT 0 1
+ Container drill-g2-2636603361-3-backend-1  Stopping
+ Container drill-g2-2636603361-3-backend-1  Stopped
+ Container drill-g2-2636603361-3-backend-1  Recreate
+ Container drill-g2-2636603361-3-backend-1  Recreated
+ Container drill-g2-2636603361-3-frontend-1  Creating
+ Container drill-g2-2636603361-3-frontend-1  Created
+ Container drill-g2-2636603361-3-backend-1  Starting
+ Container drill-g2-2636603361-3-backend-1  Started
+ Container drill-g2-2636603361-3-backend-1  Waiting
+ Container drill-g2-2636603361-3-backend-1  Healthy
+ Container drill-g2-2636603361-3-frontend-1  Starting
+ Container drill-g2-2636603361-3-frontend-1  Started
+ Container drill-g2-2636603361-3-frontend-1  Waiting
+ Container drill-g2-2636603361-3-backend-1  Waiting
+ Container drill-g2-2636603361-3-backend-1  Healthy
+ Container drill-g2-2636603361-3-frontend-1  Healthy
+ Container drill-g2-2636603361-3-db-1  Running
+ Container drill-g2-2636603361-3-backend-1  Running
+ Container drill-g2-2636603361-3-frontend-1  Running
+ Container drill-g2-2636603361-3-caddy-1  Creating
+ Container drill-g2-2636603361-3-caddy-1  Created
+ Container drill-g2-2636603361-3-db-1  Waiting
+ Container drill-g2-2636603361-3-db-1  Healthy
+ Container drill-g2-2636603361-3-backend-1  Waiting
+ Container drill-g2-2636603361-3-backend-1  Healthy
+ Container drill-g2-2636603361-3-frontend-1  Waiting
+ Container drill-g2-2636603361-3-frontend-1  Healthy
+ Container drill-g2-2636603361-3-caddy-1  Starting
+ Container drill-g2-2636603361-3-caddy-1  Started
+ Container drill-g2-2636603361-3-caddy-1  Waiting
+ Container drill-g2-2636603361-3-db-1  Waiting
+ Container drill-g2-2636603361-3-backend-1  Waiting
+ Container drill-g2-2636603361-3-frontend-1  Waiting
+ Container drill-g2-2636603361-3-caddy-1  Healthy
+ Container drill-g2-2636603361-3-backend-1  Healthy
+ Container drill-g2-2636603361-3-frontend-1  Healthy
+ Container drill-g2-2636603361-3-db-1  Healthy
+DO
+Smoke test GoldCast  --  BASE_URL = http://backend:8080
+
+[1] GET /api/v1/instruments
+  OK    tra ve mang khong rong
+  OK    moi kind nam trong InstrumentKind
+  OK    moi instrument co code va name
+
+[2] GET /api/v1/market/summary
+  OK    world.usdPerOunce > 0
+  OK    fx.vndPerUsd > 0
+  OK    domestic khong rong
+  OK    moi gia vang trong nuoc deu duong
+  OK    quy doi: tael = gram x taelInGrams
+  OK    quy doi: gram = usdPerOunce x vndPerUsd / troyOunceInGrams
+  OK    quy doi: chi = tael / 10  (kien thuc ngoai)
+  OK    hang so: taelInGrams = 37,5  (kien thuc ngoai)
+  OK    hang so: troyOunceInGrams = 31,1034768  (kien thuc ngoai)
+  OK    generatedAt doc duoc va cach hien tai duoi 24h
+
+[3] GET /api/v1/models
+  OK    tra ve mang khong rong
+        id tra ve: ["NAIVE","DRIFT","SMA","HOLT_DAMPED","AR_DIFF","AUTO"]
+  OK    moi id co dang hang enum CHU_HOA_GACH_DUOI
+  OK    co it nhat 5 mo hinh
+  OK    co mo hinh NAIVE lam moc so sanh
+  OK    moi mo hinh co label
+
+[4] Forecast contract and prediction intervals
+  OK    forecast instrument/model/horizon
+  OK    forecast has seven steps
+  OK    forecast accuracy and warnings contract
+  OK    forecast step 1: finite ordered intervals
+  OK    NAIVE step 1: equals last close
+  OK    forecast step 2: finite ordered intervals
+  OK    NAIVE step 2: equals last close
+  OK    forecast step 3: finite ordered intervals
+  OK    NAIVE step 3: equals last close
+  OK    forecast step 4: finite ordered intervals
+  OK    NAIVE step 4: equals last close
+  OK    forecast step 5: finite ordered intervals
+  OK    NAIVE step 5: equals last close
+  OK    forecast step 6: finite ordered intervals
+  OK    NAIVE step 6: equals last close
+  OK    forecast step 7: finite ordered intervals
+  OK    NAIVE step 7: equals last close
+
+35 phep thu, 0 hong.
+Tat ca dat.
+OK public release 3a205000928fe863404e0d501ad6f4a5c3e07c5f-0b98c4011c3d-2
+OK page /
+OK page /instruments/XAUUSD
+OK page /forecast/XAUUSD?model=NAIVE&horizon=7
+ Container drill-g2-2636603361-3-caddy-1  Stopping
+ Container drill-g2-2636603361-3-caddy-1  Stopped
+ Container drill-g2-2636603361-3-caddy-1  Removing
+ Container drill-g2-2636603361-3-caddy-1  Removed
+ Container drill-g2-2636603361-3-frontend-1  Stopping
+ Container drill-g2-2636603361-3-frontend-1  Stopped
+ Container drill-g2-2636603361-3-frontend-1  Removing
+ Container drill-g2-2636603361-3-frontend-1  Removed
+ Container drill-g2-2636603361-3-backend-1  Stopping
+ Container drill-g2-2636603361-3-backend-1  Stopped
+ Container drill-g2-2636603361-3-backend-1  Removing
+ Container drill-g2-2636603361-3-backend-1  Removed
+ Container drill-g2-2636603361-3-db-1  Stopping
+ Container drill-g2-2636603361-3-db-1  Stopped
+ Container drill-g2-2636603361-3-db-1  Removing
+ Container drill-g2-2636603361-3-db-1  Removed
+ Network drill-g2-2636603361-3_default  Removing
+ Network drill-g2-2636603361-3_default  Removed
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Deploy candidate in rehearsal)
+[Pipeline] sh
++ sh scripts/rollback-drill.sh prepare
+ Network rollback-drill-2636603361-3_default  Creating
+ Network rollback-drill-2636603361-3_default  Created
+ Container rollback-drill-2636603361-3-db-1  Creating
+ Container rollback-drill-2636603361-3-db-1  Created
+ Container rollback-drill-2636603361-3-backend-1  Creating
+ Container rollback-drill-2636603361-3-backend-1  Created
+ Container rollback-drill-2636603361-3-frontend-1  Creating
+ Container rollback-drill-2636603361-3-frontend-1  Created
+ Container rollback-drill-2636603361-3-db-1  Starting
+ Container rollback-drill-2636603361-3-db-1  Started
+ Container rollback-drill-2636603361-3-db-1  Waiting
+ Container rollback-drill-2636603361-3-db-1  Healthy
+ Container rollback-drill-2636603361-3-backend-1  Starting
+ Container rollback-drill-2636603361-3-backend-1  Started
+ Container rollback-drill-2636603361-3-backend-1  Waiting
+ Container rollback-drill-2636603361-3-backend-1  Healthy
+ Container rollback-drill-2636603361-3-frontend-1  Starting
+ Container rollback-drill-2636603361-3-frontend-1  Started
+ Container rollback-drill-2636603361-3-db-1  Waiting
+ Container rollback-drill-2636603361-3-backend-1  Waiting
+ Container rollback-drill-2636603361-3-frontend-1  Waiting
+ Container rollback-drill-2636603361-3-db-1  Healthy
+ Container rollback-drill-2636603361-3-backend-1  Healthy
+ Container rollback-drill-2636603361-3-frontend-1  Healthy
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+OK public release c31670e3d774be68ad7d279e0cc8c3f0dc62ef5c-f6650cdb917a-60
+OK page /
+OK page /instruments/XAUUSD
+OK page /forecast/XAUUSD?model=NAIVE&horizon=7
+ frontend Pulling 
+ backend Pulling 
+ caddy Pulling 
+ db Pulling 
+ db Pulled 
+ frontend Pulled 
+ caddy Pulled 
+ backend Pulled 
+ Container rollback-drill-2636603361-3-db-1  Running
+ Container rollback-drill-2636603361-3-frontend-1  Stopping
+ Container rollback-drill-2636603361-3-frontend-1  Stopped
+ Container rollback-drill-2636603361-3-backend-1  Recreate
+ Container rollback-drill-2636603361-3-backend-1  Recreated
+ Container rollback-drill-2636603361-3-frontend-1  Recreate
+ Container rollback-drill-2636603361-3-frontend-1  Recreated
+ Container rollback-drill-2636603361-3-caddy-1  Creating
+ Container rollback-drill-2636603361-3-caddy-1  Created
+ Container rollback-drill-2636603361-3-db-1  Waiting
+ Container rollback-drill-2636603361-3-db-1  Healthy
+ Container rollback-drill-2636603361-3-backend-1  Starting
+ Container rollback-drill-2636603361-3-backend-1  Started
+ Container rollback-drill-2636603361-3-backend-1  Waiting
+ Container rollback-drill-2636603361-3-backend-1  Healthy
+ Container rollback-drill-2636603361-3-frontend-1  Starting
+ Container rollback-drill-2636603361-3-frontend-1  Started
+ Container rollback-drill-2636603361-3-frontend-1  Waiting
+ Container rollback-drill-2636603361-3-frontend-1  Healthy
+ Container rollback-drill-2636603361-3-caddy-1  Starting
+ Container rollback-drill-2636603361-3-caddy-1  Started
+ Container rollback-drill-2636603361-3-frontend-1  Waiting
+ Container rollback-drill-2636603361-3-caddy-1  Waiting
+ Container rollback-drill-2636603361-3-db-1  Waiting
+ Container rollback-drill-2636603361-3-backend-1  Waiting
+ Container rollback-drill-2636603361-3-backend-1  Healthy
+ Container rollback-drill-2636603361-3-caddy-1  Healthy
+ Container rollback-drill-2636603361-3-frontend-1  Healthy
+ Container rollback-drill-2636603361-3-db-1  Healthy
+ Container rollback-drill-2636603361-3-frontend-1  Recreate
+ Container rollback-drill-2636603361-3-frontend-1  Recreated
+ Container rollback-drill-2636603361-3-frontend-1  Starting
+ Container rollback-drill-2636603361-3-frontend-1  Started
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (G3 deliberate identity failure)
+[Pipeline] sh
++ sh scripts/rollback-drill.sh fail-g3
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+file:///app/[eval1]:40
+      throw new Error(`Public release mismatch: expected ${releaseId}`);
+            ^
+
+Error: Public release mismatch: expected 3a205000928fe863404e0d501ad6f4a5c3e07c5f-0b98c4011c3d-2
+    at checkPages (file:///app/[eval1]:40:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async file:///app/[eval1]:64:3
+
+Node.js v22.23.3
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] stage
+[Pipeline] { (Declarative: Post Actions)
+[Pipeline] sh
++ sh scripts/rollback-drill.sh rollback
+ Container rollback-drill-2636603361-3-db-1  Running
+ Container rollback-drill-2636603361-3-frontend-1  Stopping
+ Container rollback-drill-2636603361-3-frontend-1  Stopped
+ Container rollback-drill-2636603361-3-backend-1  Recreate
+ Container rollback-drill-2636603361-3-backend-1  Recreated
+ Container rollback-drill-2636603361-3-caddy-1  Stopping
+ Container rollback-drill-2636603361-3-caddy-1  Stopped
+ Container rollback-drill-2636603361-3-frontend-1  Recreate
+ Container rollback-drill-2636603361-3-frontend-1  Recreated
+ Container rollback-drill-2636603361-3-caddy-1  Created
+ Container rollback-drill-2636603361-3-db-1  Waiting
+ Container rollback-drill-2636603361-3-db-1  Healthy
+ Container rollback-drill-2636603361-3-backend-1  Starting
+ Container rollback-drill-2636603361-3-backend-1  Started
+ Container rollback-drill-2636603361-3-backend-1  Waiting
+ Container rollback-drill-2636603361-3-backend-1  Healthy
+ Container rollback-drill-2636603361-3-frontend-1  Starting
+ Container rollback-drill-2636603361-3-frontend-1  Started
+ Container rollback-drill-2636603361-3-frontend-1  Waiting
+ Container rollback-drill-2636603361-3-frontend-1  Healthy
+ Container rollback-drill-2636603361-3-caddy-1  Starting
+ Container rollback-drill-2636603361-3-caddy-1  Started
+ Container rollback-drill-2636603361-3-db-1  Waiting
+ Container rollback-drill-2636603361-3-backend-1  Waiting
+ Container rollback-drill-2636603361-3-frontend-1  Waiting
+ Container rollback-drill-2636603361-3-caddy-1  Waiting
+ Container rollback-drill-2636603361-3-backend-1  Healthy
+ Container rollback-drill-2636603361-3-db-1  Healthy
+ Container rollback-drill-2636603361-3-caddy-1  Healthy
+ Container rollback-drill-2636603361-3-frontend-1  Healthy
+WARNING: The requested image's platform (linux/amd64) does not match the detected host platform (linux/arm64/v8) and no specific platform was requested
+OK public release c31670e3d774be68ad7d279e0cc8c3f0dc62ef5c-f6650cdb917a-60
+OK page /
+OK page /instruments/XAUUSD
+OK page /forecast/XAUUSD?model=NAIVE&horizon=7
+Rollback verified: /var/jenkins_home/workspace/goldcast-rollback-drill/.rollback-drill-3/releases/baseline
+Smoke test GoldCast  --  BASE_URL = http://backend:8080
+
+[1] GET /api/v1/instruments
+  OK    tra ve mang khong rong
+  OK    moi kind nam trong InstrumentKind
+  OK    moi instrument co code va name
+
+[2] GET /api/v1/market/summary
+  OK    world.usdPerOunce > 0
+  OK    fx.vndPerUsd > 0
+  OK    domestic khong rong
+  OK    moi gia vang trong nuoc deu duong
+  OK    quy doi: tael = gram x taelInGrams
+  OK    quy doi: gram = usdPerOunce x vndPerUsd / troyOunceInGrams
+  OK    quy doi: chi = tael / 10  (kien thuc ngoai)
+  OK    hang so: taelInGrams = 37,5  (kien thuc ngoai)
+  OK    hang so: troyOunceInGrams = 31,1034768  (kien thuc ngoai)
+  OK    generatedAt doc duoc va cach hien tai duoi 24h
+
+[3] GET /api/v1/models
+  OK    tra ve mang khong rong
+        id tra ve: ["NAIVE","DRIFT","SMA","HOLT_DAMPED","AR_DIFF","AUTO"]
+  OK    moi id co dang hang enum CHU_HOA_GACH_DUOI
+  OK    co it nhat 5 mo hinh
+  OK    co mo hinh NAIVE lam moc so sanh
+  OK    moi mo hinh co label
+
+[4] Forecast contract and prediction intervals
+  OK    forecast instrument/model/horizon
+  OK    forecast has seven steps
+  OK    forecast accuracy and warnings contract
+  OK    forecast step 1: finite ordered intervals
+  OK    NAIVE step 1: equals last close
+  OK    forecast step 2: finite ordered intervals
+  OK    NAIVE step 2: equals last close
+  OK    forecast step 3: finite ordered intervals
+  OK    NAIVE step 3: equals last close
+  OK    forecast step 4: finite ordered intervals
+  OK    NAIVE step 4: equals last close
+  OK    forecast step 5: finite ordered intervals
+  OK    NAIVE step 5: equals last close
+  OK    forecast step 6: finite ordered intervals
+  OK    NAIVE step 6: equals last close
+  OK    forecast step 7: finite ordered intervals
+  OK    NAIVE step 7: equals last close
+
+35 phep thu, 0 hong.
+Tat ca dat.
+[Pipeline] sh
++ sh scripts/rollback-drill.sh cleanup
+ Container rollback-drill-2636603361-3-caddy-1  Stopping
+ Container rollback-drill-2636603361-3-caddy-1  Stopped
+ Container rollback-drill-2636603361-3-caddy-1  Removing
+ Container rollback-drill-2636603361-3-caddy-1  Removed
+ Container rollback-drill-2636603361-3-frontend-1  Stopping
+ Container rollback-drill-2636603361-3-frontend-1  Stopped
+ Container rollback-drill-2636603361-3-frontend-1  Removing
+ Container rollback-drill-2636603361-3-frontend-1  Removed
+ Container rollback-drill-2636603361-3-backend-1  Stopping
+ Container rollback-drill-2636603361-3-backend-1  Stopped
+ Container rollback-drill-2636603361-3-backend-1  Removing
+ Container rollback-drill-2636603361-3-backend-1  Removed
+ Container rollback-drill-2636603361-3-db-1  Stopping
+ Container rollback-drill-2636603361-3-db-1  Stopped
+ Container rollback-drill-2636603361-3-db-1  Removing
+ Container rollback-drill-2636603361-3-db-1  Removed
+ Network rollback-drill-2636603361-3_default  Removing
+ Network rollback-drill-2636603361-3_default  Removed
+[Pipeline] archiveArtifacts
+Archiving artifacts
+[Pipeline] }
+[Pipeline] // stage
+[Pipeline] }
+[Pipeline] // timeout
+[Pipeline] }
+[Pipeline] // withEnv
+[Pipeline] }
+[Pipeline] // node
+[Pipeline] End of Pipeline
+ERROR: script returned exit code 1
+Finished: FAILURE
