@@ -13,6 +13,7 @@ import vn.goldcast.domain.PricePoint;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -43,12 +44,15 @@ public class MarketService {
 
     public MarketSummaryDto summary() {
         List<String> warnings = new ArrayList<>();
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Ho_Chi_Minh"));
 
         Instrument worldInstrument = series.requireInstrument(WORLD_CODE);
         Instrument fxInstrument = series.requireInstrument(FX_CODE);
 
         List<PricePoint> worldHistory = series.recent(worldInstrument.getId(), LOOKBACK_POINTS);
         List<PricePoint> fxHistory = series.recent(fxInstrument.getId(), LOOKBACK_POINTS);
+        addFreshnessWarning(warnings, worldInstrument, worldHistory, today);
+        addFreshnessWarning(warnings, fxInstrument, fxHistory, today);
 
         if (worldHistory.isEmpty() || fxHistory.isEmpty()) {
             warnings.add("Chưa có dữ liệu vàng thế giới hoặc tỷ giá — phần quy đổi tạm thời bị bỏ trống.");
@@ -72,10 +76,14 @@ public class MarketService {
         List<MarketSummaryDto.DomesticQuote> domestic = new ArrayList<>();
         for (Instrument instrument : series.instrumentsOfKind(InstrumentKind.VN_GOLD)) {
             List<PricePoint> history = series.recent(instrument.getId(), LOOKBACK_POINTS);
+            addFreshnessWarning(warnings, instrument, history, today);
             if (history.isEmpty()) {
                 continue;
             }
             domestic.add(buildDomestic(instrument, history, worldInstrument, fxInstrument));
+            if (PriceSeriesService.containsSynthetic(history)) {
+                warnings.add(instrument.getCode() + ": chuỗi có dữ liệu mô phỏng (synthetic).");
+            }
         }
 
         if (domestic.isEmpty()) {
@@ -86,6 +94,13 @@ public class MarketService {
         return new MarketSummaryDto(
                 OffsetDateTime.now(), world, fx, List.copyOf(domestic), conversion,
                 List.copyOf(warnings), DISCLAIMER);
+    }
+
+    private void addFreshnessWarning(List<String> warnings, Instrument instrument,
+                                     List<PricePoint> history, LocalDate today) {
+        String warning = DataFreshness.warning(instrument.getCode(), instrument.getKind(),
+                history.isEmpty() ? null : history.get(history.size() - 1).getObservedOn(), today);
+        if (warning != null) warnings.add(warning);
     }
 
     private MarketSummaryDto.WorldQuote buildWorld(Instrument instrument, List<PricePoint> history) {

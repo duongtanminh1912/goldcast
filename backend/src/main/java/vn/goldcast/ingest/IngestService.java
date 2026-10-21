@@ -43,6 +43,10 @@ public class IngestService {
     private final AppProperties properties;
     private final TransactionTemplate transactions;
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private final Map<String, OffsetDateTime> lastProviderSuccess = new HashMap<>();
+    private OffsetDateTime lastAttempt;
+    private IngestReport lastCommittedReport;
+    private boolean lastTransactionFailed;
 
     public IngestService(InstrumentRepository instruments,
                          PricePointRepository prices,
@@ -62,15 +66,39 @@ public class IngestService {
         if (!running.compareAndSet(false, true)) {
             throw new IngestAlreadyRunningException();
         }
+        synchronized (this) { lastAttempt = OffsetDateTime.now(); }
         try {
             // execute returns only after commit/rollback. Releasing the guard in
             // a @Transactional method's finally would be too early: its proxy
             // commits after the method has returned.
-            return transactions.execute(status -> ingest());
+            IngestReport report = transactions.execute(status -> ingest());
+            synchronized (this) {
+                lastCommittedReport = report;
+                lastTransactionFailed = false;
+                for (var outcome : report.providers()) {
+                    // Fetching unchanged rows is successful; an empty/failed feed is not.
+                    if (outcome.enabled() && outcome.quotes() > 0) {
+                        lastProviderSuccess.put(outcome.provider(), report.finishedAt());
+                    }
+                }
+            }
+            return report;
+        } catch (RuntimeException ex) {
+            synchronized (this) { lastTransactionFailed = true; }
+            throw ex;
         } finally {
             running.set(false);
         }
     }
+
+    /** Process-local telemetry: restart resets it; persisted quote dates remain the freshness truth. */
+    public synchronized Status status() {
+        return new Status(running.get(), lastAttempt, lastTransactionFailed,
+                Map.copyOf(lastProviderSuccess), lastCommittedReport);
+    }
+
+    public record Status(boolean running, OffsetDateTime lastAttempt, boolean lastTransactionFailed,
+                         Map<String, OffsetDateTime> lastProviderSuccess, IngestReport lastCommittedReport) {}
 
     private IngestReport ingest() {
         OffsetDateTime startedAt = OffsetDateTime.now();

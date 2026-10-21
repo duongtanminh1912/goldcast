@@ -1,7 +1,7 @@
 # G2: project name is unique per build; no host ports or production volumes.
 services:
   db:
-    image: postgres:16-alpine
+    image: postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     environment:
       POSTGRES_DB: goldcast
       POSTGRES_USER: goldcast
@@ -43,10 +43,16 @@ services:
       API_BASE_URL_INTERNAL: http://backend:8080
       GOLDCAST_RELEASE_ID: ${RELEASE_ID:?Set RELEASE_ID from release.env}
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/release',{signal:AbortSignal.timeout(5000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
       timeout: 10s
       retries: 30
+  caddy:
+    image: caddy@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
+    depends_on:
+      frontend:
+        condition: service_healthy
+    command: ["caddy", "reverse-proxy", "--from", ":8080", "--to", "frontend:3000"]
   probe:
     image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to a digest}
     platform: linux/amd64

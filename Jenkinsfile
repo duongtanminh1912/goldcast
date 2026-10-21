@@ -2,6 +2,8 @@ pipeline {
     agent any
     options {
         disableConcurrentBuilds()
+        timeout(time: 45, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '30', artifactNumToKeepStr: '20'))
     }
     environment {
         REG = 'ghcr.io/duongtanminh1912'
@@ -95,10 +97,10 @@ pipeline {
                             sh '''
                                 set -eu
                                 mkdir -p ~/.ssh
-                                ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "mkdir -p '$RELEASE_DIR'"
-                                COPYFILE_DISABLE=1 tar -cf - release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs |
-                                  ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "tar -xf - -C '$RELEASE_DIR'"
-                                ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "sh '$RELEASE_DIR/scripts/release.sh' deploy '$RELEASE_DIR' '$BUILD_URL'"
+                                ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new "$VPS" "mkdir -p '$RELEASE_DIR'"
+                                COPYFILE_DISABLE=1 tar -cf - release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs scripts/remote-release.sh scripts/retention.py |
+                                  ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new "$VPS" "tar -xf - -C '$RELEASE_DIR'"
+                                ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new "$VPS" "sh '$RELEASE_DIR/scripts/remote-release.sh' deploy '$RELEASE_DIR' '$BUILD_URL'"
                             '''
                         }
                     }
@@ -106,15 +108,17 @@ pipeline {
                 stage('G3 - verify and promote') {
                     steps {
                         withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
-                            sh 'ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "sh \'$RELEASE_DIR/scripts/release.sh\' verify \'$RELEASE_DIR\'"'
+                            sh 'ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new "$VPS" "sh \'$RELEASE_DIR/scripts/remote-release.sh\' verify \'$RELEASE_DIR\'"'
                         }
                     }
                 }
             }
             post {
                 unsuccessful {
-                    withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
-                        sh 'ssh -i "$SSH_KEY" -o StrictHostKeyChecking=accept-new "$VPS" "test ! -f \'$RELEASE_DIR/scripts/release.sh\' || sh \'$RELEASE_DIR/scripts/release.sh\' rollback \'$RELEASE_DIR\'"'
+                    timeout(time: 14, unit: 'MINUTES') {
+                      withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
+                        sh 'ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new "$VPS" "test ! -f \'$RELEASE_DIR/scripts/release.sh\' || sh \'$RELEASE_DIR/scripts/remote-release.sh\' rollback \'$RELEASE_DIR\'"'
+                      }
                     }
                 }
             }

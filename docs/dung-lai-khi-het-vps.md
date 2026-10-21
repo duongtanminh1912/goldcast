@@ -33,6 +33,11 @@ không phải bản sao của dữ liệu thị trường hoặc database cũ.
 
 ## 2. Trước khi để hết hạn — giữ release và dữ liệu
 
+Có thể dùng script backup tự kiểm checksum/restore và job lịch riêng trong
+[vận hành production](van-hanh-production.md#4-backup-ngoài-vps). Các lệnh
+thủ công dưới đây vẫn dùng được; không thay thế bằng chứng restore bằng việc
+chỉ kiểm file dump có dung lượng.
+
 Trên máy cá nhân, gán `IP_CU` bằng IP VPS cũ rồi chạy:
 
 ```bash

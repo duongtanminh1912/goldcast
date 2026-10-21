@@ -1,0 +1,46 @@
+// Dedicated manual job. Expected result is FAILURE; success evidence is produced
+// by post.unsuccessful after real rollback. Never invokes SSH or production.
+pipeline {
+    agent any
+    options {
+        disableConcurrentBuilds()
+        timeout(time: 25, unit: 'MINUTES')
+        buildDiscarder(logRotator(numToKeepStr: '15'))
+    }
+    parameters {
+        choice(name: 'FAIL_AT', choices: ['G3', 'G2'], description: 'Deliberate failure: rollback after G3, or stop before deployment at G2')
+        string(name: 'RELEASE_ID', description: 'Candidate release already passed G2')
+        string(name: 'BACKEND_IMAGE', description: 'Tested backend repository@sha256:digest')
+        string(name: 'FRONTEND_IMAGE', description: 'Tested frontend repository@sha256:digest')
+    }
+    stages {
+        stage('Recheck candidate G2') {
+            steps {
+                sh '''
+                    set -eu
+                    rm -f rollback-evidence.txt rollback-containers.log
+                    printf 'RELEASE_ID=%s\\nBACKEND_IMAGE=%s\\nFRONTEND_IMAGE=%s\\n' "$RELEASE_ID" "$BACKEND_IMAGE" "$FRONTEND_IMAGE" > release.env
+                    if [ "$FAIL_AT" = G2 ]; then
+                        printf 'RELEASE_ID=deliberately invalid\\n' > release.env
+                    fi
+                    job_key=$(printf '%s' "$JOB_NAME" | cksum | awk '{print $1}')
+                    export CI_PROJECT="drill-g2-$job_key-$BUILD_NUMBER"
+                    sh scripts/g2.sh
+                '''
+            }
+        }
+        stage('Deploy candidate in rehearsal') {
+            steps { sh 'sh scripts/rollback-drill.sh prepare' }
+        }
+        stage('G3 deliberate identity failure') {
+            steps { sh 'sh scripts/rollback-drill.sh fail-g3' }
+        }
+    }
+    post {
+        unsuccessful { sh 'sh scripts/rollback-drill.sh rollback' }
+        always {
+            sh 'sh scripts/rollback-drill.sh cleanup'
+            archiveArtifacts artifacts: 'rollback-evidence.txt,rollback-containers.log', allowEmptyArchive: true
+        }
+    }
+}

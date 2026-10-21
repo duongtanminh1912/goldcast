@@ -1,6 +1,7 @@
 # Số liệu chương 3 — Đánh giá pipeline G1/G2/G3 và đối chiếu Jenkins với GitHub Actions
 
-Cập nhật theo cấu hình trong repo ngày **18/10/2026**. Tài liệu tập trung vào
+Cập nhật cấu hình ngày **21/10/2026**; các số đo Jenkins dưới đây giữ nguyên
+thời điểm thực hiện, không gán cho bản sửa mới. Tài liệu tập trung vào
 luồng **G1 → build image → G2 → Deploy → G3**, kết quả đã đo và giới hạn của
 bằng chứng. Quá trình thử nghiệm theo tuần nằm trong [nhật ký](nhat-ky.md);
 hướng dẫn vận hành nằm trong [tutorial](tutorial.md#b10-g1--build--g2--deploy--g3).
@@ -9,6 +10,12 @@ Bằng chứng Jenkins mới được lưu trong repo là **build #58 trên `mai
 `a58f2cc`: G1, build image, G2, Deploy và G3 đều thành công. Có thêm phép thử
 rollback thật trên VPS khi cấu hình định danh frontend sai. Build #55 và các
 bảng pipeline cũ được giữ để truy nguyên, không ghép thành cùng một lần đo.
+
+Đợt cải tiến vận hành bổ sung pin PostgreSQL/Caddy, healthcheck frontend,
+retry G3 có giới hạn, cảnh báo dữ liệu cũ, timeout/retention, script backup
+và job rollback biệt lập. Xem [phạm vi và bằng chứng](van-hanh-production.md).
+Job đã viết chưa được tính là phép đo Jenkins; phải bổ sung số build/log sau
+khi chạy thật, không thay thế thời lượng #58 bằng kết quả local.
 
 ## 1. Phạm vi và phương pháp đo
 

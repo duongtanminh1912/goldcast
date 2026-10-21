@@ -38,3 +38,9 @@ docs/bao-cao/
 
 # Python test cache
 __pycache__/
+
+# Private backup data and isolated Jenkins rollback rehearsal state
+goldcast-backup-*/
+.rollback-drill-*/
+/rollback-evidence.txt
+/rollback-containers.log

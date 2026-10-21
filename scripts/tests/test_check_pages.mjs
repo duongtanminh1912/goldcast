@@ -51,6 +51,24 @@ test('matching frontend cannot hide an old backend behind it', async t => {
   await assert.rejects(checkPages('https://example.test', { releaseId: 'candidate-123' }), /Public release mismatch/);
 });
 
+test('temporary proxy startup failure retries and then verifies identity', async t => {
+  let calls = 0;
+  mockFetch(t, async url => {
+    if (++calls === 1) return new Response('starting', { status: 502 });
+    return url.endsWith('/api/release')
+      ? Response.json({ releaseId: 'new', backendReleaseId: 'new' }) : new Response(html);
+  });
+  await checkPages('https://example.test', { releaseId: 'new', retryDelayMs: 0 });
+  assert.equal(calls, 5);
+});
+
+test('persistent unavailable release stops after the configured retry budget', async t => {
+  let calls = 0;
+  mockFetch(t, async () => { calls++; return new Response('unavailable', { status: 503 }); });
+  await assert.rejects(checkPages('https://example.test', { releaseId: 'new', attempts: 2, retryDelayMs: 0 }), /mismatch/);
+  assert.equal(calls, 2);
+});
+
 test('legacy baseline requires HTTPS before attempting DNS or page requests', async t => {
   mockFetch(t, async () => { throw new Error('must not request'); });
   await assert.rejects(checkPages('http://127.0.0.1', { legacyLocalOrigin: true }), /requires HTTPS/);

@@ -16,12 +16,12 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-compose up -d --wait --wait-timeout 300 db backend frontend
+compose up -d --wait --wait-timeout 300 db backend frontend caddy
 # Startup applies Flyway to an empty isolated DB. Assert its history explicitly.
 compose exec -T db psql -U goldcast -d goldcast -v ON_ERROR_STOP=1 -c \
   "DO \$\$ BEGIN IF (SELECT count(*) FROM flyway_schema_history WHERE success) < 2 OR EXISTS (SELECT 1 FROM flyway_schema_history WHERE NOT success) THEN RAISE EXCEPTION 'Flyway migration failed'; END IF; END \$\$;"
 compose run --rm -T probe http://backend:8080 < scripts/smoke.mjs
-compose run --rm -T probe http://frontend:3000 "$tested_release" < scripts/check-pages.mjs
+compose run --rm -T probe http://caddy:8080 "$tested_release" < scripts/check-pages.mjs
 
 # Separate upgrade scenario: V1 schema with existing rows in every domain table.
 # Keep this baseline and its fixture tied to V1 when adding future migrations.
@@ -34,6 +34,7 @@ compose exec -T db psql -U goldcast -d goldcast -v ON_ERROR_STOP=1 < scripts/fix
 compose stop backend
 # Same candidate image, now applying all migrations to the populated V1 database.
 compose up -d --no-deps --force-recreate --wait --wait-timeout 300 backend frontend
+compose up -d --wait --wait-timeout 60 caddy
 compose exec -T db psql -U goldcast -d goldcast -v ON_ERROR_STOP=1 < scripts/fixtures/assert-upgrade.sql
 compose run --rm -T probe http://backend:8080 < scripts/smoke.mjs
-compose run --rm -T probe http://frontend:3000 "$tested_release" < scripts/check-pages.mjs
+compose run --rm -T probe http://caddy:8080 "$tested_release" < scripts/check-pages.mjs

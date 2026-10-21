@@ -38,6 +38,12 @@ public class AdminController {
         return ingestService.run();
     }
 
+    @GetMapping("/ingest/status")
+    @Operation(summary = "Lượt ingest và lần nhận dữ liệu thành công theo nguồn kể từ khi khởi động")
+    public IngestService.Status ingestStatus() {
+        return ingestService.status();
+    }
+
     @GetMapping("/providers")
     @Operation(summary = "Các nguồn dữ liệu đã đăng ký và trạng thái bật/tắt")
     public List<ProviderInfo> providers() {

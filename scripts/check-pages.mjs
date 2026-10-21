@@ -14,14 +14,27 @@ async function requireLocalOrigin(base) {
   }
 }
 
-export async function checkPages(base, { releaseId, legacyLocalOrigin = false } = {}) {
+export async function checkPages(base, { releaseId, legacyLocalOrigin = false, attempts = 5, retryDelayMs = 2000 } = {}) {
   if (!base) throw new Error('Missing base URL');
+  if (!Number.isInteger(attempts) || attempts < 1 || attempts > 10) throw new Error('Invalid attempts');
   const options = () => ({
-    signal: AbortSignal.timeout(90000), redirect: 'error',
+    signal: AbortSignal.timeout(15000), redirect: 'error',
     headers: { 'Cache-Control': 'no-cache', Pragma: 'no-cache' },
   });
+  async function request(path) {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const response = await fetch(base + path, options());
+        if (![502, 503, 504].includes(response.status) || attempt === attempts) return response;
+        await response.body?.cancel();
+      } catch (error) {
+        if (attempt === attempts) throw error;
+      }
+      await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+    }
+  }
   if (releaseId) {
-    const response = await fetch(base + '/api/release', options());
+    const response = await request('/api/release');
     const identity = response.ok ? await response.json() : {};
     if (!response.ok || identity.releaseId !== releaseId || identity.backendReleaseId !== releaseId) {
       throw new Error(`Public release mismatch: expected ${releaseId}`);
@@ -35,7 +48,7 @@ export async function checkPages(base, { releaseId, legacyLocalOrigin = false } 
     ['/instruments/XAUUSD', 'Lịch sử giá'],
     ['/forecast/XAUUSD?model=NAIVE&horizon=7', 'Chi tiết từng bước dự báo'],
   ]) {
-    const response = await fetch(base + path, options());
+    const response = await request(path);
     const html = await response.text();
     const rendered = html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, '');
     const errors = ['Không tạo được dự báo', 'Không tải được dữ liệu', 'Chưa hiển thị được dữ liệu', 'Chưa có quan sát nào'];
