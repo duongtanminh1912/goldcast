@@ -96,15 +96,19 @@
       "input_series": [
         {
           "series": "goldcast_public_release_matches_manifest{job=\"vps-node\",instance=\"vps\"}",
-          "values": "0+0x6"
+          "values": "0+0x8"
         },
         {
           "series": "goldcast_public_identity_probe_success{job=\"vps-node\",instance=\"vps\"}",
-          "values": "1+0x6"
+          "values": "1+0x8"
         },
         {
           "series": "goldcast_release_lock_exists{job=\"vps-node\",instance=\"vps\"}",
-          "values": "1 1 1 0 0 0 0"
+          "values": "1 1 1 0 0 0 0 0 0"
+        },
+        {
+          "series": "goldcast_release_state_read_success{job=\"vps-node\",instance=\"vps\"}",
+          "values": "1 1 1 0 0 1 1 1 1"
         }
       ],
       "promql_expr_test": [
@@ -120,7 +124,17 @@
         },
         {
           "expr": "count(ALERTS{alertname=\"GoldcastPublicVersionMismatch\",alertstate=\"firing\"}) or vector(0)",
-          "eval_time": "6m",
+          "eval_time": "4m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastPublicVersionMismatch\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "8m",
           "exp_samples": [
             {
               "labels": "{}",

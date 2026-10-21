@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Export only operational state. Never read runtime.env, credentials or price rows."""
 import argparse
-from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path

@@ -3,7 +3,6 @@
 import argparse
 from datetime import datetime, timedelta, timezone
 import json
-import time
 import urllib.request
 
 

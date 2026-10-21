@@ -1322,3 +1322,11 @@ Telegram đã thử một FIRING và một RESOLVED qua Alertmanager, 2 lần g�
 0 lỗi gửi. Bộ thu VPS/timer đã cài, không thay ứng dụng production trong
 bước cài đó. Chưa coi metrics backend production đã hoạt động trước khi
 candidate qua G2 và pipeline triển khai image mới. Chi tiết [monitoring](monitoring.md).
+
+Jenkins `goldcast-monitoring-ci #1` đã đạt G1/Build/G2 trong 357,961 giây,
+Production skipped. Cả hai ca G2 đều đạt metrics/release_id/tách management
+port. [Bằng chứng monitoring](measurements/monitoring-2026-10-21/README.md)
+giữ số đo riêng, không trộn với #58/#61. Đã xác minh key monitoring riêng
+bị chặn lệnh và cổng ngoài danh sách; 24 truy vấn panel không lỗi cú pháp.
+Backend metrics/readiness production vẫn chờ image mới; probe HTTPS=1,
+collector=1 và public/last-good khớp=1 ở thời điểm kiểm tra.

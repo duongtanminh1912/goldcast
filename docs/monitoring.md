@@ -49,8 +49,9 @@ vẫn có luật riêng. Job diễn tập cố ý thất bại không nằm tron
   bằng tài khoản `admin`; không dán mật khẩu/token vào issue hoặc artifact.
 - Exporter Jenkins chỉ gọi GET của hai job cho phép. Nên dùng tài khoản riêng
   có Overall/Read và Job/Read; cấu hình không thay quyền token hiện có.
-  SSH key cần cho phép forwarding tới 127.0.0.1:9091/9100; ưu tiên key riêng
-  chỉ được forward hai địa chỉ này khi tách quyền vận hành.
+  SSH key riêng bị chặn shell/exec/SFTP, PTY, agent và X11; đích local
+  forwarding giới hạn ở 127.0.0.1:9091/9100 bằng `permitopen`. Không dùng key deploy
+  toàn quyền làm secret của container monitoring.
 - Prometheus giữ tối đa 7 ngày và giới hạn TSDB 512 MB; Grafana/Alertmanager
   dùng named volume. Docker log xoay vòng 3 file × 10 MB/container.
   Cấu hình chạy được chụp ra `~/.local/share/goldcast-monitoring/releases/`,
@@ -62,7 +63,8 @@ vẫn có luật riêng. Job diễn tập cố ý thất bại không nằm tron
 Trên Mac, nhập bí mật bằng prompt ẩn; không đặt token trong dòng lệnh:
 
 ```sh
-python3 monitoring/configure.py --ssh-key "$HOME/.ssh/jenkins_deploy"
+python3 monitoring/create-forward-key.py --deploy-key "$HOME/.ssh/jenkins_deploy"
+python3 monitoring/configure.py --ssh-key "$HOME/.config/goldcast-monitoring/id_ed25519"
 sh monitoring/check.sh
 ```
 

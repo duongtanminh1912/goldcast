@@ -226,7 +226,7 @@ groups:
           description: "Kiểm executor/SSH; không xóa release lock theo tuổi."
           runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
       - alert: GoldcastPublicVersionMismatch
-        expr: "goldcast_public_release_matches_manifest == 0 and on(job,instance) goldcast_public_identity_probe_success == 1 and on(job,instance) goldcast_release_lock_exists == 0"
+        expr: "goldcast_public_release_matches_manifest == 0 and on(job,instance) goldcast_public_identity_probe_success == 1 and on(job,instance) goldcast_release_state_read_success == 1 and on(job,instance) goldcast_release_lock_exists == 0"
         for: 2m
         labels: {severity: critical, site: goldcast}
         annotations:

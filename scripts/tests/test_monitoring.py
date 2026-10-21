@@ -46,6 +46,10 @@ class JenkinsMetricsTest(unittest.TestCase):
         output = jenkins.render('goldcast-backup', {}, now=100)
         self.assertIn('last_success_timestamp_seconds{job_name="goldcast-backup"} 0', output)
         self.assertIn('has_completed_build{job_name="goldcast-backup"} 0', output)
+        timestamp = 1792599367266
+        precise = jenkins.render('goldcast-backup', {'lastSuccessfulBuild': {'timestamp': timestamp}}, now=0)
+        value = next(line.split(' ')[1] for line in precise.splitlines() if 'last_success_timestamp_seconds' in line)
+        self.assertAlmostEqual(float(value), timestamp / 1000, places=6)
 
 
 class VpsMetricsTest(unittest.TestCase):
