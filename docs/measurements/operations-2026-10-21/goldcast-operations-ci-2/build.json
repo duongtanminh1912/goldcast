@@ -1,0 +1,9 @@
+{
+  "number": 2,
+  "url": "http://localhost:8081/job/goldcast-operations-ci/2/",
+  "building": false,
+  "result": "SUCCESS",
+  "duration": 146355,
+  "timestamp": 1792588271113,
+  "commit": "3a205000928fe863404e0d501ad6f4a5c3e07c5f"
+}

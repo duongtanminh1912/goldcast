@@ -1,0 +1,1 @@
+PASS: rollback to distinct baseline digests, old API/pages on candidate schema, pointer and lock verified

@@ -93,7 +93,8 @@ release đã promoted, `runtime.env`, Python ≥3.9, Docker, SSH và đủ dung 
 [hướng dẫn phục hồi](dung-lai-khi-het-vps.md) để dựng VPS mới.
 
 Job riêng `goldcast-backup` dùng [Jenkinsfile.backup](../jenkins/Jenkinsfile.backup),
-SCM `main`, credential `vps-deploy`, known_hosts đã xác minh của user Jenkins.
+credential `vps-deploy`, known_hosts đã xác minh của user Jenkins. Job hiện
+ghim commit đã kiểm chứng `c077a88`; khi tạo mới sau merge có thể chọn SCM `main`.
 Python/SSH/Docker CLI chạy trong runner riêng; dữ liệu nằm ở named volume
 `goldcast-private-backups` trên **máy Jenkins**, khác VPS. Runner nhận SSH key
 qua stdin, không ghi key vào image. Lịch `H 2 * * *` chạy khoảng 02:00 theo múi
@@ -101,6 +102,11 @@ giờ Jenkins; đổi `TZ` hệ điều hành Jenkins nếu cần giờ Việt N
 job mới, chạy một lần thành công để đăng ký lịch, rồi kiểm `Build periodically`.
 Job fail khi chụp/truyền/checksum/restore/registry fail; kiểm mục failed builds
 hằng ngày. Chưa có thông báo email/chat tự động.
+
+Nếu backup bị ngắt và để lại `.release-lock`, `status` của release hiện tại
+sẽ cho thấy owner là thư mục backup. Xác nhận cả job, SSH và `pg_dump` đã dừng
+trước khi dọn khóa đó; lệnh `recover` cho release không xử lý owner backup.
+Không tự xóa khóa chỉ theo tuổi. Giữ snapshot dở dang để điều tra.
 
 Sau backup thành công, giữ 14 backup đã kiểm chứng ngoài VPS; backup chưa hoàn
 tất/hỏng được giữ để điều tra và không được tính thay cho bản tốt. Trên VPS
@@ -115,6 +121,8 @@ Job thủ công riêng `goldcast-rollback-drill` dùng
 [Jenkinsfile.rollback-drill](../jenkins/Jenkinsfile.rollback-drill), credential
 GHCR chỉ cần nếu package private; job không có bước SSH/VPS. Nhập ba giá trị
 `RELEASE_ID`, `BACKEND_IMAGE`, `FRONTEND_IMAGE` từ **cùng artifact đã qua G2**.
+Job hiện ghim commit đã kiểm chứng `3a20500`. `FAIL_AT=G3` chạy ca rollback;
+`FAIL_AT=G2` cố ý đặt định danh không hợp lệ để kiểm Jenkins dừng trước deploy.
 Job chạy lại G2, tạo baseline #60 trong mạng/DB riêng, deploy candidate có bộ
 digest khác, cố ý làm sai định danh frontend rồi để G3 fail. Nhánh
 `post.unsuccessful` thật phải gọi rollback và kiểm lại image, định danh, ba
@@ -133,7 +141,12 @@ thật trên VPS, cũng chưa đo thao tác người dùng trong trình duyệt.
 
 ## 6. Trạng thái bằng chứng
 
-Build #58 và lần rollback thủ công trên VPS vẫn là bằng chứng đã lưu trong
-repo trước đợt sửa này. Các test local hoặc script/job đã viết không tự chứng
-minh job Jenkins đã chạy hay lịch backup đã bật. Ghi thêm số build, commit,
-log và artifact sau khi chạy thật; giữ riêng số đo lịch sử.
+Đã lưu [bộ kiểm chứng ngày 21/10](measurements/operations-2026-10-21/README.md):
+CI nhánh mới #2 đạt G1/G2, backup #1 đạt restore và đã đăng ký cron, diễn tập
+#2 chặn ở G2, #3 tự rollback sau G3 lỗi và có artifact PASS. Lần #1 diễn tập
+thất bại ngoài dự kiến được giữ riêng để truy nguyên lỗi và bản sửa.
+
+Build #58/rollback thủ công trên VPS là bằng chứng lịch sử riêng. Production
+vẫn release #60, chưa triển khai thay đổi runtime của PR #55. Backup #1 được
+khởi chạy thủ công; lịch đã bật nhưng chưa có mẫu chạy do cron. Diễn tập tự
+động chạy trong môi trường riêng, chưa phải nhánh SSH rollback production.

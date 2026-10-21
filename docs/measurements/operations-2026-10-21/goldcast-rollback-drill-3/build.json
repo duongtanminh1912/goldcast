@@ -1,0 +1,9 @@
+{
+  "number": 3,
+  "url": "http://localhost:8081/job/goldcast-rollback-drill/3/",
+  "building": false,
+  "result": "FAILURE",
+  "duration": 227939,
+  "timestamp": 1792590039565,
+  "commit": "3a205000928fe863404e0d501ad6f4a5c3e07c5f"
+}

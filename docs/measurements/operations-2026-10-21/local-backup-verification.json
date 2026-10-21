@@ -1,0 +1,17 @@
+{
+  "verified_utc": "2026-10-21T09:39:50.189093+00:00",
+  "release_id": "c31670e3d774be68ad7d279e0cc8c3f0dc62ef5c-f6650cdb917a-60",
+  "sha256_verified": true,
+  "release_archive_verified": true,
+  "database_restore_verified": true,
+  "restored_counts": {
+    "server_version": "16.15",
+    "instrument": 5,
+    "price_point": 5317,
+    "forecast_run": 0,
+    "forecast_point": 0,
+    "flyway_successes": 2,
+    "flyway_failures": 0
+  },
+  "ghcr_manifests_accessible": true
+}

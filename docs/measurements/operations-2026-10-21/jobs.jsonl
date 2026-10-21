@@ -1,0 +1,4 @@
+{"job": "goldcast-ci", "branch": "*/main", "script": "Jenkinsfile", "cron": [], "poll_scm": ["H/5 * * * *"]}
+{"job": "goldcast-operations-ci", "branch": "*/fix/production-operations", "script": "Jenkinsfile", "cron": [], "poll_scm": []}
+{"job": "goldcast-backup", "branch": "c077a889a75a26665f11abe5eb8bd7f55c5b35d3", "script": "jenkins/Jenkinsfile.backup", "cron": ["H 2 * * *"], "poll_scm": []}
+{"job": "goldcast-rollback-drill", "branch": "3a205000928fe863404e0d501ad6f4a5c3e07c5f", "script": "jenkins/Jenkinsfile.rollback-drill", "cron": [], "poll_scm": []}

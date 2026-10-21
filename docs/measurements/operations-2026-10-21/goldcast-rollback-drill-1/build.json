@@ -1,0 +1,8 @@
+{
+  "number": 1,
+  "url": "http://localhost:8081/job/goldcast-rollback-drill/1/",
+  "building": false,
+  "result": "FAILURE",
+  "duration": 128438,
+  "timestamp": 1792586584424
+}
