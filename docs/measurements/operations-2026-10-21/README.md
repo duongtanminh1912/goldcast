@@ -45,6 +45,9 @@ trong job production trên VPS.
 
 ## Backup và trạng thái production
 
+[Metadata backup #1](backup-job-1/build.json) và
+[log backup](backup-job-1/console.log) chỉ chứa bằng chứng vận hành, không chứa dump/env.
+
 Backup #1 được phục hồi trong PostgreSQL 16.15 tạm, network=none, không publish
 cổng: 5 instrument, 5.317 price_point, 0 forecast_run, 0 forecast_point,
 2 migration thành công, 0 thất bại. Hai manifest ứng dụng GHCR truy cập được.
