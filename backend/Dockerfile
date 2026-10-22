@@ -25,4 +25,6 @@ EXPOSE 8080
 
 # MaxRAMPercentage lets the JVM size its heap from the container limit rather than
 # from the host's memory, which is what makes this behave under a small memory cap.
-ENTRYPOINT ["sh", "-c", "exec java -XX:MaxRAMPercentage=75 -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom -jar /app/app.jar"]
+# The source's AAAA lookup currently returns NXDOMAIN despite a valid A record.
+# Use IPv4 DNS/socket lookup on Alpine; do not pin a provider IP or bypass TLS.
+ENTRYPOINT ["sh", "-c", "exec java -Djava.net.preferIPv4Stack=true -XX:MaxRAMPercentage=75 -XX:+UseSerialGC -Djava.security.egd=file:/dev/./urandom -jar /app/app.jar"]

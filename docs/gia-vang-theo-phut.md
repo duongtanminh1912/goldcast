@@ -58,6 +58,11 @@ Các biến môi trường trong `.env.example`: `APP_LIVE_GOLD_ENABLED`,
 lịch sử ngày. Giá vẫn được lấy khi Mac tắt vì backend chạy trên VPS;
 monitoring/Telegram trên Mac vẫn phụ thuộc thời gian Mac/Docker hoạt động.
 
+Image backend dùng JVM `java.net.preferIPv4Stack=true`: kiểm tra trên VPS cho
+thấy nguồn có A hợp lệ nhưng truy vấn AAAA trả NXDOMAIN, làm lookup mặc định
+trên Alpine thất bại. Vẫn phân giải hostname và xác minh TLS bình thường;
+không ghim IP nhà cung cấp. Runtime này yêu cầu đường kết nối IPv4 hoạt động.
+
 ## Chuỗi ngày và dự báo
 
 `price_point` tiếp tục lưu quan sát theo ngày cho thống kê, quy đổi và các
