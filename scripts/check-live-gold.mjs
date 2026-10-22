@@ -51,8 +51,10 @@ const failed = await waitFor(s => !s.lastFetchSucceeded);
 assert.equal(failed.latest.observedAt, observedAt, 'Outage changed the source timestamp');
 assert.equal(failed.latest.usdPerOunce, 2500.1256);
 await json(source + '/control/future', { method: 'POST' });
-const attempt = failed.lastAttemptAt;
-const future = await waitFor(s => s.lastAttemptAt !== attempt && !s.lastFetchSucceeded);
+// Require a completed poll that started after future mode was confirmed, rather
+// than accidentally observing an in-flight failure from the preceding mode.
+const futureSince = Date.now();
+const future = await waitFor(s => Date.parse(s.lastAttemptAt) >= futureSince && !s.lastFetchSucceeded);
 assert.equal(future.latest.observedAt, observedAt, 'Future quote replaced the valid observation');
 await json(source + '/control/normal', { method: 'POST' });
 await waitFor(s => s.lastFetchSucceeded && s.status === 'FRESH');
