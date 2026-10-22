@@ -52,7 +52,7 @@ sys.exit(int(os.environ.get('HTTP_FAILURE', '0')))
         args = json.loads(self.args.read_text())
         self.assertIn('X-Admin-Token: ' + token, args)
         self.assertIn('--post-data=', args)
-        self.assertEqual(args[-1], 'http://localhost:8080/api/v1/admin/ingest')
+        self.assertEqual(args[-1], 'http://127.0.0.1:8080/api/v1/admin/ingest')
         self.assertNotIn(token, result.stdout + result.stderr)
 
     def test_http_failure_is_not_reported_as_success(self):
