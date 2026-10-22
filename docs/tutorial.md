@@ -583,6 +583,10 @@ phải khớp artifact Jenkins. Nhánh khác `main` vẫn chạy G1/build/G2 nh�
   Log được in khi lỗi; container, mạng và dữ liệu tạm được dọn khi kết thúc.
   PostgreSQL/Caddy được ghim digest như production; kiểm trang đi qua Caddy
   HTTP trong mạng CI. HTTPS thật được kiểm ở G3.
+  Feed XAU/USD theo phút có nguồn HTTP giả lập riêng, kiểm hợp đồng, proxy,
+  giữ giá khi nguồn lỗi, timestamp tương lai, retention và chuỗi ngày không đổi
+  ở cả hai ca. Poll một giây chỉ áp dụng cho CI; cấu hình vận hành là 60 giây.
+  Xem [giá vàng theo phút](gia-vang-theo-phut.md).
 - **Deploy:** chỉ `main`, dùng đúng hai digest đã qua G2, cấu hình release được
   truyền từ workspace Jenkins qua SSH; không `git pull` mã mới trên VPS.
 - **G3:** đợi ứng dụng sẵn sàng, so image ID container với digest mong đợi,

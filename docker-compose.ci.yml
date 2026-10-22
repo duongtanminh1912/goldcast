@@ -1,5 +1,52 @@
 # G2: project name is unique per build; no host ports or production volumes.
 services:
+  # Deterministic upstream for G2; never part of the production release.
+  live-gold-source:
+    image: python@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
+    command:
+      - python3
+      - -u
+      - -c
+      - |
+        from datetime import datetime, timedelta, timezone
+        from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+        import json, threading
+        state = {'mode': 'normal', 'calls': 0, 'last': None, 'frozen': None}
+        lock = threading.Lock()
+        class Handler(BaseHTTPRequestHandler):
+          def reply(self, status, body):
+            data = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+          def do_GET(self):
+            if self.path == '/health': return self.reply(200, {'ok': True})
+            if self.path == '/calls': return self.reply(200, {'calls': state['calls']})
+            if self.path != '/price/XAU': return self.reply(404, {})
+            with lock:
+              state['calls'] += 1
+              if state['mode'] == 'fail': return self.reply(503, {'error': 'simulated outage'})
+              observed = state['frozen'] if state['mode'] == 'freeze' else datetime.now(timezone.utc)
+              if state['mode'] == 'future': observed += timedelta(days=1)
+              state['last'] = observed
+              self.reply(200, {'symbol': 'XAU', 'currency': 'USD', 'price': 2500.1256,
+                              'updatedAt': observed.isoformat().replace('+00:00', 'Z')})
+          def do_POST(self):
+            mode = self.path.removeprefix('/control/')
+            if mode not in ['normal', 'freeze', 'fail', 'future']: return self.reply(404, {})
+            with lock:
+              state['mode'] = mode
+              if mode == 'freeze': state['frozen'] = state['last'] or datetime.now(timezone.utc)
+              self.reply(200, {'mode': mode, 'updatedAt': state['frozen'].isoformat() if mode == 'freeze' else None})
+          def log_message(self, *args): pass
+        ThreadingHTTPServer(('0.0.0.0', 8000), Handler).serve_forever()
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
   db:
     image: postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     environment:
@@ -17,12 +64,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      live-gold-source:
+        condition: service_healthy
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/goldcast
       SPRING_DATASOURCE_USERNAME: goldcast
       SPRING_DATASOURCE_PASSWORD: ci-only
       APP_RELEASE_ID: ${RELEASE_ID:?Set RELEASE_ID from release.env}
       MANAGEMENT_SERVER_PORT: "9091"
+      APP_LIVE_GOLD_ENABLED: ${CI_LIVE_GOLD_ENABLED:-false}
+      APP_LIVE_GOLD_URL: http://live-gold-source:8000/price/XAU
+      APP_LIVE_GOLD_POLL_SECONDS: ${CI_LIVE_GOLD_POLL_SECONDS:-60}
       APP_PROVIDERS_STOOQ_ENABLED: "false"
       APP_PROVIDERS_SJC_ENABLED: "false"
       SPRING_FLYWAY_TARGET: ${MIGRATION_TARGET:-latest}

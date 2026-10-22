@@ -1,4 +1,5 @@
 import Link from "next/link";
+import LiveWorldGold from "@/components/LiveWorldGold";
 import type { ReactNode } from "react";
 import { api, ApiError } from "@/lib/api";
 import {
@@ -50,18 +51,21 @@ export default async function DashboardPage() {
         ? error.message
         : "Không lấy được dữ liệu thị trường.";
     return (
-      <EmptyState
-        title="Chưa hiển thị được dữ liệu"
-        description={
-          <>
-            <p>{message}</p>
-            <p className="mt-2">
-              Nếu bạn vừa khởi động stack, backend có thể đang chạy lượt thu thập dữ liệu
-              đầu tiên. Thử tải lại sau ít giây.
-            </p>
-          </>
-        }
-      />
+      <div className="space-y-6">
+        <LiveWorldGold />
+        <EmptyState
+          title="Chưa hiển thị được dữ liệu"
+          description={
+            <>
+              <p>{message}</p>
+              <p className="mt-2">
+                Nếu bạn vừa khởi động stack, backend có thể đang chạy lượt thu thập dữ liệu
+                đầu tiên. Thử tải lại sau ít giây.
+              </p>
+            </>
+          }
+        />
+      </div>
     );
   }
 
@@ -77,7 +81,7 @@ export default async function DashboardPage() {
       <SectionHeading
         eyebrow={<UpdatedAt>Cập nhật lúc {formatDateTime(summary.generatedAt)}</UpdatedAt>}
         title="Tổng quan thị trường vàng"
-        description="Giá vàng thế giới, tỷ giá USD/VND và giá vàng miếng trong nước, cùng mức chênh lệch giữa giá trong nước và giá thế giới quy đổi."
+        description="Giá vàng thế giới theo phút; lịch sử ngày, tỷ giá USD/VND và giá vàng trong nước phục vụ thống kê, quy đổi và dự báo."
         right={
           <div className="flex flex-wrap gap-2">
             <Link href="/methodology" className="btn">
@@ -91,6 +95,8 @@ export default async function DashboardPage() {
         }
       />
 
+      <LiveWorldGold />
+
       <WarningList warnings={summary.warnings} />
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -103,7 +109,7 @@ export default async function DashboardPage() {
           <div className="relative flex h-full flex-col p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
-                <p className="label">Vàng thế giới · XAU/USD</p>
+                <p className="label">Giá theo ngày · XAU/USD</p>
                 {world && (
                   <p className="mt-1 text-xs text-ink-subtle">
                     {formatDate(world.asOf)} · nguồn {world.source}
@@ -184,7 +190,7 @@ export default async function DashboardPage() {
 
           <Card>
             <StatTile
-              label="Thế giới quy đổi / lượng"
+              label="Quy đổi theo dữ liệu ngày / lượng"
               value={conversion ? formatPrice(conversion.worldVndPerTael, { displayScale: 0 }) : "—"}
               unit="VNĐ"
             />

@@ -1340,3 +1340,31 @@ không thay pmset toàn hệ thống.
 Kết quả merge/Deploy/G3 của bản monitoring được cập nhật trong
 [PR #56](https://github.com/duongtanminh1912/goldcast/pull/56); các số của job
 feature ở trên giữ nguyên phạm vi trước production.
+
+### Giá vàng thế giới theo phút — ngày 22/10/2026
+
+Thêm nguồn XAU/USD từ Gold API, một lượt lấy giá mỗi 60 giây ở backend,
+bảng quan sát riêng qua migration V3 và endpoint snapshot có timestamp nguồn.
+Trang chủ và trang XAU/USD hiển thị giá theo phút; chuỗi ngày dùng thống kê,
+quy đổi và dự báo giữ riêng, không thay giá đóng cửa bằng spot trong phiên.
+Lỗi nguồn giữ giá đã lưu và thời điểm thực, không sinh dữ liệu mô phỏng.
+Chi tiết cấu hình và giới hạn: [giá vàng theo phút](gia-vang-theo-phut.md).
+
+Kiểm tra local: 138 test Java, 54 Python, 24 Node, TypeScript typecheck,
+cấu hình Compose và 10 kịch bản promtool đạt; bộ luật có 34 cảnh báo.
+Kết nối đọc thử Gold API thành công từ cả Mac và VPS. Đây là kiểm tra kết nối,
+không phải bằng chứng tính năng đã được triển khai lên production.
+G2 bổ sung nguồn giả lập để kiểm cả cài mới/nâng cấp, mất nguồn, timestamp
+tương lai, retention và việc không sửa chuỗi ngày. Kết quả chạy image và
+trạng thái triển khai phải đối chiếu riêng theo commit/build.
+
+Jenkins `goldcast-live-gold-ci #1` đã SUCCESS trong 390,702 giây, cả hai ca
+G2 đạt và Production skipped. Bản xem thử dùng image #1 lấy được giá thật;
+Chrome kiểm trang chủ desktop/mobile và trang XAU/USD đạt. Xem
+[bằng chứng giá phút](measurements/live-gold-2026-10-22/README.md).
+Các commit hoàn thiện kiểm thử/giao diện sau đó có kết quả riêng trong PR #57.
+
+Lượt kiểm cuối `goldcast-live-gold-ci #3`, commit `c07ab66`, đã SUCCESS với
+G1/Build/G2 đạt, Production skipped. Số đo thời gian #3 có ngoại lệ và được
+ghi riêng trong bộ bằng chứng; không dùng để thay bảng hiệu suất trước đó.
+Chưa merge/deploy tính năng giá phút tại thời điểm ghi nhận này.

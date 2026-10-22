@@ -217,6 +217,150 @@
           ]
         }
       ]
+    },
+    {
+      "name": "receipt keeps advancing but source quote is stale",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "goldcast_live_gold_enabled{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "up{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "goldcast_live_gold_last_fetch_timestamp{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "0+60x12"
+        },
+        {
+          "series": "goldcast_live_gold_observed_timestamp{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "0+0x12"
+        },
+        {
+          "series": "goldcast_live_gold_stale_after_seconds{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "180+0x12"
+        },
+        {
+          "series": "goldcast_live_gold_expected_updates{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "1+0x12"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastLiveGoldQuoteStale\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "8m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "reference session pause suppresses stale source alert",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "goldcast_live_gold_enabled{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "up{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "goldcast_live_gold_observed_timestamp{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "0+0x12"
+        },
+        {
+          "series": "goldcast_live_gold_stale_after_seconds{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "180+0x12"
+        },
+        {
+          "series": "goldcast_live_gold_expected_updates{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "0+0x12"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastLiveGoldQuoteStale\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "8m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "fetch outage is still reported during session pause",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "goldcast_live_gold_enabled{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "up{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "goldcast_live_gold_fetch_success{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "0+0x12"
+        },
+        {
+          "series": "goldcast_live_gold_expected_updates{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "0+0x12"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastLiveGoldFetchFailed\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "4m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "scheduler stalled while backend scrape stays healthy",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "goldcast_live_gold_enabled{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "up{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "1+0x12"
+        },
+        {
+          "series": "goldcast_live_gold_last_attempt_timestamp{job=\"goldcast-backend\",instance=\"backend\"}",
+          "values": "0+0x12"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastLiveGoldPollingStalled\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "6m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
     }
   ]
 }

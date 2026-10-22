@@ -4,8 +4,8 @@
 #
 # Khac ban dev:
 #   - khong build, chi keo image tu GHCR
-#   - KHONG publish cong nao cho db/backend/frontend
-#   - chi Caddy publish 80 va 443
+#   - chi Caddy publish cong Internet 80 va 443
+#   - management backend 9091 chi bind loopback cho monitoring qua SSH
 # Bound per-container logs; release retention is an explicit maintenance command.
 x-logging: &logging
   driver: json-file
@@ -46,6 +46,12 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD}
       APP_RELEASE_ID: ${RELEASE_ID:?Set RELEASE_ID from release.env}
       MANAGEMENT_SERVER_PORT: "9091"
+      APP_LIVE_GOLD_ENABLED: ${APP_LIVE_GOLD_ENABLED:-true}
+      APP_LIVE_GOLD_URL: ${APP_LIVE_GOLD_URL:-https://api.gold-api.com/price/XAU}
+      APP_LIVE_GOLD_POLL_SECONDS: ${APP_LIVE_GOLD_POLL_SECONDS:-60}
+      APP_LIVE_GOLD_TIMEOUT_SECONDS: ${APP_LIVE_GOLD_TIMEOUT_SECONDS:-10}
+      APP_LIVE_GOLD_STALE_SECONDS: ${APP_LIVE_GOLD_STALE_SECONDS:-180}
+      APP_LIVE_GOLD_RETENTION_DAYS: ${APP_LIVE_GOLD_RETENTION_DAYS:-30}
       # Ingest thu du lieu tu provider; seed mo phong chi bat khi chu dong chon.
       APP_INGEST_ENABLED: ${APP_INGEST_ENABLED:-true}
       APP_INGEST_SEED_ON_EMPTY: ${APP_INGEST_SEED_ON_EMPTY:-false}

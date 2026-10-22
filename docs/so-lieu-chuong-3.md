@@ -1,6 +1,6 @@
 # Số liệu chương 3 — Đánh giá pipeline G1/G2/G3 và đối chiếu Jenkins với GitHub Actions
 
-Cập nhật cấu hình ngày **21/10/2026**; các số đo Jenkins dưới đây giữ nguyên
+Cập nhật mã nguồn ngày **22/10/2026**; các số đo Jenkins dưới đây giữ nguyên
 thời điểm thực hiện, không gán cho bản sửa mới. Tài liệu tập trung vào
 luồng **G1 → build image → G2 → Deploy → G3**, kết quả đã đo và giới hạn của
 bằng chứng. Quá trình thử nghiệm theo tuần nằm trong [nhật ký](nhat-ky.md);
@@ -64,9 +64,9 @@ Commit `7494a4c` đưa vào luồng mới; `8013a3d` lấy digest từ metadata 
 
 | Bước | Công việc trong mã hiện tại | Bằng chứng ở build #58 |
 |---|---|---|
-| G1 | `mvn test`, test vận hành bằng Python 3.13, test probe/snapshot bằng Node 22, `npm ci` và TypeScript typecheck | 114 test Java, 29 test Python, 19 test Node và typecheck đạt |
+| G1 | `mvn test`, test vận hành bằng Python 3.13, test probe/snapshot bằng Node 22, `npm ci`, TypeScript typecheck và kiểm cấu hình/luật monitoring | 114 test Java, 29 test Python, 19 test Node và typecheck đạt |
 | Build image | Đăng nhập GHCR; build/push backend và frontend một lần cho amd64, lấy digest từ metadata và lưu `release.env` | Stage build đạt; tái sử dụng một số layer và build lại phần ứng dụng |
-| G2 | Compose riêng, không mở cổng và không dùng volume production; kiểm cài mới và nâng cấp V1 có dữ liệu mẫu | Hai ca đều đạt migration, 35 phép kiểm API và 3 trang SSR |
+| G2 | Compose riêng, không mở cổng và không dùng volume production; kiểm cài mới/nâng cấp V1 có dữ liệu mẫu, metrics và feed phút qua nguồn giả lập | Hai ca đều đạt migration, 35 phép kiểm API và 3 trang SSR |
 | Deploy | Chỉ nhánh `main`, không phải PR; chuyển manifest và cấu hình release sang VPS, chạy đúng digest đã qua G2 | Đạt trên VPS, 46,920 giây |
 | G3 | Readiness, image ID đúng digest, `RELEASE_ID` frontend/backend qua URL HTTPS công khai và các trang qua Caddy; đạt mới ghi `.last-good-release` | Đạt, 3,591 giây; định danh công khai và image ID khớp manifest |
 | Xử lý lỗi Production | Rollback theo `previous-good-release` đã lưu; xác minh lại. Có khóa và lệnh `status`/`recover` cho lần chạy gián đoạn | Phép thử thủ công sau #58 xác nhận G3 từ chối cấu hình frontend sai và rollback thành công; chưa có ca Jenkins tự gọi rollback |
@@ -90,8 +90,15 @@ lượng kiểm tra hiện tại; số 102/19 và thời lượng #55 vẫn gi�
 đã đo, không tự cập nhật thành số test hoặc thời lượng của mã mới.
 
 Kiểm tra manifest bổ sung sau #58 từ chối khóa trùng, repository không đúng,
-digest sai định dạng và khóa ngoài danh sách trước `pull`/`up`. Bộ test hiện
-tại có 36 test Python và 20 test Node; các số 29/19 của #58 giữ nguyên theo log.
+digest sai định dạng và khóa ngoài danh sách trước `pull`/`up`. Bộ test ở
+thời điểm kiểm manifest đó có 36 test Python và 20 test Node; các số
+29/19 của #58 giữ nguyên theo log.
+
+Tính năng [giá vàng theo phút](gia-vang-theo-phut.md) trên nhánh
+`feat/minute-world-gold` bổ sung V3 và test nguồn giá/cache/retention trong G2.
+Kiểm tra local của bản này đạt 138 Java, 54 Python, 24 Node, typecheck và
+10 kịch bản promtool; không thay số đo #58/#61 bằng các kết quả đó. Trạng thái
+feature và triển khai được ghi riêng trong [nhật ký](nhat-ky.md).
 
 ## 3. Số đo Jenkins ngày 18/10/2026
 
