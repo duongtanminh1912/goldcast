@@ -1357,3 +1357,9 @@ không phải bằng chứng tính năng đã được triển khai lên product
 G2 bổ sung nguồn giả lập để kiểm cả cài mới/nâng cấp, mất nguồn, timestamp
 tương lai, retention và việc không sửa chuỗi ngày. Kết quả chạy image và
 trạng thái triển khai phải đối chiếu riêng theo commit/build.
+
+Jenkins `goldcast-live-gold-ci #1` đã SUCCESS trong 390,702 giây, cả hai ca
+G2 đạt và Production skipped. Bản xem thử dùng image #1 lấy được giá thật;
+Chrome kiểm trang chủ desktop/mobile và trang XAU/USD đạt. Xem
+[bằng chứng giá phút](measurements/live-gold-2026-10-22/README.md).
+Các commit hoàn thiện kiểm thử/giao diện sau đó có kết quả riêng trong PR #57.

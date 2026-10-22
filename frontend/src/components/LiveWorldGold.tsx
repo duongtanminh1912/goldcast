@@ -84,7 +84,13 @@ export default function LiveWorldGold() {
             <p className="mt-2 text-xs text-ink-subtle">
               Nguồn cập nhật lúc {sourceTime(latest.observedAt)} (giờ Việt Nam) · đã {ageSeconds ?? 0} giây
             </p>
-            <Sparkline values={data.points.map(point => point.usdPerOunce)} tone="gold" className="mt-5 h-28 w-full" />
+            {data.points.length >= 2 ? (
+              <Sparkline values={data.points.map(point => point.usdPerOunce)} tone="gold" className="mt-5 h-28 w-full" />
+            ) : (
+              <p className="mt-5 rounded-lg bg-gold/5 p-3 text-xs leading-relaxed text-ink-subtle">
+                Biểu đồ sẽ xuất hiện khi có quan sát ở ít nhất hai phút khác nhau.
+              </p>
+            )}
             <div className="mt-2 flex flex-wrap justify-between gap-2 text-xs text-ink-subtle">
               <span>{data.points.length} quan sát phút gần nhất</span>
               <a href="https://gold-api.com/" target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">Nguồn: gold-api.com</a>
