@@ -91,7 +91,7 @@ verify() {
         test "$(docker inspect --format '{{.Image}}' "$cid")" = "$(docker image inspect --format '{{.Id}}' "$expected")"
     done
     # Older rollback images use the application port; new releases isolate metrics.
-    compose exec -T backend sh -ec 'wget -qO- "http://localhost:${MANAGEMENT_SERVER_PORT:-8080}/actuator/health/readiness"' | grep -q '"status":"UP"'
+    compose exec -T backend sh -ec 'wget -qO- "http://127.0.0.1:${MANAGEMENT_SERVER_PORT:-8080}/actuator/health/readiness"' | grep -q '"status":"UP"'
     # HTTPS certificate validation is enabled; requests exercise Caddy -> Next -> API.
     probe_image=$(sed -n 's/^FRONTEND_IMAGE=//p' "$release/release.env")
     public_release=$(sed -n 's/^RELEASE_ID=//p' "$release/release.env")

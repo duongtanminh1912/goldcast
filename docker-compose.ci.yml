@@ -81,7 +81,7 @@ services:
       APP_INGEST_ENABLED: ${CI_INGEST_ENABLED:-true}
       APP_INGEST_SEED_ON_EMPTY: "true"
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:9091/actuator/health/readiness"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:9091/actuator/health/readiness"]
       interval: 3s
       timeout: 5s
       retries: 60
