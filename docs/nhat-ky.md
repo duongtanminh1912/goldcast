@@ -1363,3 +1363,8 @@ G2 đạt và Production skipped. Bản xem thử dùng image #1 lấy được 
 Chrome kiểm trang chủ desktop/mobile và trang XAU/USD đạt. Xem
 [bằng chứng giá phút](measurements/live-gold-2026-10-22/README.md).
 Các commit hoàn thiện kiểm thử/giao diện sau đó có kết quả riêng trong PR #57.
+
+Lượt kiểm cuối `goldcast-live-gold-ci #3`, commit `c07ab66`, đã SUCCESS với
+G1/Build/G2 đạt, Production skipped. Số đo thời gian #3 có ngoại lệ và được
+ghi riêng trong bộ bằng chứng; không dùng để thay bảng hiệu suất trước đó.
+Chưa merge/deploy tính năng giá phút tại thời điểm ghi nhận này.

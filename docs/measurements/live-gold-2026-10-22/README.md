@@ -33,3 +33,16 @@ Các commit tiếp theo siết điều kiện chờ poll tương lai và thêm l
 khi biểu đồ chưa đủ hai điểm; kết quả từng commit được cập nhật trong
 [PR #57](https://github.com/duongtanminh1912/goldcast/pull/57), không gán lại
 số đo #1 cho chúng. Feature chưa merge và chưa deploy production tại mốc này.
+
+## Kiểm commit hoàn thiện
+
+`goldcast-live-gold-ci #2`, commit `4ed0475`: SUCCESS, 224,254 giây; kiểm
+điều kiện poll tương lai đã siết. `#3`, commit `c07ab66`: SUCCESS, G1/Build/G2
+đạt, Production skipped. G1 vẫn 138 Java, 54 Python, 24 Node, typecheck và
+10 kịch bản promtool; cả hai ca G2 đều đạt cùng nhóm kiểm ở trên.
+
+Jenkins ghi tổng #3 là 3.084,077 giây, riêng G2 2.891,188 giây, lớn bất thường
+so với #1/#2. Đây là thời lượng wall theo Jenkins, chưa chứng minh các phép
+thử thực thi liên tục trong toàn khoảng đó; không dùng mẫu này để kết luận
+hiệu suất pipeline. JSON và manifest #3 giữ riêng, không thay số đo #1.
+Commit sau #3 chỉ cập nhật tài liệu/bằng chứng, không đổi mã ứng dụng hay G2.

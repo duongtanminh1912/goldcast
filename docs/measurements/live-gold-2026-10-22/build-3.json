@@ -1,0 +1,51 @@
+{
+  "number": 3,
+  "result": "SUCCESS",
+  "duration": 3084077,
+  "timestamp": 1792672859507,
+  "url": "http://localhost:8081/job/goldcast-live-gold-ci/3/",
+  "job": "goldcast-live-gold-ci",
+  "commit": "c07ab66ae01136ff4a2485369a8ac31d2e1b6c70",
+  "stages": [
+    {
+      "name": "Checkout SCM",
+      "state": "success",
+      "totalDurationMillis": 1318
+    },
+    {
+      "name": "Checkout identity",
+      "state": "success",
+      "totalDurationMillis": 596
+    },
+    {
+      "name": "G1 - code",
+      "state": "success",
+      "totalDurationMillis": 62889
+    },
+    {
+      "name": "Registry login",
+      "state": "success",
+      "totalDurationMillis": 2217
+    },
+    {
+      "name": "Build images once",
+      "state": "success",
+      "totalDurationMillis": 123549
+    },
+    {
+      "name": "G2 - isolated image tests",
+      "state": "success",
+      "totalDurationMillis": 2891188
+    },
+    {
+      "name": "Production",
+      "state": "skipped",
+      "totalDurationMillis": 206
+    },
+    {
+      "name": "Post Actions",
+      "state": "success",
+      "totalDurationMillis": 283
+    }
+  ]
+}

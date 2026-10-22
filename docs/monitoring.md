@@ -131,6 +131,10 @@ thử luật không gửi Telegram và không làm thay đổi production.
 4. **Giá cũ/nguồn lỗi:** đối chiếu observedOn, lịch giao dịch và provider trong
    trạng thái ingest. Không bật seed synthetic để che feed hỏng. Cache metrics
    chỉ hợp lệ khi refresh thành công và timestamp mới; scrape không truy vấn DB.
+   Với feed phút, kiểm `/api/v1/market/world/live`: `latest.observedAt`,
+   `lastAttemptAt`, `lastFetchAt` và `lastFetchSucceeded`; đây là lịch lấy giá
+   riêng với ingest ngày. Đối chiếu nguồn Gold API, kết nối HTTP và log ghi DB;
+   không dùng thời điểm nhận dữ liệu để thay timestamp nguồn hoặc che giá cũ.
 5. **Sai release/image:** so last-good với `/api/release` và Docker image ID.
    Nếu khóa deploy còn tồn tại, kiểm owner/build trước; không xóa theo tuổi.
 6. **Backup đỏ/quá hạn:** đọc đúng build của `goldcast-backup`, xác minh
