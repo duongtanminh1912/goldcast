@@ -228,3 +228,28 @@ export interface ApiProblem {
   available?: number;
   required?: number;
 }
+/** Minute snapshots are independent of the daily series used by forecasting. */
+export interface LiveGoldPoint {
+  usdPerOunce: number;
+  observedAt: string;
+  receivedAt: string;
+}
+
+export interface LiveGold {
+  symbol: string;
+  currency: string;
+  unit: string;
+  source: string;
+  sourceUrl: string;
+  enabled: boolean;
+  pollIntervalSeconds: number;
+  staleAfterSeconds: number;
+  referenceSession: boolean;
+  status: "FRESH" | "STALE" | "SESSION_PAUSE" | "UNAVAILABLE" | "DISABLED";
+  generatedAt: string;
+  lastAttemptAt: string | null;
+  lastFetchAt: string | null;
+  lastFetchSucceeded: boolean;
+  latest: LiveGoldPoint | null;
+  points: LiveGoldPoint[];
+}

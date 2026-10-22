@@ -10,6 +10,10 @@ Luồng hiện tại: G1 → build image → G2 độc lập → Deploy `main` �
 Nhánh khác `main` chạy tới G2 và bỏ qua Production. Việc chuyển production cũ
 sang cơ chế release cần bootstrap một lần; xem [tutorial](docs/tutorial.md).
 
+Giá XAU/USD theo phút được thu riêng từ Gold API mỗi 60 giây trên backend;
+giao diện hiện timestamp nguồn và giữ giá gần nhất khi nguồn lỗi. Lịch sử
+ngày phục vụ dự báo được giữ riêng. Xem [giá vàng theo phút](docs/gia-vang-theo-phut.md).
+
 > **Ứng dụng có thể chứa dữ liệu mô phỏng.** Ingest thử lấy dữ liệu từ Stooq/SJC;
 > khi bật seed và chuỗi còn rỗng, hệ thống sinh dữ liệu gắn nhãn `synthetic`.
 > Xem nhãn nguồn và cảnh báo trên từng kết quả; đây là ứng dụng minh hoạ cho đồ án.

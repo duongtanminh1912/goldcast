@@ -31,6 +31,16 @@ test('baseline retains DB volume identity, Caddy config, healthcheck and command
   assert.equal(compose.services.backend.mem_limit, 268435456);
 });
 
+test('baseline keeps the live feed runtime configuration for recovery', () => {
+  const { containers, images } = runtimeFixture();
+  containers[1].Config.Env.push('APP_LIVE_GOLD_ENABLED=false', 'APP_LIVE_GOLD_POLL_SECONDS=60',
+    'APP_LIVE_GOLD_STALE_SECONDS=180', 'APP_LIVE_GOLD_RETENTION_DAYS=30');
+  const result = captureRelease(containers, images);
+  assert.equal(result.runtimeEnv.APP_LIVE_GOLD_ENABLED, 'false');
+  assert.equal(result.runtimeEnv.APP_LIVE_GOLD_POLL_SECONDS, '60');
+  assert.equal(result.runtimeEnv.APP_LIVE_GOLD_RETENTION_DAYS, '30');
+});
+
 test('legacy mode is explicit when the running image has no release identity', () => {
   const { containers, images } = runtimeFixture();
   containers[2].Config.Env = ['API_BASE_URL_INTERNAL=http://backend:8080'];

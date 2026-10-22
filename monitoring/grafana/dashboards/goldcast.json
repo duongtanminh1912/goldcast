@@ -712,6 +712,122 @@
         "overrides": []
       },
       "options": {}
+    },
+    {
+      "id": 25,
+      "title": "XAU/USD · giá theo phút",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 84,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast_live_gold_usd_per_ounce",
+          "legendFormat": "XAU/USD"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 26,
+      "title": "XAU/USD · tuổi timestamp nguồn",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 84,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "(time() - goldcast_live_gold_observed_timestamp) and (goldcast_live_gold_observed_timestamp > 0)",
+          "legendFormat": "XAU/USD"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 27,
+      "title": "XAU/USD · fetch/commit thành công",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 91,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast_live_gold_fetch_success",
+          "legendFormat": "XAU/USD"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 28,
+      "title": "XAU/USD · diễn biến giá nguồn",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 91,
+        "w": 12,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast_live_gold_usd_per_ounce",
+          "legendFormat": "XAU/USD"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "options": {}
     }
   ]
 }

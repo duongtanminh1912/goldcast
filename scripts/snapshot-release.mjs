@@ -120,7 +120,9 @@ export function captureRelease(containers, images) {
     if (!databaseEnv[key]) throw new Error(`Missing live ${key}`);
     runtimeEnv[key] = databaseEnv[key];
   }
-  for (const key of ['APP_INGEST_ENABLED', 'APP_INGEST_SEED_ON_EMPTY', 'APP_INGEST_CRON', 'APP_CORS_ALLOWED_ORIGINS', 'APP_ADMIN_TOKEN', 'MANAGEMENT_SERVER_PORT']) {
+  for (const key of ['APP_INGEST_ENABLED', 'APP_INGEST_SEED_ON_EMPTY', 'APP_INGEST_CRON', 'APP_CORS_ALLOWED_ORIGINS', 'APP_ADMIN_TOKEN', 'MANAGEMENT_SERVER_PORT',
+    'APP_LIVE_GOLD_ENABLED', 'APP_LIVE_GOLD_URL', 'APP_LIVE_GOLD_POLL_SECONDS', 'APP_LIVE_GOLD_TIMEOUT_SECONDS',
+    'APP_LIVE_GOLD_STALE_SECONDS', 'APP_LIVE_GOLD_RETENTION_DAYS']) {
     if (backendEnv[key] !== undefined) runtimeEnv[key] = backendEnv[key];
   }
   if (!manifest.RELEASE_ID && compose.services.frontend.environment.API_BASE_URL_INTERNAL !== 'http://backend:8080') {

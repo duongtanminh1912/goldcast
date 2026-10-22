@@ -1,4 +1,30 @@
 groups:
+  - name: goldcast-live-gold
+    rules:
+      - alert: GoldcastLiveGoldPollingStalled
+        expr: '(time() - goldcast_live_gold_last_attempt_timestamp > 180) and on(job,instance) (goldcast_live_gold_enabled == 1) and on(job,instance) (up{job="goldcast-backend"} == 1)'
+        for: 2m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Lịch lấy giá XAU/USD theo phút ngừng chạy"
+          description: "Backend còn scrape được metrics nhưng không có lượt poll hoàn tất hơn 3 phút. Kiểm scheduler, DB và timeout."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastLiveGoldFetchFailed
+        expr: '(goldcast_live_gold_fetch_success == 0) and on(job,instance) (goldcast_live_gold_enabled == 1) and on(job,instance) (up{job="goldcast-backend"} == 1)'
+        for: 3m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Không lấy được giá vàng thế giới theo phút"
+          description: "Kiểm nguồn gold-api.com, HTTP/timeout, hợp đồng XAU/USD, timestamp tương lai và ghi DB. Giá đã lưu được giữ nguyên."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
+      - alert: GoldcastLiveGoldQuoteStale
+        expr: '(time() - goldcast_live_gold_observed_timestamp > goldcast_live_gold_stale_after_seconds) and on(job,instance) (goldcast_live_gold_enabled == 1) and on(job,instance) (goldcast_live_gold_expected_updates == 1) and on(job,instance) (up{job="goldcast-backend"} == 1)'
+        for: 3m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Giá XAU/USD theo phút không có cập nhật mới"
+          description: "Tuổi giá tính từ timestamp nguồn, không tính từ giờ gọi API. Lịch phiên NY chỉ là tham chiếu, chưa bao gồm ngày lễ."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook
   - name: goldcast
     rules:
       - alert: GoldcastWebsiteUnavailable

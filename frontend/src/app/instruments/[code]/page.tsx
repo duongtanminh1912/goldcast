@@ -14,6 +14,7 @@ import {
 } from "@/lib/format";
 import type { Indicators, Instrument, Series } from "@/lib/types";
 import { InstrumentTabs } from "@/components/InstrumentTabs";
+import LiveWorldGold from "@/components/LiveWorldGold";
 
 export const revalidate = 60;
 
@@ -114,6 +115,8 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
         }
       />
 
+      {instrument.code === "XAUUSD" && <LiveWorldGold />}
+
       {series.containsSyntheticData && (
         <WarningList
           warnings={[
@@ -125,7 +128,7 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
           <StatTile
-            label="Giá mới nhất"
+            label="Giá ngày gần nhất"
             value={formatPrice(series.latestClose, instrument)}
             unit={instrument.unitLabel}
             hint={latest ? `Ngày ${formatDate(latest.date)}` : undefined}

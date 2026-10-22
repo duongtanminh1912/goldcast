@@ -59,7 +59,7 @@ public class MarketService {
         }
         if (PriceSeriesService.containsSynthetic(worldHistory)
                 || PriceSeriesService.containsSynthetic(fxHistory)) {
-            warnings.add("Một phần dữ liệu đang là dữ liệu mô phỏng (source = \"synthetic\"), "
+            warnings.add("Một phần dữ liệu ngày đang là dữ liệu mô phỏng (source = \"synthetic\"), "
                     + "không phải giá thị trường thật.");
         }
 
@@ -100,7 +100,7 @@ public class MarketService {
                                      List<PricePoint> history, LocalDate today) {
         String warning = DataFreshness.warning(instrument.getCode(), instrument.getKind(),
                 history.isEmpty() ? null : history.get(history.size() - 1).getObservedOn(), today);
-        if (warning != null) warnings.add(warning);
+        if (warning != null) warnings.add("Dữ liệu ngày · " + warning);
     }
 
     private MarketSummaryDto.WorldQuote buildWorld(Instrument instrument, List<PricePoint> history) {

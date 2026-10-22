@@ -33,7 +33,9 @@ Exporter Jenkins cũng xuất thời điểm poll hoàn tất; HTTP scrape còn 
 nhưng poll ngừng cập nhật quá 120 giây vẫn bị cảnh báo. Timestamp của VPS và
 backend được kiểm độc lập, không suy ra dữ liệu mới chỉ từ `up=1`.
 
-31 luật trong [alerts.yml](../monitoring/prometheus/alerts.yml). Luật `info`
+34 luật trong [alerts.yml](../monitoring/prometheus/alerts.yml), gồm ba luật riêng
+cho [giá XAU/USD theo phút](gia-vang-theo-phut.md). Tuổi giá phút tính từ
+timestamp nguồn; cảnh báo dữ liệu ngày vẫn giữ phạm vi riêng. Luật `info`
 chỉ hiện trên dashboard. Cảnh báo `warning`/`critical` gửi Telegram, có tin
 phục hồi; gom nhóm theo site/alertname, lặp sau 6 giờ. Khi mất tunnel/collector,
 Alertmanager chặn các cảnh báo phụ liên quan để giảm tin trùng. Sai phiên
@@ -106,8 +108,11 @@ python3 monitoring/test-notification.py resolve
 # Chờ nhận RESOLVED; /metrics của Alertmanager phải ghi nhận hai lần gửi.
 ```
 
-CI chạy 6 kịch bản promtool: lỗi thoáng qua, lỗi kéo dài rồi phục hồi, backup
-quá hạn, khóa deploy chặn sai phiên bản chuyển tiếp, provider tắt, poll Jenkins ngừng dù HTTP còn trả 200. Ngoài ra
+CI chạy 10 kịch bản promtool: lỗi thoáng qua, lỗi kéo dài rồi phục hồi, backup
+quá hạn, khóa deploy chặn sai phiên bản chuyển tiếp, provider tắt, poll Jenkins
+ngừng dù HTTP còn trả 200; thêm bốn ca cho giá phút không đổi timestamp dù
+fetch thành công, giá cũ ngoài phiên tham chiếu, fetch lỗi ngoài phiên và
+lịch lấy giá bị treo. Ngoài ra
 có unit test Java cho lịch cuối tuần/mất DB/ngày tương lai và Python cho
 Jenkins/VPS lỗi, sai digest, định danh và ghi textfile nguyên tử. Các phép
 thử luật không gửi Telegram và không làm thay đổi production.
