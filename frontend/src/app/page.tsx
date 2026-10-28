@@ -80,7 +80,7 @@ export default async function DashboardPage() {
     <div className="space-y-6">
       <SectionHeading
         eyebrow={<UpdatedAt>Cập nhật lúc {formatDateTime(summary.generatedAt)}</UpdatedAt>}
-        title="Tổng quan thị trường vàng"
+        title="GoldCast — Demo triển khai thành công"
         description="Giá vàng thế giới theo phút; lịch sử ngày, tỷ giá USD/VND và giá vàng trong nước phục vụ thống kê, quy đổi và dự báo."
         right={
           <div className="flex flex-wrap gap-2">
