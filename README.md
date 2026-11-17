@@ -56,7 +56,7 @@ Trình duyệt
     │  HTML (SSR) + proxy chỉ đọc /api/v1/market/world/live
 Next.js 15 (App Router, TypeScript, Tailwind, Recharts)
     │  REST /api/v1, chỉ gọi từ phía máy chủ
-Spring Boot 3.3 · Java 21  ──►  Stooq, SJC (ingest hằng giờ) · Gold API (mỗi phút)
+Spring Boot 3.3 · Java 21  ──►  Stooq, SJC, FRED (ingest hằng giờ) · Gold API (mỗi phút)
     │  JPA/JDBC + Flyway
 PostgreSQL 16
 ```
@@ -72,6 +72,7 @@ goldcast/
 │   ├── ingest/      PriceProvider (Stooq, SJC), parser, scheduler, seed mô phỏng
 │   ├── market/      Quy đổi đơn vị, lịch giao dịch, tổng hợp, độ mới dữ liệu
 │   │   └── live/    Giá XAU/USD theo phút (bảng riêng, có retention)
+│   ├── macro/       Lợi suất thực, chỉ số USD từ FRED cho mô hình ARX
 │   ├── api/         Controller, DTO, lỗi RFC 7807, filter admin token
 │   ├── domain/, repository/, config/, monitoring/
 ├── frontend/src/
@@ -111,11 +112,12 @@ không đụng tới API.
 | GET | `/api/v1/admin/providers` | Danh sách nguồn dữ liệu (`X-Admin-Token`) |
 
 Mã chuỗi: `XAUUSD`, `USDVND`, `SJC_HCM`, `SJC_HN`, `SJC_RING`.
-Mô hình: `AUTO` (mặc định), `NAIVE`, `DRIFT`, `SMA`, `HOLT_DAMPED`, `AR_DIFF`.
+Mô hình: `AUTO` (mặc định), `NAIVE`, `DRIFT`, `SMA`, `HOLT_DAMPED`, `AR_DIFF`, `ARX_MACRO` (chỉ XAU/USD).
 
 Lỗi trả về theo RFC 7807. Đáng chú ý là **422 `insufficient-history`**: chuỗi chưa
 đủ dữ liệu thì API từ chối dự báo, thay vì trả một con số kèm khoảng tin cậy rộng
-mà người đọc vẫn sẽ tin. Ingest thủ công chạy chồng với scheduler trả **409**.
+mà người đọc vẫn sẽ tin. Tương tự, yêu cầu `ARX_MACRO` cho chuỗi không phải XAU/USD, hoặc khi
+chưa đủ dữ liệu vĩ mô, trả **422 `macro-unavailable`**. Ingest thủ công chạy chồng với scheduler trả **409**.
 
 ```bash
 curl "http://localhost:8080/api/v1/forecast/XAUUSD?model=AUTO&horizon=14" | jq
@@ -130,9 +132,14 @@ curl "http://localhost:8080/api/v1/forecast/XAUUSD?model=AUTO&horizon=14" | jq
 | XAU/USD, USD/VND (ngày) | Stooq (CSV) | Nhiều năm, một request lấy cả chuỗi |
 | Vàng miếng SJC | Feed XML công khai của SJC | **Chỉ có giá ngày hiện tại** |
 | XAU/USD (phút) | [Gold API](https://gold-api.com/docs) | Tích luỹ từ lúc chạy, giữ 30 ngày |
+| Lợi suất thực 10 năm Mỹ, chỉ số USD rộng | [FRED](https://fred.stlouisfed.org/) (`DFII10`, `DTWEXBGS`) | Khoảng 3 năm; chỉ là biến đầu vào của mô hình |
 
 SJC không có endpoint lịch sử, nên chuỗi trong nước dày lên dần kể từ lúc hệ thống
 chạy; trước đó API trả 422 chứ không đoán.
+
+Hai chuỗi vĩ mô nằm ở bảng riêng `macro_observation` (lợi suất thực có thể âm nên không
+dùng chung bảng giá) và không hiện trên giao diện thị trường. FRED được gọi sau khi dữ liệu
+giá đã commit, nên FRED lỗi không bao giờ làm mất dữ liệu giá.
 
 Giá theo phút nằm ở bảng riêng `live_gold_quote` và **không bao giờ** sửa chuỗi
 ngày dùng cho dự báo. Tuổi giá luôn tính từ timestamp của nguồn; khi nguồn lỗi,
@@ -167,6 +174,7 @@ sai ba chữ số.
 | `SMA` | Dự báo phẳng bằng trung bình k phiên gần nhất. |
 | `HOLT_DAMPED` | San mũ có xu hướng tắt dần (φ < 1), grid search α/β/φ theo SSE một bước. |
 | `AR_DIFF` | AR(p) trên sai phân bậc 1, tức ARIMA(p,1,0) khớp bằng OLS. |
+| `ARX_MACRO` | AR(2) trên sai phân cộng biến động trong hai phiên gần nhất (trước ngày dự báo) của lợi suất thực 10 năm Mỹ và chỉ số USD (ARIMAX khớp bằng OLS). Chỉ cho XAU/USD. |
 
 - **Xu hướng tắt dần là cố ý.** Mô hình xu hướng không tắt, khớp vào một đợt tăng
   giá, sẽ ngoại suy đợt tăng đó ra vô hạn.
@@ -176,6 +184,10 @@ sai ba chữ số.
   một bước × √h.
 - **Backtest rolling-origin:** ở mỗi điểm gốc, mô hình được khớp lại chỉ với dữ
   liệu có trước đó. Sai số báo cả tổng hợp lẫn **theo từng bước dự báo**.
+- **Biến vĩ mô chỉ được dùng khi chúng giúp thật.** Lợi suất thực và đồng USD là hai yếu tố
+  kinh điển của giá vàng, nhưng `ARX_MACRO` chỉ dùng biến động **đến phiên trước** (không nhìn
+  thấy thông tin của ngày cần dự báo) và giả định hai biến đứng yên trong tương lai. Nó cạnh
+  tranh với các mô hình khác trong cùng backtest; AUTO không chọn nó nếu nó không thắng.
 - **Đọc MASE:** dưới 1 thì mô hình mang thêm thông tin, từ 1 trở lên thì không,
   bất kể MAPE đẹp đến đâu. Giá vàng theo ngày rất gần bước đi ngẫu nhiên, nên
   MASE quanh 1 là bình thường và giao diện cảnh báo đúng lúc đó.
@@ -210,6 +222,7 @@ ngày của giá trong nước**, không phải giá mới nhất.
 | `APP_LIVE_GOLD_POLL_SECONDS` | `60` | Chu kỳ lấy giá theo phút |
 | `APP_LIVE_GOLD_STALE_SECONDS` | `180` | Quá ngưỡng này thì giá phút bị coi là cũ |
 | `APP_LIVE_GOLD_RETENTION_DAYS` | `30` | Số ngày giữ giá theo phút |
+| `APP_MACRO_ENABLED` | `true` | Lấy lợi suất thực và chỉ số USD từ FRED cho `ARX_MACRO` |
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Origin được phép gọi API |
 | `APP_ADMIN_TOKEN` | rỗng | Header `X-Admin-Token` cho `/api/v1/admin/**`; rỗng thì khoá endpoint |
 | `API_BASE_URL_INTERNAL` | Compose: `http://backend:8080` | URL backend mà frontend gọi từ phía máy chủ |
@@ -257,6 +270,9 @@ nhất:
   XML hỏng, trang HTML lỗi thay XML, số kiểu `78.500` vs `1,5`, giá trị sai đơn vị
 - `IngestConcurrencyTest` và các test `market/live`: khoá ingest, parser và lưu
   trữ giá theo phút
+- `ArxMacroForecasterTest`, `FredCsvParserTest`, `MacroAlignmentTest`: khôi phục đúng hệ số
+  của một tác động vĩ mô đã biết, không bao giờ đọc dữ liệu vĩ mô sau ngày dự báo, CSV FRED
+  có ô trống hoặc sai chuỗi
 
 ---
 
@@ -313,7 +329,7 @@ Cách dựng và vận hành từng phần: [docs/huong-dan.md](docs/huong-dan.m
 
 | Hạn chế | Hệ quả |
 |---|---|
-| Mô hình chỉ ngoại suy thống kê từ giá quá khứ | Không biết lãi suất, chính sách hay biến động địa chính trị, vốn là thứ tạo ra cú sốc giá lớn |
+| Mô hình chỉ dựa trên dữ liệu đã xảy ra | `ARX_MACRO` có tính lợi suất thực và USD đến phiên trước, nhưng không mô hình nào biết trước quyết định của Fed hay tin địa chính trị, vốn là thứ tạo ra cú sốc giá lớn |
 | Lịch giao dịch chỉ bỏ thứ Bảy/Chủ nhật | Chưa có ngày lễ Việt Nam; nhãn ngày quanh Tết có thể lệch |
 | Monitoring chạy trên máy Mac cá nhân | Mac tắt hoặc mất mạng thì cảnh báo dừng; chưa có dead-man check độc lập |
 | Chưa có log tập trung, tracing, SLO | Log chỉ nằm trong Docker trên VPS; cảnh báo dựa trên ngưỡng |

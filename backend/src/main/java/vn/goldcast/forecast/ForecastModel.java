@@ -23,6 +23,14 @@ public enum ForecastModel {
     /** Autoregression on first differences — an ARIMA(p,1,0) fitted by ordinary least squares. */
     AR_DIFF("AR(p) on differences", "Hồi quy tự tương quan trên sai phân bậc 1, tương đương ARIMA(p,1,0)."),
 
+    /**
+     * AR(p) on differences plus lagged changes of macro drivers (US real yield, US dollar
+     * index). Only offered for world spot gold, and only when macro data is present.
+     */
+    ARX_MACRO("ARX macro (real yield + USD)",
+            "AR(p) trên sai phân cộng biến động trễ một ngày của lợi suất thực 10 năm Mỹ và "
+                    + "chỉ số USD. Tương lai của hai biến này được giả định đứng yên."),
+
     /** Pick whichever of the above scores best in a rolling-origin backtest. */
     AUTO("Auto (chọn theo backtest)", "Chạy backtest mọi mô hình và chọn mô hình có MASE thấp nhất.");
 
@@ -42,7 +50,10 @@ public enum ForecastModel {
         return description;
     }
 
-    /** Models that can actually be fitted, i.e. everything except {@link #AUTO}. */
+    /**
+     * Univariate models that can be fitted from the price series alone. {@link #ARX_MACRO}
+     * is excluded because it also needs aligned macro data; the service adds it separately.
+     */
     public static ForecastModel[] fittable() {
         return new ForecastModel[] {NAIVE, DRIFT, SMA, HOLT_DAMPED, AR_DIFF};
     }

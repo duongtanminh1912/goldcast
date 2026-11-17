@@ -19,4 +19,7 @@ DO $$ BEGIN
   IF to_regclass('live_gold_quote') IS NULL THEN
     RAISE EXCEPTION 'Upgrade did not create minute observations';
   END IF;
+  IF to_regclass('macro_observation') IS NULL THEN
+    RAISE EXCEPTION 'Upgrade did not create macro observations';
+  END IF;
 END $$;

@@ -34,7 +34,7 @@ trap 'exit 143' TERM
 compose up -d --wait --wait-timeout 300 db backend frontend caddy
 # Startup applies Flyway to an empty isolated DB. Assert its history explicitly.
 compose exec -T db psql -U goldcast -d goldcast -v ON_ERROR_STOP=1 -c \
-  "DO \$\$ BEGIN IF (SELECT count(*) FROM flyway_schema_history WHERE success) < 3 OR EXISTS (SELECT 1 FROM flyway_schema_history WHERE NOT success) OR to_regclass('live_gold_quote') IS NULL THEN RAISE EXCEPTION 'Flyway migration failed'; END IF; END \$\$;"
+  "DO \$\$ BEGIN IF (SELECT count(*) FROM flyway_schema_history WHERE success) < 3 OR EXISTS (SELECT 1 FROM flyway_schema_history WHERE NOT success) OR to_regclass('live_gold_quote') IS NULL OR to_regclass('macro_observation') IS NULL THEN RAISE EXCEPTION 'Flyway migration failed'; END IF; END \$\$;"
 compose run --rm -T probe http://backend:8080 < scripts/smoke.mjs
 compose run --rm -T probe http://backend:9091 "$tested_release" < monitoring/check-metrics.mjs
 check_live_gold

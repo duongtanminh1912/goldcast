@@ -49,6 +49,12 @@ public class ApiExceptionHandler {
         return detail;
     }
 
+    @ExceptionHandler(MacroDataUnavailableException.class)
+    public ProblemDetail macroUnavailable(MacroDataUnavailableException ex) {
+        return problem(HttpStatus.UNPROCESSABLE_ENTITY,
+                "Chưa đủ dữ liệu vĩ mô", ex.getMessage(), "macro-unavailable");
+    }
+
     /**
      * A query parameter that could not be converted — a non-numeric horizon, or a model
      * name that is not in the enum. The valid values are listed, since guessing them from
