@@ -2,27 +2,15 @@
 
 # GoldCast
 
-**Đây là một đồ án về quy trình DevOps.** Ứng dụng theo dõi giá vàng bên dưới là
-*đối tượng* mà quy trình xây dựng, kiểm thử, đóng gói và triển khai — không phải
-mục tiêu của đồ án.
+Ứng dụng theo dõi giá vàng thế giới (XAU/USD), tỷ giá USD/VND và giá vàng miếng
+trong nước, kèm dự báo thống kê có backtest, cùng một quy trình CI/CD đầy đủ
+đưa ứng dụng từ commit tới production.
 
-Luồng hiện tại: G1 → build image → G2 độc lập → Deploy `main` → G3 → ghi bản tốt.
-Nhánh khác `main` chạy tới G2 và bỏ qua Production. Việc chuyển production cũ
-sang cơ chế release cần bootstrap một lần; xem [tutorial](docs/tutorial.md).
-
-Giá XAU/USD theo phút được thu riêng từ Gold API mỗi 60 giây trên backend;
-giao diện hiện timestamp nguồn và giữ giá gần nhất khi nguồn lỗi. Lịch sử
-ngày phục vụ dự báo được giữ riêng. Xem [giá vàng theo phút](docs/gia-vang-theo-phut.md).
-
-> **Ứng dụng có thể chứa dữ liệu mô phỏng.** Ingest thử lấy dữ liệu từ Stooq/SJC;
+> **Ứng dụng có thể chứa dữ liệu mô phỏng.** Ingest lấy dữ liệu từ Stooq/SJC;
 > khi bật seed và chuỗi còn rỗng, hệ thống sinh dữ liệu gắn nhãn `synthetic`.
-> Xem nhãn nguồn và cảnh báo trên từng kết quả; đây là ứng dụng minh hoạ cho đồ án.
 
-Nếu bạn tới đây để xem cách dựng một pipeline CI/CD từ con số không:
-[Quy trình DevOps](#quy-trình-devops) · [nhật ký từng tuần](docs/nhat-ky.md) ·
-[số liệu đo được](docs/so-lieu-chuong-3.md) · [hướng dẫn dựng lại từ đầu](docs/tutorial.md) ·
-[vận hành và backup](docs/van-hanh-production.md) ·
-[monitoring và cảnh báo Telegram](docs/monitoring.md)
+**[Hướng dẫn đầy đủ](docs/huong-dan.md)**: chạy local, dựng Jenkins, đưa lên VPS,
+vận hành, backup, monitoring và khôi phục khi mất máy chủ.
 
 ---
 
@@ -31,149 +19,57 @@ Nếu bạn tới đây để xem cách dựng một pipeline CI/CD từ con s�
 ```
 git push
    │
-   ├──► GitHub Actions ───────────────────────────────────┐
-   │      G1: Java + Python/Node + TypeScript             │
-   │                                                      ├──► xanh / đỏ trên pull request
-   │                                                       ┘
+   ├──► GitHub Actions ── G1 ──► xanh / đỏ trên pull request (check `backend-test`)
    │
-   └──► Jenkins  (poll nhánh cấu hình trong job)
-          G1: mvn test + TypeScript typecheck + test release/rollback
-          docker buildx --platform linux/amd64  ──►  GHCR (digest)
-          G2: Compose riêng + cài mới/nâng cấp DB có dữ liệu + smoke + SSR
-          Deploy main: đúng digest đã qua G2
-          G3: readiness + image ID + HTTPS + các trang chính
-          Thành công: ghi bản tốt; lỗi: rollback và xác minh lại
+   └──► Jenkins (Poll SCM)
+          G1: test Java + TypeScript typecheck + test script vận hành + kiểm luật monitoring
+          Build: docker buildx linux/amd64 một lần ──► GHCR, chốt digest vào release.env
+          G2: Compose riêng, cài mới + nâng cấp DB có dữ liệu, smoke API, trang SSR
+          Deploy (chỉ main): đúng digest đã qua G2
+          G3: readiness + image ID + HTTPS + RELEASE_ID công khai
+          Đạt: ghi .last-good-release · Lỗi: rollback về bản tốt và xác minh lại
 ```
-
-### Hai công cụ, hai vai trò khác nhau
-
-Không phải hai lựa chọn thay thế nhau:
 
 | | GitHub Actions | Jenkins |
 |---|---|---|
-| Tín hiệu trên pull request | toàn bộ G1 trong required check `backend-test` | job hiện tại poll một nhánh; Jenkinsfile hỗ trợ nhận diện PR khi có multibranch job |
-| Môi trường | sạch mỗi lần | bền vững — giữ `~/.m2` và `target/` giữa các lần chạy |
-| Sản phẩm | tín hiệu xanh hoặc đỏ | **image Docker đẩy lên GHCR + triển khai thật** |
-| Chạy ở đâu | hạ tầng GitHub | máy cá nhân, sau router gia đình |
+| Vai trò | tín hiệu xanh/đỏ trên PR | build image, G2, triển khai thật |
+| Môi trường | sạch mỗi lần | bền vững, giữ cache Maven/Docker |
+| Chạy ở đâu | hạ tầng GitHub | máy cá nhân |
 
-Jenkins trong thiết lập này dùng Poll SCM `H/5 * * * *`. Nhánh được chọn ở cấu hình
-job, không bị cố định bởi Jenkinsfile; job hiện theo dõi `*/main`. Chỉ khi
-`SOURCE_BRANCH=main` và không phải PR thì stage Production mới được chạy.
-GitHub Actions chạy Java, Python 3.13, Node 22 và TypeScript trong cùng check
-`backend-test` đang được bảo vệ. Check chỉ xanh khi tất cả bước đạt. Jenkins
-chạy cùng nhóm kiểm tra trước khi build image.
+**G1 — kiểm code.** Ngoài unit test, [`ApiContractTest`](backend/src/test/java/vn/goldcast/api/dto/ApiContractTest.java)
+đối chiếu tên từng trường của DTO Java với kiểu TypeScript ở frontend. Kiểu
+TypeScript bị xoá lúc biên dịch, nên thiếu cổng này thì đổi tên một trường ở
+backend vẫn để `mvn test` và `tsc` xanh, còn người dùng thấy ô trống.
 
-### Các cổng chất lượng
-
-**G1 — kiểm code.** Chạy test Java, TypeScript typecheck và test Python cho các lệnh
-vận hành/release, cùng test Node cho probe phiên bản và snapshot. Trong đó,
-hợp đồng API đối chiếu DTO Java với khai báo TypeScript. Kiểu
-TypeScript bị xoá lúc biên dịch nên không gì đối chiếu chúng với JSON thật: đổi tên một
-trường ở backend thì `mvn test` xanh, `tsc` xanh, còn người dùng thấy ô trống. Cổng chạy
-hai chặng — so tên kiểu, rồi duyệt đồ thị kiểu để **so tên từng trường**. Nằm trong
-`mvn test` nên cũng được kiểm trên GitHub Actions.
-
-→ [`ApiContractTest.java`](backend/src/test/java/vn/goldcast/api/dto/ApiContractTest.java)
-
-**G2 — kiểm image trước deploy.** Dùng cùng digest sẽ triển khai, dựng Compose riêng
-để kiểm cài mới và nâng cấp từ schema V1 có dữ liệu mẫu. Mỗi ca kiểm 35 bất biến API
-và ba trang SSR, đối chiếu `RELEASE_ID` của frontend/backend qua `/api/release`,
-với provider ngoài tắt và seed mô phỏng bật. Ví dụ:
-`worldVndPerGram × troyOunceInGrams` phải bằng `usdPerOunce × vndPerUsd` — nối ba trường ở
-ba khối khác nhau của cùng một phản hồi, nên công thức quy đổi sai là lộ ngay.
-
+**G2 — kiểm image trước deploy.** Dùng đúng digest sẽ triển khai, dựng Compose
+riêng để kiểm cài mới và nâng cấp từ schema V1 có dữ liệu mẫu: 35 bất biến API và
+ba trang SSR. Ví dụ `worldVndPerGram × troyOunceInGrams` phải bằng
+`usdPerOunce × vndPerUsd`, nên công thức quy đổi sai là lộ ngay.
 → [`scripts/g2.sh`](scripts/g2.sh) · [`scripts/smoke.mjs`](scripts/smoke.mjs)
 
-**G3 — xác minh production.** Kiểm readiness, image ID đúng digest và các trang HTTPS
-qua Caddy. `/api/release` phải trả đúng `RELEASE_ID` của cả frontend và backend
-so với manifest; trang từ bản cũ không được chấp nhận. Chỉ ghi bản tốt khi đạt;
-lỗi thì quay lại bản tốt đã lưu ở đầu deploy và kiểm lại.
-Xem cách chuẩn bị baseline và giới hạn rollback DB trong [tutorial](docs/tutorial.md#b10-g1--build--g2--deploy--g3).
+**G3 — xác minh production.** Image ID đúng digest, readiness, các trang HTTPS qua
+Caddy, và `/api/release` phải trả đúng `RELEASE_ID` của cả frontend lẫn backend.
+→ [`scripts/release.sh`](scripts/release.sh)
 
-Các kiểm tra hợp đồng G1 và công thức G2 đã được **kiểm chứng bằng cách cố tình làm hỏng**: đổi tên một trường DTO
-để xem G1 có đỏ không, sửa một hằng số quy đổi để xem G2 có bắt được không. Một cổng chưa
-bao giờ đỏ thì không phân biệt được với một cổng không làm gì cả.
+**Hạ tầng:** một VPS Ubuntu 24.04 dựng bằng script chạy lại được ([`deploy/`](deploy/)),
+Caddy tự cấp HTTPS, chỉ mở 22/80/443, triển khai bằng user `deploy` không phải root.
 
-Bằng chứng đã lưu cho luồng mới:
-
-| Tình huống | Bằng chứng | Phạm vi |
-|---|---|---|
-| Toàn luồng G1 → G2 → Deploy → G3 | Build #58 trên `main`, `SUCCESS`; image ID và `RELEASE_ID` công khai khớp manifest, `.last-good-release` ở phase `promoted` | Production VPS, log trong [`build-58/`](docs/measurements/pipeline-new/build-58/) |
-| G3 từ chối bản lỗi và rollback | Cố ý làm sai định danh frontend sau #58; G3 từ chối, rollback và probe lại đều đạt | Production VPS, **thao tác thủ công**, khôi phục cấu hình của bản tốt |
-| Jenkins tự rollback sang digest khác | Job `goldcast-rollback-drill` #3: G3 lỗi chủ đích, `post.unsuccessful` tự rollback, artifact `PASS` | **Môi trường riêng**, không phải VPS production |
-| G2 chặn trước deploy | `goldcast-rollback-drill` #2: lỗi ở G2, Deploy/G3 bị bỏ qua | Môi trường riêng |
-
-Chưa có ca Jenkins tự gọi rollback trên production thật. Chi tiết:
-[số liệu](docs/so-lieu-chuong-3.md) · [vận hành và diễn tập rollback](docs/van-hanh-production.md).
-
-### Môi trường triển khai đã ghi nhận
-
-| | |
-|---|---|
-| Máy chủ | VPS 1 vCPU / 2 GB RAM / 20 GB — 213.400đ/tháng |
-| Tên miền + HTTPS | 19.000đ/năm; chứng chỉ do Caddy tự xin và tự gia hạn |
-| Registry | GitHub Container Registry (GHCR), miễn phí cho repo công khai |
-| Cổng mở ra internet | Cấu hình chỉ publish 80/443 qua Caddy; SSH dùng 22. Lần quét lịch sử được ghi trong nhật ký |
-| Người dùng triển khai | `deploy`, không phải `root` |
-
-Máy chủ được dựng bằng script chạy lại được, không gõ tay — để việc xoá sạch và dựng lại
-từ đầu là chuyện vài phút thay vì vài giờ: [`deploy/`](deploy/)
-
-Pipeline cũ đã được thử bằng cách huỷ máy chủ và dựng lại, mất 27 phút theo nhật ký.
-Kết quả đó không xác nhận bootstrap hay G3 của luồng mới. Hướng dẫn khôi phục hiện
-dùng manifest theo digest và kiểm baseline trước khi nối lại Jenkins.
-[Hướng dẫn dựng lại khi hết hạn VPS](docs/dung-lai-khi-het-vps.md)
-
-### Số liệu đo được
-
-Build #58 (`a58f2cc`, ngày 18/10/2026, nhánh `main`) là mẫu Jenkins toàn luồng đã lưu:
-
-| Phép đo | Kết quả |
-|---|---|
-| G1 | 39,301 s |
-| Build/push hai image | 174,892 s |
-| G2, gồm hai ca DB | 100,831 s |
-| Deploy lên VPS | 46,920 s |
-| G3 | 3,591 s |
-| Tổng build | 371,948 s (≈ 6 phút 12 giây) |
-
-Đây là **một** mẫu: BuildKit tái sử dụng một phần layer, chưa có trung bình hay
-khoảng dao động. Build #55 (Production `SKIPPED`, cache ấm hơn) được giữ riêng để
-truy nguyên, không ghép số với #58. Không so thời gian Maven của Jenkins với toàn
-job GitHub Actions, và không dùng độ dao động của vài mẫu làm ngưỡng kết luận chung.
-
-Chi tiết kèm nguồn của từng con số: [`docs/so-lieu-chuong-3.md`](docs/so-lieu-chuong-3.md)
+**Giám sát:** Prometheus, Alertmanager, Grafana và Blackbox chạy trên máy Jenkins,
+nối về VPS qua SSH tunnel; 34 luật cảnh báo gửi Telegram (HTTPS, tài nguyên,
+container, API, độ mới dữ liệu, sai digest, Jenkins, backup).
 
 ### Hạn chế đã biết
 
-Liệt kê trước khi bị hỏi:
-
 | Hạn chế | Hệ quả |
 |---|---|
-| **Monitoring chạy trên máy Mac cá nhân** | Mac tắt, sleep hoặc mất mạng thì toàn bộ cảnh báo dừng; chưa có dead-man check độc lập |
-| **Rollback tự động chưa chạy trên production** | Rollback trên VPS mới làm thủ công; rollback tự động sang digest khác chỉ được chứng minh ở môi trường riêng |
-| **Chưa có log tập trung, tracing, SLO/error budget** | Log chỉ nằm trong Docker trên VPS (xoay vòng 10 MB); cảnh báo dựa trên ngưỡng, không dựa trên mục tiêu dịch vụ |
-| **Hạ tầng dựng bằng script shell, chưa có IaC** | Dựng lại được nhưng không có trạng thái khai báo như Terraform |
-| **Migration G2 dùng baseline V1 và dữ liệu mẫu** | Chưa bao phủ mọi phiên bản cũ và hình dạng dữ liệu production |
-| **Rollback không phục hồi DB** | Migration cần tương thích với phiên bản ứng dụng trước |
-| **Một máy chủ, không dự phòng** | Máy chết là dịch vụ chết; mỗi lần triển khai gián đoạn vài giây |
-| **Khoá triển khai không passphrase** | Bắt buộc vì Jenkins chạy tự động; khoá đó vào thẳng production |
-| **Jenkins gắn `/var/run/docker.sock`** | Quyền tương đương quản trị trên máy chạy Jenkins |
-| **Chưa kiểm trình duyệt tự động** | G2/G3 kiểm HTML từ server, chưa kiểm tương tác JavaScript |
-
-G2 chạy trên Docker của Jenkins, trước khi chạm VPS. Giới hạn một VPS hiện tại là
-chưa có triển khai không gián đoạn; giới hạn đó không ngăn được G2 trước deploy.
-
-### Giám sát
-
-Prometheus, Alertmanager, Grafana và Blackbox chạy trên máy Mac (cùng máy Jenkins);
-VPS chỉ chạy node_exporter và bộ thu trạng thái, nối về qua SSH tunnel. 34
-luật cảnh báo gửi Telegram, bao phủ: HTTPS và chứng chỉ, tài nguyên VPS, container
-restart/OOM, readiness và lỗi/độ trễ API, dữ liệu cũ hoặc synthetic, ingest/provider
-ngừng, digest đang chạy khác last-good, Jenkins và backup. Cấu hình và luật được
-kiểm bằng `promtool`/`amtool` trong G1 (`monitoring/check.sh`).
-
-→ [Monitoring và cảnh báo Telegram](docs/monitoring.md)
+| Monitoring chạy trên máy Mac cá nhân | Mac tắt hoặc mất mạng thì cảnh báo dừng; chưa có dead-man check độc lập |
+| Chưa có log tập trung, tracing, SLO | Log chỉ nằm trong Docker trên VPS; cảnh báo dựa trên ngưỡng |
+| Hạ tầng dựng bằng script shell, chưa có IaC | Dựng lại được nhưng không có trạng thái khai báo như Terraform |
+| Một máy chủ, không dự phòng | Máy chết là dịch vụ chết; mỗi lần deploy gián đoạn vài giây |
+| Rollback không phục hồi DB | Migration phải tương thích với bản ứng dụng trước |
+| G2 nâng cấp từ baseline V1 và dữ liệu mẫu | Chưa bao phủ mọi phiên bản cũ và dữ liệu production |
+| Khoá deploy không passphrase, Jenkins gắn `docker.sock` | Máy Jenkins bị chiếm là production bị chiếm |
+| Chưa kiểm trình duyệt tự động | G2/G3 kiểm HTML từ server, chưa kiểm tương tác JavaScript |
 
 ---
 
@@ -236,7 +132,7 @@ goldcast/
 ├── deploy/                  Caddyfile + script dựng máy chủ + script siết SSH
 ├── docker-compose.ci.yml    môi trường G2 riêng cho từng build
 ├── scripts/                 smoke, G2, xác minh release và rollback
-├── docs/                    nhật ký, số liệu, tutorial dựng lại từ đầu
+├── docs/huong-dan.md        hướng dẫn dựng, vận hành và khôi phục
 ├── backend/
 │   └── src/main/java/vn/goldcast/
 │       ├── domain/      Instrument, PricePoint, ForecastRun, ForecastPoint
@@ -473,20 +369,6 @@ bằng cấu hình trong repo:
 - [ ] Thêm dead-man check ở máy/dịch vụ độc lập với Mac nếu cần phát hiện cả khi bộ giám sát chết
 - [ ] Thêm bảng ngày lễ Việt Nam nếu cần nhãn ngày chính xác quanh Tết — hiện
       `TradingCalendar` chỉ bỏ qua thứ Bảy và Chủ nhật
-
----
-
-## Ba điều rút ra
-
-Bỏ hết tên công cụ đi thì còn lại:
-
-1. **Một phép đo có thể chạy hoàn hảo mà vẫn trả lời sai câu hỏi.** Con số so sánh Jenkins
-   với GitHub Actions chỉ đúng ở lần đo thứ tư; ba lần trước đều chạy trót lọt và đều cho ra
-   số hợp lệ, cho một câu hỏi không ai đặt ra.
-2. **Kiểm bằng hành vi, không kiểm bằng nhãn.** Không tin `ufw status`, không tin một lệnh
-   trả về 0, và không kiểm từ bên trong hệ thống đang được kiểm.
-3. **Thứ chưa được kiểm chứng thì chưa tồn tại.** Tài liệu chưa ai làm theo là bản nháp; cổng
-   chưa bao giờ đỏ là cổng không làm gì.
 
 ---
 

@@ -180,7 +180,7 @@ def main():
         '- `verification.json`: restore counts and validation results.\n'
         '- `SHA256SUMS`: checksums of every backup file.\n\n'
         'The folder contains private configuration. Directory mode: 700; file modes: 600.\n'
-        'Recovery procedure: docs/dung-lai-khi-het-vps.md in the GoldCast repository.\n'
+        'Recovery procedure: docs/huong-dan.md (section 9) in the GoldCast repository.\n'
     )
     for path in output.iterdir():
         if path.is_file():
