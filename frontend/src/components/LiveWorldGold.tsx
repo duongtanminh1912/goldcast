@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { formatPrice } from "@/lib/format";
+import { formatDate, formatPrice } from "@/lib/format";
 import type { LiveGold } from "@/lib/types";
 import { Sparkline } from "@/components/ui";
 
@@ -11,7 +11,26 @@ function sourceTime(value: string): string {
   }).format(new Date(value));
 }
 
-export default function LiveWorldGold() {
+/**
+ * Daily USD/VND rate and unit constants from the market summary. The minute price is
+ * converted with them in the browser, so the VND figure moves with every minute quote.
+ */
+export type LiveGoldConversion = {
+  vndPerUsd: number;
+  fxAsOf: string;
+  troyOunceInGrams: number;
+  taelInGrams: number;
+};
+
+const VND = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
+
+function vndPerTael(usdPerOunce: number, conversion: LiveGoldConversion): number {
+  // Round to the nearest thousand VND: the inputs are not more precise than that.
+  const raw = usdPerOunce * conversion.vndPerUsd / conversion.troyOunceInGrams * conversion.taelInGrams;
+  return Math.round(raw / 1000) * 1000;
+}
+
+export default function LiveWorldGold({ conversion }: { conversion?: LiveGoldConversion | null }) {
   const [data, setData] = useState<LiveGold | null>(null);
   const [failed, setFailed] = useState(false);
   const [now, setNow] = useState(0);
@@ -78,7 +97,19 @@ export default function LiveWorldGold() {
         <div className="mt-4 flex flex-wrap items-end gap-x-3 gap-y-2">
           <span className="tabular text-4xl font-bold tracking-tight sm:text-5xl">{formatPrice(latest?.usdPerOunce)}</span>
           <span className="pb-1.5 text-sm text-ink-subtle">USD/oz</span>
+          {latest && conversion && (
+            <span className="pb-1.5 text-sm text-ink-muted">
+              ≈ <span className="tabular text-lg font-semibold text-ink">{VND.format(vndPerTael(latest.usdPerOunce, conversion))}</span>{" "}
+              VND/lượng
+            </span>
+          )}
         </div>
+        {latest && conversion && (
+          <p className="mt-1 text-xs text-ink-subtle">
+            Quy đổi theo tỷ giá {VND.format(conversion.vndPerUsd)} VND/USD ngày {formatDate(conversion.fxAsOf)};
+            1 lượng = {conversion.taelInGrams} g. Chưa gồm chênh lệch trong nước, thuế và phí, nên thường thấp hơn giá vàng miếng niêm yết.
+          </p>
+        )}
         {data && latest ? (
           <>
             <p className="mt-2 text-xs text-ink-subtle">
