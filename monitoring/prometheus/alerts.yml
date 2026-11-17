@@ -1,4 +1,17 @@
 groups:
+  # Dead-man switch. This alert is always firing on purpose: Alertmanager forwards it
+  # to an external check (healthchecks.io) about once a minute. When the Mac, Docker,
+  # Prometheus, Alertmanager or the Mac's network stops, the pings stop and the external
+  # service alerts on its own. It never reaches Telegram through this Alertmanager.
+  - name: goldcast-meta
+    rules:
+      - alert: GoldcastWatchdog
+        expr: vector(1)
+        labels: {severity: heartbeat, site: goldcast}
+        annotations:
+          summary: "Watchdog của bộ giám sát (luôn firing)"
+          description: "Nhịp sống gửi tới dịch vụ dead-man bên ngoài. Nếu nó ngừng, bản thân bộ giám sát đã chết."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/huong-dan.md#runbook
   - name: goldcast-live-gold
     rules:
       - alert: GoldcastLiveGoldPollingStalled

@@ -7,6 +7,13 @@ route:
   group_interval: 5m
   repeat_interval: 6h
   routes:
+    # Heartbeat to the external dead-man check, re-sent every minute while firing.
+    # It must stay first so the Watchdog never falls through to Telegram.
+    - receiver: deadman
+      matchers: ['alertname="GoldcastWatchdog"']
+      group_wait: 0s
+      group_interval: 1m
+      repeat_interval: 1m
     - receiver: dashboard-only
       matchers: ['severity="info"']
     - receiver: telegram
@@ -14,6 +21,11 @@ route:
       group_wait: 0s
       group_interval: 10s
 receivers:
+  - name: deadman
+    webhook_configs:
+      - url_file: /run/secrets/deadman_ping_url
+        send_resolved: false
+        max_alerts: 1
   - name: dashboard-only
   - name: telegram
     telegram_configs:

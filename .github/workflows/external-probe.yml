@@ -1,0 +1,74 @@
+name: External probe
+
+# Second, independent monitoring path. Prometheus and Alertmanager run on a personal
+# Mac; when it is off, nothing there checks the site. This job runs on GitHub's
+# infrastructure every 10 minutes and messages Telegram only when the state changes
+# (UP -> DOWN, DOWN -> UP), so a long outage produces one alert, not one per run.
+#
+# GitHub may delay scheduled runs at busy times, and disables schedules after 60 days
+# without repository activity; the Watchdog dead-man check covers the Mac side.
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: external-probe
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      SITE: https://goldcast.click
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: scripts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Probe public HTTPS
+        id: probe
+        continue-on-error: true
+        run: node scripts/external-probe.mjs "$SITE" | tee probe.log
+
+      - name: Read previous result
+        id: previous
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          previous=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow external-probe.yml \
+            --status completed --limit 1 --json conclusion -q '.[0].conclusion // "unknown"')
+          echo "conclusion=$previous" >> "$GITHUB_OUTPUT"
+          echo "Previous run: $previous"
+
+      - name: Notify Telegram on state change
+        if: >-
+          (steps.probe.outcome == 'failure' && steps.previous.outputs.conclusion != 'failure') ||
+          (steps.probe.outcome == 'success' && steps.previous.outputs.conclusion == 'failure')
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          OUTCOME: ${{ steps.probe.outcome }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "::warning::TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID secrets are not set; skipping message"
+            exit 0
+          fi
+          if [ "$OUTCOME" = failure ]; then title='GoldCast DOWN (external probe)'; else title='GoldCast RECOVERED (external probe)'; fi
+          text=$(printf '%s\n%s\n%s' "$title" "$(tail -n 1 probe.log)" "$RUN_URL")
+          curl -sS --fail -o /dev/null --max-time 20 \
+            "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+            --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" --data-urlencode "text=${text}"
+
+      - name: Fail the run when the site is down
+        if: steps.probe.outcome == 'failure'
+        run: exit 1
