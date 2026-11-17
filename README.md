@@ -57,8 +57,8 @@ Không phải hai lựa chọn thay thế nhau:
 | Chạy ở đâu | hạ tầng GitHub | máy cá nhân, sau router gia đình |
 
 Jenkins trong thiết lập này dùng Poll SCM `H/5 * * * *`. Nhánh được chọn ở cấu hình
-job, không bị cố định bởi Jenkinsfile. Build #55 đã chạy nhánh `ci/pre-deploy-gate`;
-chỉ khi `SOURCE_BRANCH=main` và không phải PR thì stage Production mới được chạy.
+job, không bị cố định bởi Jenkinsfile; job hiện theo dõi `*/main`. Chỉ khi
+`SOURCE_BRANCH=main` và không phải PR thì stage Production mới được chạy.
 GitHub Actions chạy Java, Python 3.13, Node 22 và TypeScript trong cùng check
 `backend-test` đang được bảo vệ. Check chỉ xanh khi tất cả bước đạt. Jenkins
 chạy cùng nhóm kiểm tra trước khi build image.
@@ -92,9 +92,19 @@ Xem cách chuẩn bị baseline và giới hạn rollback DB trong [tutorial](do
 
 Các kiểm tra hợp đồng G1 và công thức G2 đã được **kiểm chứng bằng cách cố tình làm hỏng**: đổi tên một trường DTO
 để xem G1 có đỏ không, sửa một hằng số quy đổi để xem G2 có bắt được không. Một cổng chưa
-bao giờ đỏ thì không phân biệt được với một cổng không làm gì cả. Bằng chứng pipeline
-mới hiện có là build #55: G1/G2 đạt, Production bị bỏ qua. Chưa có log Deploy/G3/rollback
-thực tế trên VPS cho luồng mới trong bộ số liệu đã lưu.
+bao giờ đỏ thì không phân biệt được với một cổng không làm gì cả.
+
+Bằng chứng đã lưu cho luồng mới:
+
+| Tình huống | Bằng chứng | Phạm vi |
+|---|---|---|
+| Toàn luồng G1 → G2 → Deploy → G3 | Build #58 trên `main`, `SUCCESS`; image ID và `RELEASE_ID` công khai khớp manifest, `.last-good-release` ở phase `promoted` | Production VPS, log trong [`build-58/`](docs/measurements/pipeline-new/build-58/) |
+| G3 từ chối bản lỗi và rollback | Cố ý làm sai định danh frontend sau #58; G3 từ chối, rollback và probe lại đều đạt | Production VPS, **thao tác thủ công**, khôi phục cấu hình của bản tốt |
+| Jenkins tự rollback sang digest khác | Job `goldcast-rollback-drill` #3: G3 lỗi chủ đích, `post.unsuccessful` tự rollback, artifact `PASS` | **Môi trường riêng**, không phải VPS production |
+| G2 chặn trước deploy | `goldcast-rollback-drill` #2: lỗi ở G2, Deploy/G3 bị bỏ qua | Môi trường riêng |
+
+Chưa có ca Jenkins tự gọi rollback trên production thật. Chi tiết:
+[số liệu](docs/so-lieu-chuong-3.md) · [vận hành và diễn tập rollback](docs/van-hanh-production.md).
 
 ### Môi trường triển khai đã ghi nhận
 
@@ -116,20 +126,21 @@ dùng manifest theo digest và kiểm baseline trước khi nối lại Jenkins.
 
 ### Số liệu đo được
 
-Build #55 (`81185938bbd3`, ngày 18/10/2026) là mẫu Jenkins đã lưu của luồng mới:
+Build #58 (`a58f2cc`, ngày 18/10/2026, nhánh `main`) là mẫu Jenkins toàn luồng đã lưu:
 
 | Phép đo | Kết quả |
 |---|---|
-| G1 | 36,018 s |
-| Build/push hai image | 22,531 s |
-| G2, gồm hai ca DB | 93,214 s |
-| Tổng build | 157,211 s |
-| Production | `SKIPPED` vì chạy nhánh `ci/pre-deploy-gate` |
+| G1 | 39,301 s |
+| Build/push hai image | 174,892 s |
+| G2, gồm hai ca DB | 100,831 s |
+| Deploy lên VPS | 46,920 s |
+| G3 | 3,591 s |
+| Tổng build | 371,948 s (≈ 6 phút 12 giây) |
 
-Đây là một mẫu có cache Docker và Maven biên dịch tăng dần, chưa phải thời lượng
-đại diện hay thời gian triển khai đầy đủ. Các phép đo Docker/Maven cũ được giữ ở
-phụ lục số liệu; không so thời gian Maven của Jenkins với toàn job GitHub Actions,
-và không dùng độ dao động của vài mẫu làm ngưỡng kết luận chung.
+Đây là **một** mẫu: BuildKit tái sử dụng một phần layer, chưa có trung bình hay
+khoảng dao động. Build #55 (Production `SKIPPED`, cache ấm hơn) được giữ riêng để
+truy nguyên, không ghép số với #58. Không so thời gian Maven của Jenkins với toàn
+job GitHub Actions, và không dùng độ dao động của vài mẫu làm ngưỡng kết luận chung.
 
 Chi tiết kèm nguồn của từng con số: [`docs/so-lieu-chuong-3.md`](docs/so-lieu-chuong-3.md)
 
@@ -139,7 +150,10 @@ Liệt kê trước khi bị hỏi:
 
 | Hạn chế | Hệ quả |
 |---|---|
-| **Không có giám sát** | Hệ thống chết lúc 2 giờ sáng thì không ai biết |
+| **Monitoring chạy trên máy Mac cá nhân** | Mac tắt, sleep hoặc mất mạng thì toàn bộ cảnh báo dừng; chưa có dead-man check độc lập |
+| **Rollback tự động chưa chạy trên production** | Rollback trên VPS mới làm thủ công; rollback tự động sang digest khác chỉ được chứng minh ở môi trường riêng |
+| **Chưa có log tập trung, tracing, SLO/error budget** | Log chỉ nằm trong Docker trên VPS (xoay vòng 10 MB); cảnh báo dựa trên ngưỡng, không dựa trên mục tiêu dịch vụ |
+| **Hạ tầng dựng bằng script shell, chưa có IaC** | Dựng lại được nhưng không có trạng thái khai báo như Terraform |
 | **Migration G2 dùng baseline V1 và dữ liệu mẫu** | Chưa bao phủ mọi phiên bản cũ và hình dạng dữ liệu production |
 | **Rollback không phục hồi DB** | Migration cần tương thích với phiên bản ứng dụng trước |
 | **Một máy chủ, không dự phòng** | Máy chết là dịch vụ chết; mỗi lần triển khai gián đoạn vài giây |
@@ -149,6 +163,17 @@ Liệt kê trước khi bị hỏi:
 
 G2 chạy trên Docker của Jenkins, trước khi chạm VPS. Giới hạn một VPS hiện tại là
 chưa có triển khai không gián đoạn; giới hạn đó không ngăn được G2 trước deploy.
+
+### Giám sát
+
+Prometheus, Alertmanager, Grafana và Blackbox chạy trên máy Mac (cùng máy Jenkins);
+VPS chỉ chạy node_exporter và bộ thu trạng thái, nối về qua SSH tunnel. 34
+luật cảnh báo gửi Telegram, bao phủ: HTTPS và chứng chỉ, tài nguyên VPS, container
+restart/OOM, readiness và lỗi/độ trễ API, dữ liệu cũ hoặc synthetic, ingest/provider
+ngừng, digest đang chạy khác last-good, Jenkins và backup. Cấu hình và luật được
+kiểm bằng `promtool`/`amtool` trong G1 (`monitoring/check.sh`).
+
+→ [Monitoring và cảnh báo Telegram](docs/monitoring.md)
 
 ---
 
@@ -443,8 +468,9 @@ bằng cấu hình trong repo:
 - [ ] Đặt `APP_ADMIN_TOKEN` và xác nhận gọi thiếu/sai token bị trả 401; filter đã có trong code
 - [ ] Quét cổng từ máy khác: chỉ 22, 80, 443 mở. Docker có thể publish cổng vượt qua luật ufw
 - [ ] Bootstrap baseline khỏe mạnh; xác nhận `.last-good-release` và thử Deploy/G3 có lưu log
-- [ ] Đặt cảnh báo khi ingest trả 0 dòng nhiều lượt liên tiếp — feed chết trông giống hệt
-      feed yên ắng
+- [ ] Bật bộ monitoring và gửi thử một cảnh báo Telegram; các luật ingest/provider ngừng và
+      dữ liệu cũ đã có trong `monitoring/prometheus/alerts.yml`
+- [ ] Thêm dead-man check ở máy/dịch vụ độc lập với Mac nếu cần phát hiện cả khi bộ giám sát chết
 - [ ] Thêm bảng ngày lễ Việt Nam nếu cần nhãn ngày chính xác quanh Tết — hiện
       `TradingCalendar` chỉ bỏ qua thứ Bảy và Chủ nhật
 
