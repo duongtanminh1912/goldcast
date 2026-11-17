@@ -10,7 +10,7 @@ def send(base, started, ended):
     payload = [{'labels': {'alertname': 'GoldcastMonitoringTest', 'severity': 'warning', 'site': 'goldcast'},
                 'annotations': {'summary': 'Kiểm thử đường cảnh báo GoldCast',
                                 'description': 'Diễn tập monitoring; không thay đổi production.',
-                                'runbook': 'https://github.com/duongtanminh1912/goldcast/blob/main/docs/monitoring.md#runbook'},
+                                'runbook': 'https://github.com/duongtanminh1912/goldcast/blob/main/docs/huong-dan.md#runbook'},
                 'startsAt': started.isoformat(), 'endsAt': ended.isoformat()}]
     request = urllib.request.Request(base + '/api/v2/alerts', data=json.dumps(payload).encode(),
                                     headers={'Content-Type': 'application/json'}, method='POST')

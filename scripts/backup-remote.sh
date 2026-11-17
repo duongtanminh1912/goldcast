@@ -43,7 +43,6 @@ cp "$release/release.env" "$backup/release.env"
 set -- release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs runtime.env
 if [ -f "$release/scripts/remote-release.sh" ]; then set -- "$@" scripts/remote-release.sh; fi
 if [ -f "$release/scripts/retention.py" ]; then set -- "$@" scripts/retention.py; fi
-if [ -f "$release/legacy-local-origin" ]; then set -- "$@" legacy-local-origin; fi
 tar -cf "$backup/release.tar" -C "$release" "$@"
 if [ -f "$root/.env" ]; then cp "$root/.env" "$backup/production.env"; fi
 docker exec goldcast-db sh -ec 'exec pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -Fc' > "$backup/database.dump"

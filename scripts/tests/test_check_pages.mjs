@@ -34,7 +34,7 @@ test('old public release fails even when every page would look healthy', async t
   assert.equal(calls.length, 1);
 });
 
-test('missing release endpoint is not accepted as a legacy release', async t => {
+test('missing release endpoint is rejected', async t => {
   mockFetch(t, async () => new Response('not found', { status: 404 }));
   await assert.rejects(checkPages('https://example.test', { releaseId: 'candidate-123' }), /Public release mismatch/);
 });
@@ -69,17 +69,7 @@ test('persistent unavailable release stops after the configured retry budget', a
   assert.equal(calls, 2);
 });
 
-test('legacy baseline requires HTTPS before attempting DNS or page requests', async t => {
+test('missing release identity is rejected before any request', async t => {
   mockFetch(t, async () => { throw new Error('must not request'); });
-  await assert.rejects(checkPages('http://127.0.0.1', { legacyLocalOrigin: true }), /requires HTTPS/);
-});
-
-test('explicit legacy baseline can check the local HTTPS origin', async t => {
-  mockFetch(t, async () => new Response(html));
-  await checkPages('https://127.0.0.1', { legacyLocalOrigin: true });
-});
-
-test('legacy baseline cannot bless pages from a different public host', async t => {
-  mockFetch(t, async () => { throw new Error('must not request'); });
-  await assert.rejects(checkPages('https://203.0.113.254', { legacyLocalOrigin: true }), /directly to this VPS/);
+  await assert.rejects(checkPages('https://example.test', {}), /Missing release identity/);
 });

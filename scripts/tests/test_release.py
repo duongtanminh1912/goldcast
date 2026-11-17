@@ -158,13 +158,12 @@ exec /bin/{command} "$@"
         self.assertTrue((self.root / '.release-lock').exists())
         self.assertEqual(self.marker.read_text().strip(), str(self.old))
 
-    def test_explicit_legacy_baseline_can_be_validated_and_rolled_back(self):
+    def test_baseline_without_public_identity_is_rejected_before_production_changes(self):
         manifest = self.old / 'release.env'
         manifest.write_text(manifest.read_text().replace('RELEASE_ID=old\n', ''))
-        (self.old / 'legacy-local-origin').touch()
-        self.assertEqual(self.run_release('deploy').returncode, 0)
-        self.assertEqual(self.run_release('rollback').returncode, 0)
-        self.assertIn('--legacy-local-origin', (self.root / 'docker.log').read_text())
+        self.assertNotEqual(self.run_release('deploy').returncode, 0)
+        self.assertFalse((self.root / '.release-lock').exists())
+        self.assertFalse((self.root / 'docker.log').exists())
 
     def test_invalid_bootstrap_manifest_is_rejected_before_lock_or_docker(self):
         self.marker.unlink()
@@ -215,9 +214,9 @@ exec /bin/{command} "$@"
         self.assertNotEqual(self.run_release('deploy').returncode, 0)
         self.assertFalse((self.root / '.release-lock').exists())
 
-    def test_candidate_cannot_select_legacy_verification_via_its_identity(self):
+    def test_candidate_identity_cannot_look_like_a_probe_option(self):
         manifest = self.new / 'release.env'
-        manifest.write_text(manifest.read_text().replace('RELEASE_ID=new', 'RELEASE_ID=--legacy-local-origin'))
+        manifest.write_text(manifest.read_text().replace('RELEASE_ID=new', 'RELEASE_ID=--release-option'))
         self.assertNotEqual(self.run_release('deploy').returncode, 0)
         self.assertFalse((self.root / '.release-lock').exists())
 

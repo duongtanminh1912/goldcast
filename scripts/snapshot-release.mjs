@@ -125,10 +125,8 @@ export function captureRelease(containers, images) {
     'APP_LIVE_GOLD_STALE_SECONDS', 'APP_LIVE_GOLD_RETENTION_DAYS']) {
     if (backendEnv[key] !== undefined) runtimeEnv[key] = backendEnv[key];
   }
-  if (!manifest.RELEASE_ID && compose.services.frontend.environment.API_BASE_URL_INTERNAL !== 'http://backend:8080') {
-    throw new Error('Legacy adoption requires the standard internal backend route');
-  }
-  return { compose: escapeInterpolation(compose), manifest, runtimeEnv, legacy: !manifest.RELEASE_ID };
+  if (!manifest.RELEASE_ID) throw new Error('Running frontend has no release identity; adopt only releases built by the G1/G2/G3 pipeline');
+  return { compose: escapeInterpolation(compose), manifest, runtimeEnv };
 }
 
 if ((process.argv[1] === '-' && import.meta.url.endsWith('/[eval1]')) || (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)) {
@@ -142,6 +140,5 @@ if ((process.argv[1] === '-' && import.meta.url.endsWith('/[eval1]')) || (proces
   writeFileSync(join(directory, 'release.env'), Object.entries(result.manifest).map(([k, v]) => `${k}=${v}\n`).join(''), { mode: 0o600 });
   const literal = value => "'" + value.replaceAll("'", () => "\\'") + "'";
   writeFileSync(join(directory, 'runtime.env'), Object.entries(result.runtimeEnv).map(([k, v]) => `${k}=${literal(v)}\n`).join(''), { mode: 0o600 });
-  if (result.legacy) writeFileSync(join(directory, 'legacy-local-origin'), 'Direct VPS origin required\n', { mode: 0o600 });
   console.log('Captured running images, environment, mounts and service configuration');
 }

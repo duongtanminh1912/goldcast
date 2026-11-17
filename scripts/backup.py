@@ -102,12 +102,12 @@ def main():
     require(public['releaseId'] == public['backendReleaseId'] == manifest['RELEASE_ID'], 'Public release mismatch')
     with tarfile.open(output / 'release.tar') as archive:
         allowed = {'release.env', 'docker-compose.prod.yml', 'deploy/Caddyfile', 'scripts/release.sh',
-                   'scripts/check-pages.mjs', 'scripts/remote-release.sh', 'scripts/retention.py', 'runtime.env', 'legacy-local-origin'}
+                   'scripts/check-pages.mjs', 'scripts/remote-release.sh', 'scripts/retention.py', 'runtime.env'}
         members = archive.getmembers()
         archive_names = {member.name for member in members}
         require(all(member.isfile() and member.name in allowed for member in members), 'Unsafe release archive')
         require(len(archive_names) == len(members), 'Duplicate archive entry')
-        require((allowed - {'legacy-local-origin', 'scripts/remote-release.sh', 'scripts/retention.py'}).issubset(archive_names), 'Missing release configuration')
+        require((allowed - {'scripts/remote-release.sh', 'scripts/retention.py'}).issubset(archive_names), 'Missing release configuration')
         require(archive.extractfile('release.env').read() == (output / 'release.env').read_bytes(), 'Manifest mismatch')
         validator = archive.extractfile('scripts/release.sh').read()
         require(hashlib.sha256(validator).hexdigest() == metadata['validator_sha256'], 'Validator mismatch')
@@ -180,7 +180,7 @@ def main():
         '- `verification.json`: restore counts and validation results.\n'
         '- `SHA256SUMS`: checksums of every backup file.\n\n'
         'The folder contains private configuration. Directory mode: 700; file modes: 600.\n'
-        'Recovery procedure: docs/dung-lai-khi-het-vps.md in the GoldCast repository.\n'
+        'Recovery procedure: docs/huong-dan.md (section 9) in the GoldCast repository.\n'
     )
     for path in output.iterdir():
         if path.is_file():

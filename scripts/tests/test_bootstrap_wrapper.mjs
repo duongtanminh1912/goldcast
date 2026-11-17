@@ -78,13 +78,12 @@ test('explicit refresh replaces an old baseline only after runtime verification'
   assert.ok(!readFileSync(join(state.root, 'docker.log'), 'utf8').includes('up -d'));
 });
 
-test('wrapper marks a pre-identity baseline for direct-origin verification', t => {
+test('wrapper refuses a running release without identity and records no baseline', t => {
   const state = setup(t);
   state.fixture.containers[2].Config.Env = ['API_BASE_URL_INTERNAL=http://backend:8080'];
-  const result = state.run(); assert.equal(result.status, 0, result.stderr);
-  const release = readFileSync(join(state.root, '.last-good-release'), 'utf8').trim();
-  assert.ok(existsSync(join(release, 'legacy-local-origin')));
-  assert.ok(readFileSync(join(state.root, 'docker.log'), 'utf8').includes('--legacy-local-origin'));
+  assert.notEqual(state.run().status, 0);
+  assert.ok(!existsSync(join(state.root, '.last-good-release')));
+  assert.ok(!existsSync(join(state.root, '.release-lock')));
 });
 
 test('wrapper refuses another Compose project without recording a baseline', t => {
