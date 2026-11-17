@@ -18,13 +18,9 @@ fi
 case "$release" in "$root"/releases/*) ;; *) echo 'Invalid release directory' >&2; exit 1;; esac
 validate_manifest() {
     manifest_release=$1
-    require_identity=1
-    if [ "${2:-}" = --allow-legacy ] && [ -f "$manifest_release/legacy-local-origin" ]; then
-        require_identity=0
-    fi
     # Treat the manifest as data, never source it as shell code. Only the two
     # application repositories built by Jenkins may reach production.
-    awk -v require_identity="$require_identity" '
+    awk '
         function fail(message) {
             print "Invalid release manifest: " message > "/dev/stderr"
             failed = 1
@@ -57,7 +53,7 @@ validate_manifest() {
             if (failed) exit 1
             if (!seen["BACKEND_IMAGE"] || !seen["FRONTEND_IMAGE"])
                 fail("both application image digests are required")
-            if (require_identity && !seen["RELEASE_ID"])
+            if (!seen["RELEASE_ID"])
                 fail("RELEASE_ID is required")
         }
     ' "$manifest_release/release.env"
@@ -67,7 +63,7 @@ compose() {
     # Compose gives exported variables precedence over --env-file. The tested
     # manifest must remain authoritative, including when rolling back in CI.
     unset BACKEND_IMAGE FRONTEND_IMAGE RELEASE_ID
-    validate_manifest "$release" --allow-legacy
+    validate_manifest "$release"
     runtime_env="$release/runtime.env"
     test -f "$runtime_env" || runtime_env="$root/.env"
     docker compose --env-file "$runtime_env" --env-file "$release/release.env" -p "$project" -f "$release/docker-compose.prod.yml" "$@"
@@ -80,7 +76,7 @@ freeze_env() {
     fi
 }
 verify() {
-    validate_manifest "$release" --allow-legacy
+    validate_manifest "$release"
     # Match the actual running image IDs to the exact registry digests passed by G2.
     for service in backend frontend; do
         case "$service" in backend) key=BACKEND_IMAGE;; frontend) key=FRONTEND_IMAGE;; esac
@@ -95,10 +91,7 @@ verify() {
     # HTTPS certificate validation is enabled; requests exercise Caddy -> Next -> API.
     probe_image=$(sed -n 's/^FRONTEND_IMAGE=//p' "$release/release.env")
     public_release=$(sed -n 's/^RELEASE_ID=//p' "$release/release.env")
-    if [ -z "$public_release" ]; then
-        test -f "$release/legacy-local-origin" || { echo 'Missing public release identity' >&2; return 1; }
-        public_release=--legacy-local-origin
-    elif ! printf '%s\n' "$public_release" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$'; then
+    if ! printf '%s\n' "$public_release" | grep -Eq '^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$'; then
         echo 'Invalid public release identity' >&2
         return 1
     fi
@@ -121,11 +114,11 @@ case "$operation" in
     test -s "$root/.last-good-release" || { echo 'Run bootstrap against the current healthy production first' >&2; exit 1; }
     previous=$(cat "$root/.last-good-release")
     case "$previous" in "$root"/releases/*) ;; *) echo 'Invalid previous release' >&2; exit 1;; esac
-    if [ ! -f "$previous/runtime.env" ] || { ! grep -q '^RELEASE_ID=.' "$previous/release.env" && [ ! -f "$previous/legacy-local-origin" ]; }; then
+    if [ ! -f "$previous/runtime.env" ]; then
         echo 'Baseline predates public identity/config snapshots; run bootstrap-release.sh --refresh against healthy production first' >&2
         exit 1
     fi
-    validate_manifest "$previous" --allow-legacy
+    validate_manifest "$previous"
     mkdir "$root/.release-lock"
     printf '%s\n' "$release" > "$root/.release-lock/owner"
     date -u '+%Y-%m-%dT%H:%M:%SZ' > "$release/deploy-started-at"
@@ -214,7 +207,7 @@ case "$operation" in
     fi
     ;;
   bootstrap)
-    validate_manifest "$release" --allow-legacy
+    validate_manifest "$release"
     # Explicit one-time adoption of existing production; never auto-bless on deploy.
     case "${3:-}" in
       '') test ! -e "$root/.last-good-release"; baseline_before=;;

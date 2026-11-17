@@ -50,9 +50,7 @@ ssh deploy@$IP_CU 'set -eu
   release=$(cat .last-good-release)
   case "$release" in /opt/goldcast/releases/*) ;; *) exit 1;; esac
   set -- release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs
-  for file in runtime.env legacy-local-origin; do
-    if [ -f "$release/$file" ]; then set -- "$@" "$file"; fi
-  done
+  if [ -f "$release/runtime.env" ]; then set -- "$@" runtime.env; fi
   tar -cf - -C "$release" "$@"
 ' > "$BACKUP_DIR/release.tar"
 tar -tf "$BACKUP_DIR/release.tar"
@@ -391,11 +389,10 @@ sh "$RELEASE_DIR/scripts/release.sh" status "$RELEASE_DIR"
 
 Bootstrap so image ID/digest, readiness và HTTPS qua các trang thật trước khi
 ghi con trỏ. Release mới phải khớp `RELEASE_ID` frontend/backend qua URL công
-khai. Archive legacy giữ marker `legacy-local-origin`, cần DNS trỏ trực tiếp
-vào VPS. Nó không restart stack. Nếu lỗi, chưa có baseline; sửa nguyên
+khai; archive thiếu `RELEASE_ID` bị từ chối. Nó không restart stack. Nếu lỗi, chưa có baseline; sửa nguyên
 nhân và kiểm lại trước khi nối Jenkins. Không tự tạo `.last-good-release`.
 
-Nếu archive dùng script đời cũ chưa có snapshot/định danh, cập nhật checkout
+Nếu archive thiếu `runtime.env` (tạo bởi script đời cũ), cập nhật checkout
 chứa script mới rồi chạy `sh /opt/goldcast/scripts/bootstrap-release.sh --refresh`
 trên production vừa phục hồi, trước khi chạy pipeline mới. Lệnh kiểm lại
 runtime và chỉ thay baseline sau khi đạt; không restart stack.

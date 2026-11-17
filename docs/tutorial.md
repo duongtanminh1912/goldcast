@@ -503,19 +503,18 @@ mỗi khóa `RELEASE_ID`, `BACKEND_IMAGE`, `FRONTEND_IMAGE` xuất hiện đúng
 không nhận khóa khác. Image phải thuộc đúng repository của từng service và có
 digest `sha256` gồm 64 ký tự hex thường; không nhận tag, nội suy hoặc giá trị
 có dấu nháy. Cho phép dòng trống và comment riêng. Baseline và rollback cũng
-được kiểm trước khi chạy Compose; chỉ baseline đã có marker legacy mới được
-thiếu `RELEASE_ID`. Manifest lỗi bị từ chối trước `pull`/`up` và không được
+được kiểm trước khi chạy Compose; mọi manifest đều phải có `RELEASE_ID`.
+Manifest lỗi bị từ chối trước `pull`/`up` và không được
 ghi nhận thành bản tốt.
 
-**Chuẩn bị một lần khi chuyển từ pipeline cũ:** trên VPS, cập nhật checkout
-chứa các script mới rồi chạy `sh scripts/bootstrap-release.sh` tại
-`/opt/goldcast`. Script chụp digest, môi trường, lệnh, healthcheck, volume và
+**Tạo baseline lần đầu** (máy chủ mới, chưa có `.last-good-release`): trên VPS,
+cập nhật checkout rồi chạy `sh scripts/bootstrap-release.sh` tại `/opt/goldcast`. Script chụp digest, môi trường, lệnh, healthcheck, volume và
 cấu hình Caddy của container đang chạy; không lấy Compose mới để giả định cấu
 hình cũ. Kiểm project `goldcast`, volume `goldcast_goldcast-pgdata`, readiness
 và HTTPS trước khi ghi `.last-good-release`. Không restart production.
 
-Nếu đã có baseline tạo trước cơ chế định danh/snapshot này, khi production
-đang khỏe và không có deploy đang chạy, dùng:
+Muốn chụp lại baseline từ production đang chạy, khi production đang khỏe và
+không có deploy đang chạy, dùng:
 
 ```bash
 cd /opt/goldcast
@@ -523,11 +522,10 @@ sh scripts/bootstrap-release.sh --refresh
 ```
 
 Refresh chỉ thay con trỏ sau xác minh; thất bại giữ bản tốt cũ. Các snapshot
-và `runtime.env` có thể chứa token/password, được ghi quyền 600. Image cũ chưa
-có `/api/release` chỉ được adopt bằng chế độ `legacy-local-origin`: DNS HTTPS
-phải trỏ trực tiếp vào IP thuộc VPS đó, frontend phải gọi backend nội bộ.
-Chế độ này không hỗ trợ CDN/NAT; release mới luôn phải khớp định danh công khai.
-Pipeline từ chối deploy khi baseline cũ chưa được refresh an toàn.
+và `runtime.env` có thể chứa token/password, được ghi quyền 600. Bootstrap chỉ
+nhận container có `RELEASE_ID` (image do pipeline G1/G2/G3 build) và phải khớp
+định danh công khai qua `/api/release`. Pipeline từ chối deploy khi baseline
+thiếu `runtime.env`.
 Sau khi chuyển sang release theo digest, thao tác Compose thủ công cũng phải dùng
 `--env-file <release>/runtime.env --env-file <release>/release.env -p goldcast
 -f <release>/docker-compose.prod.yml`; không dùng riêng `THE_TAG` cũ để cập nhật.

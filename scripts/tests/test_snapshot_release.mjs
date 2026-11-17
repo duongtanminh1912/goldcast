@@ -41,10 +41,10 @@ test('baseline keeps the live feed runtime configuration for recovery', () => {
   assert.equal(result.runtimeEnv.APP_LIVE_GOLD_RETENTION_DAYS, '30');
 });
 
-test('legacy mode is explicit when the running image has no release identity', () => {
+test('running image without release identity cannot be adopted', () => {
   const { containers, images } = runtimeFixture();
   containers[2].Config.Env = ['API_BASE_URL_INTERNAL=http://backend:8080'];
-  assert.equal(captureRelease(containers, images).legacy, true);
+  assert.throws(() => captureRelease(containers, images), /no release identity/);
 });
 
 test('unexpected volume, network or published application port rejects adoption', () => {
