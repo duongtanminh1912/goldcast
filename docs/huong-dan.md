@@ -666,7 +666,17 @@ flowchart LR
   P --> J[Exporter chỉ đọc Jenkins]
   G[Grafana trên Mac] --> P
   P --> M[Alertmanager] --> T[Telegram]
+  M -->|Watchdog mỗi phút| H[healthchecks.io]
+  H -->|ngừng nhận ping| T
+  GH[GitHub Actions mỗi 10 phút] -->|HTTPS thực tế| W
+  GH -->|khi đổi trạng thái| T
 ```
+
+Có hai đường giám sát độc lập với nhau, để một máy chết không làm mù cả hệ thống:
+
+- **Trên Mac:** Prometheus và Alertmanager, đầy đủ 35 luật (mục 7.1).
+- **Ngoài Mac:** healthchecks.io canh *bản thân* bộ giám sát (Watchdog), còn GitHub
+  Actions kiểm site từ bên ngoài khi Mac tắt (mục 7.4).
 
 ### 7.1 Phạm vi
 
@@ -680,9 +690,10 @@ flowchart LR
 | Giá theo phút | Lịch poll treo, fetch lỗi kéo dài, timestamp nguồn cũ |
 | Release | Image ID khác digest trong last-good, định danh HTTPS lệch, khoá tồn tại quá 20 phút |
 | CI/backup | Kết quả `goldcast-ci`, `goldcast-backup`; backup thành công quá 30 giờ; job treo |
-| Bộ giám sát | SSH tunnel mất, exporter lỗi, collector hoặc poll Jenkins ngừng cập nhật |
+| Bộ giám sát | SSH tunnel mất, exporter lỗi, collector hoặc poll Jenkins ngừng cập nhật; Watchdog ngừng ping healthchecks.io |
 
-34 luật nằm trong `monitoring/prometheus/alerts.yml`. Luật `info` chỉ hiện trên
+35 luật nằm trong `monitoring/prometheus/alerts.yml`, gồm `GoldcastWatchdog` luôn firing
+(mục 7.4); `monitoring/check.sh` khẳng định nó chỉ đi tới dead-man, không tới Telegram. Luật `info` chỉ hiện trên
 dashboard; `warning`/`critical` gửi Telegram kèm tin phục hồi, gom theo
 site/alertname, lặp sau 6 giờ. Mất tunnel/collector thì Alertmanager chặn các
 cảnh báo phụ liên quan. Sai phiên bản/image được bỏ qua trong lúc giữ khoá
@@ -752,6 +763,42 @@ python3 monitoring/test-notification.py resolve   # chờ RESOLVED
 chạy lại sau đăng nhập; Docker Desktop vẫn phải được bật. Tắt bằng
 `launchctl bootout gui/$(id -u)/vn.goldcast.monitoring-awake`.
 
+### 7.4 Giám sát bộ giám sát: Watchdog và probe ngoài
+
+**Watchdog (dead-man switch).** Luật `GoldcastWatchdog` luôn firing. Alertmanager gửi
+nó qua webhook tới một check trên healthchecks.io khoảng mỗi phút. Khi Mac tắt, Docker
+dừng, Prometheus/Alertmanager chết hoặc Mac mất mạng, ping ngừng và healthchecks.io tự
+báo Telegram. Cách này kiểm cả đường đi Prometheus → luật → Alertmanager → mạng ra
+ngoài, chứ không chỉ "process còn chạy".
+
+1. Tạo tài khoản healthchecks.io (gói miễn phí đủ dùng), tạo check:
+   **Period 1 phút, Grace 5 phút**. Vào Integrations, thêm Telegram và gắn vào check.
+2. Chạy lại `python3 monitoring/configure.py --ssh-key ...` và dán **Ping URL**
+   (`https://hc-ping.com/<uuid>`) vào prompt ẩn. URL được lưu ở
+   `~/.config/goldcast-monitoring/deadman_ping_url` (quyền 600): ai có URL này có thể
+   giữ check xanh giả, nên coi nó như một bí mật.
+3. `python3 monitoring/start.py` để nạp cấu hình mới.
+
+**Kiểm:** trên healthchecks.io, check chuyển sang **Up** và "Last ping" cập nhật mỗi phút.
+Thử thật: `docker compose -p goldcast-monitoring stop alertmanager`, chờ khoảng 6 phút
+phải nhận tin Telegram từ healthchecks.io, rồi `start alertmanager` và check phải
+về **Up**.
+
+**Probe ngoài (GitHub Actions).** Workflow `.github/workflows/external-probe.yml` chạy
+mỗi 10 phút trên hạ tầng GitHub, dùng `scripts/external-probe.mjs`: `/api/release` phải
+trả cùng một định danh cho frontend và backend, ba trang chính phải có nội dung thật
+(cùng định nghĩa "khoẻ" như G3). Chỉ nhắn Telegram khi **đổi trạng thái** (UP → DOWN,
+DOWN → UP), nên sự cố kéo dài chỉ tạo một tin.
+
+1. GitHub → Settings → Secrets and variables → Actions, thêm `TELEGRAM_BOT_TOKEN` và
+   `TELEGRAM_CHAT_ID` (có thể dùng lại bot của Alertmanager).
+2. Actions → **External probe** → **Run workflow** để chạy thử ngay.
+
+**Kiểm:** lần chạy thử xanh, log có dòng `UP https://goldcast.click release ...`.
+
+Giới hạn của GitHub: lịch có thể trễ vài phút lúc GitHub bận, và lịch tự tắt sau 60 ngày
+repo không có hoạt động (GitHub gửi email báo trước). Watchdog không phụ thuộc điều này.
+
 ### Runbook
 
 1. **Website/readiness đỏ:** thử HTTPS từ máy ngoài VPS, xem Jenkins Deploy/G3
@@ -775,6 +822,12 @@ chạy lại sau đăng nhập; Docker Desktop vẫn phải được bật. Tắ
 7. **Không thấy Telegram:** kiểm `/metrics` của Alertmanager (integration
    `telegram`, bộ đếm notification failed), bot/chat_id, route, silence và
    inhibition. Không công khai log chứa URL/token Telegram.
+8. **healthchecks.io báo Watchdog ngừng:** bộ giám sát trên Mac đã chết hoặc mất mạng,
+   nên mọi cảnh báo khác cũng đang im. Kiểm Mac còn bật, Docker Desktop,
+   `docker compose -p goldcast-monitoring ps`, log Alertmanager (lỗi webhook) và mạng.
+   Trong lúc đó xem trạng thái site ở workflow **External probe** trên GitHub.
+9. **External probe báo DOWN:** xử lý như mục 1. Nếu Prometheus trên Mac không báo
+   cùng lúc, kiểm thêm Watchdog: có thể cả bộ giám sát trên Mac cũng đang chết.
 
 ---
 
@@ -1001,9 +1054,9 @@ khi nối lại Jenkins.
 
 ## 11. Giới hạn đã biết
 
-- **Monitoring phụ thuộc máy Mac:** Mac tắt, sleep hoặc mất mạng thì mọi cảnh
-  báo dừng. Cần dead-man check ở máy/dịch vụ độc lập nếu muốn phát hiện cả
-  trường hợp này. Chưa có log tập trung, tracing hay SLO/error budget.
+- **Monitoring đầy đủ vẫn chạy trên máy Mac:** khi Mac tắt, Watchdog báo qua
+  healthchecks.io và probe GitHub vẫn kiểm site, nhưng các luật chi tiết (tài nguyên
+  VPS, dữ liệu, backup...) tạm ngừng. Chưa có log tập trung, tracing hay SLO/error budget.
 - **Một máy chủ, không dự phòng:** máy chết là dịch vụ chết; mỗi lần deploy gián
   đoạn vài giây.
 - **Rollback không phục hồi DB:** migration phải tương thích với bản trước.

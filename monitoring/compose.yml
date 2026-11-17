@@ -60,7 +60,7 @@ services:
     volumes:
       - ${MONITORING_SECRETS_DIR:?}/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
-    secrets: [telegram_bot_token]
+    secrets: [telegram_bot_token, deadman_ping_url]
     cap_drop: [ALL]
     cap_add: [DAC_OVERRIDE]
     security_opt: [no-new-privileges:true]
@@ -95,6 +95,7 @@ volumes:
   alertmanager-data:
 secrets:
   telegram_bot_token: {file: '${MONITORING_SECRETS_DIR:?}/telegram_bot_token'}
+  deadman_ping_url: {file: '${MONITORING_SECRETS_DIR:?}/deadman_ping_url'}
   grafana_admin_password: {file: '${MONITORING_SECRETS_DIR:?}/grafana_admin_password'}
   ssh_key: {file: '${MONITORING_SSH_KEY:?}'}
   known_hosts: {file: '${MONITORING_KNOWN_HOSTS:?}'}

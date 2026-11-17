@@ -39,6 +39,13 @@ def main():
     chat = (directory / 'telegram_chat_id').read_text().strip()
     if not re.fullmatch(r'-?[0-9]+', chat):
         raise SystemExit('Invalid Telegram chat_id.')
+    # Dead-man ping URL (e.g. https://hc-ping.com/<uuid>). It is a credential: anyone
+    # holding it can keep the check green, so it lives with the other secrets.
+    ping_path = directory / 'deadman_ping_url'
+    if not ping_path.exists():
+        private_write(ping_path, getpass.getpass('Dead-man ping URL, e.g. https://hc-ping.com/<uuid> (hidden): ').strip() + '\n')
+    if not re.fullmatch(r'https://[^\s/]+/\S+', ping_path.read_text().strip()):
+        raise SystemExit('Invalid dead-man ping URL: an https URL is required.')
     if not (directory / 'grafana_admin_password').exists():
         private_write(directory / 'grafana_admin_password', secrets.token_urlsafe(32) + '\n')
     auth_path = directory / 'jenkins_auth.json'

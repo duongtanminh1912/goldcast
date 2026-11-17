@@ -251,8 +251,8 @@ Từ thư mục gốc, đây cũng chính là cổng G1:
 ```bash
 mvn -f backend/pom.xml test                          # một test: -Dtest=ForecasterTest
 python3 -m unittest discover -s scripts/tests -v     # release, rollback, backup, monitoring
-node --test scripts/tests/test_*.mjs                 # probe G3, snapshot bootstrap
-sh monitoring/check.sh                               # promtool/amtool qua Docker
+node --test scripts/tests/test_*.mjs                 # probe G3, probe ngoài, snapshot bootstrap
+sh monitoring/check.sh                               # promtool/amtool, định tuyến cảnh báo
 (cd frontend && npm ci && npm run typecheck)
 ```
 
@@ -318,8 +318,10 @@ Caddy tự cấp HTTPS, chỉ mở 22/80/443, triển khai bằng user `deploy` 
 Backup DB và cấu hình release chạy hằng đêm ra ngoài VPS, có phục hồi thử.
 
 **Giám sát:** Prometheus, Alertmanager, Grafana và Blackbox chạy trên máy Jenkins,
-nối về VPS qua SSH tunnel; 34 luật cảnh báo gửi Telegram (HTTPS, tài nguyên,
-container, API, độ mới dữ liệu, sai digest, Jenkins, backup).
+nối về VPS qua SSH tunnel; 35 luật cảnh báo gửi Telegram (HTTPS, tài nguyên,
+container, API, độ mới dữ liệu, sai digest, Jenkins, backup). Hai đường độc lập với
+máy đó: Watchdog gửi nhịp sống tới healthchecks.io (bộ giám sát chết là có tin báo),
+và một workflow GitHub Actions kiểm site từ bên ngoài mỗi 10 phút.
 
 Cách dựng và vận hành từng phần: [docs/huong-dan.md](docs/huong-dan.md).
 
@@ -331,7 +333,7 @@ Cách dựng và vận hành từng phần: [docs/huong-dan.md](docs/huong-dan.m
 |---|---|
 | Mô hình chỉ dựa trên dữ liệu đã xảy ra | `ARX_MACRO` có tính lợi suất thực và USD đến phiên trước, nhưng không mô hình nào biết trước quyết định của Fed hay tin địa chính trị, vốn là thứ tạo ra cú sốc giá lớn |
 | Lịch giao dịch chỉ bỏ thứ Bảy/Chủ nhật | Chưa có ngày lễ Việt Nam; nhãn ngày quanh Tết có thể lệch |
-| Monitoring chạy trên máy Mac cá nhân | Mac tắt hoặc mất mạng thì cảnh báo dừng; chưa có dead-man check độc lập |
+| Monitoring đầy đủ chạy trên máy Mac cá nhân | Mac tắt thì Watchdog báo và probe GitHub vẫn kiểm site, nhưng luật chi tiết (VPS, dữ liệu, backup) tạm ngừng |
 | Chưa có log tập trung, tracing, SLO | Log chỉ nằm trong Docker trên VPS; cảnh báo dựa trên ngưỡng |
 | Hạ tầng dựng bằng script shell, chưa có IaC | Dựng lại được nhưng không có trạng thái khai báo như Terraform |
 | Một máy chủ, không dự phòng | Máy chết là dịch vụ chết; mỗi lần deploy gián đoạn vài giây |

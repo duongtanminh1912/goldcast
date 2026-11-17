@@ -13,4 +13,10 @@ COPYFILE_DISABLE=1 tar -cf - monitoring/alertmanager |
   docker run --rm -i --entrypoint /bin/sh "$ALERTMANAGER_IMAGE" -ec '
     mkdir /tmp/check; cd /tmp/check; tar -xf -;
     sed "s/__CHAT_ID__/1/" monitoring/alertmanager/alertmanager.yml.template > /tmp/alertmanager.yml;
-    amtool check-config /tmp/alertmanager.yml'
+    amtool check-config /tmp/alertmanager.yml;
+    route() { amtool config routes test --config.file=/tmp/alertmanager.yml "$@"; }
+    expect() { want=$1; shift; got=$(route "$@" | tr -d " "); [ "$got" = "$want" ] || { echo "Route for $* is $got, want $want" >&2; exit 1; }; }
+    expect deadman alertname=GoldcastWatchdog severity=heartbeat site=goldcast;
+    expect telegram alertname=GoldcastWebsiteUnavailable severity=critical site=goldcast;
+    expect dashboard-only alertname=GoldcastMarketDataSynthetic severity=info site=goldcast;
+    echo "Alert routing OK"'

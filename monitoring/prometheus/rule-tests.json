@@ -361,6 +361,30 @@
           ]
         }
       ]
+    },
+    {
+      "name": "watchdog is always firing so the external dead-man check keeps receiving pings",
+      "interval": "1m",
+      "input_series": [],
+      "alert_rule_test": [
+        {
+          "eval_time": "1m",
+          "alertname": "GoldcastWatchdog",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "severity": "heartbeat",
+                "site": "goldcast"
+              },
+              "exp_annotations": {
+                "summary": "Watchdog của bộ giám sát (luôn firing)",
+                "description": "Nhịp sống gửi tới dịch vụ dead-man bên ngoài. Nếu nó ngừng, bản thân bộ giám sát đã chết.",
+                "runbook": "https://github.com/duongtanminh1912/goldcast/blob/main/docs/huong-dan.md#runbook"
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }
