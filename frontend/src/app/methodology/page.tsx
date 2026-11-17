@@ -96,6 +96,14 @@ VNĐ/lượng = USD/oz ÷ 31,1034768 × 37,5 × tỷ giá USD/VND`}
               mức thay đổi ngày-qua-ngày thì xấp xỉ dừng.
             </li>
             <li>
+              <strong className="text-ink">ARX vĩ mô</strong> (chỉ cho XAU/USD) — AR(p) trên
+              sai phân, cộng thêm biến động của lợi suất thực 10 năm Mỹ và chỉ số USD rộng của
+              Fed (nguồn FRED) đến phiên trước. Mọi biến đều trễ ít nhất một phiên nên mô hình
+              không nhìn thấy thông tin của chính ngày nó dự báo. Tương lai của hai biến này
+              được giả định đứng yên. Mô hình chỉ được Auto chọn khi thắng thật trong backtest;
+              nó vẫn không biết trước quyết định của Fed hay tin tức địa chính trị.
+            </li>
+            <li>
               <strong className="text-ink">Auto</strong> — backtest tất cả mô hình trên chính
               chuỗi đó rồi chọn mô hình có MASE thấp nhất. Khi hoà, mô hình đơn giản hơn thắng.
             </li>

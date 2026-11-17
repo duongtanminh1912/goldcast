@@ -442,7 +442,8 @@ bộ luồng; nhánh khác `main` (hoặc PR) dừng sau G2.
     rồi chạy cùng image ở target mới nhất; `assert-upgrade.sql` kiểm dữ liệu cũ
     còn nguyên, smoke và các trang phải đạt lại.
 
-  Cả hai ca kiểm feed giá phút bằng nguồn HTTP giả lập (mục 8) và đối chiếu
+  Cả hai ca kiểm mô hình `ARX_MACRO` trên dữ liệu vĩ mô mô phỏng (FRED tắt trong
+  G2, mục 6.6), kiểm feed giá phút bằng nguồn HTTP giả lập (mục 8) và đối chiếu
   `RELEASE_ID` frontend/backend qua `/api/release`. PostgreSQL/Caddy ghim digest
   như production. Container, mạng và dữ liệu tạm được dọn khi kết thúc.
 - **Deploy** (chỉ `main`, không phải PR): Jenkins chuyển `release.env`, Compose,
@@ -627,6 +628,27 @@ diễn tập trong mạng/DB riêng, không SSH vào VPS. Nhập `RELEASE_ID`,
 Job cố ý kết thúc **FAILURE**. Chỉ kết luận diễn tập đạt khi artifact
 `rollback-evidence.txt` của chính build đó có `PASS`. G2 lỗi thì không có PASS.
 
+### 6.6 Dữ liệu vĩ mô cho mô hình ARX (FRED)
+
+Mỗi lượt ingest, sau khi dữ liệu giá đã commit, backend tải hai chuỗi từ FRED vào bảng
+`macro_observation`: lợi suất thực 10 năm Mỹ (`DFII10`, có thể âm) và chỉ số USD rộng của
+Fed (`DTWEXBGS`). FRED được gọi trong transaction riêng, nên lỗi FRED không làm mất dữ liệu
+giá. Kết quả hiện trong `GET /api/v1/admin/ingest/status` dưới provider `fred`.
+
+- Tắt bằng `APP_MACRO_ENABLED=false`. G2 tắt FRED; khi seed bật và bảng rỗng, backend sinh
+  dữ liệu vĩ mô mô phỏng gắn nguồn `synthetic`, và dự báo dùng nó sẽ cảnh báo rõ.
+- `ARX_MACRO` chỉ được đề xuất cho XAU/USD khi giá trị vĩ mô mới nhất không cũ hơn
+  `app.macro.max-lag-days` (mặc định 7 ngày) so với giá vàng gần nhất. Không đạt thì yêu cầu
+  `model=ARX_MACRO` trả 422 `macro-unavailable` và AUTO bỏ qua mô hình này.
+- Kiểm nhanh dữ liệu trên VPS:
+
+```bash
+docker exec goldcast-db psql -U goldcast -d goldcast -c \
+  "SELECT series_code, max(observed_on), count(*), string_agg(DISTINCT source, ',') FROM macro_observation GROUP BY 1"
+```
+
+Migration V4 chỉ thêm bảng, nên rollback về bản trước vẫn chạy được (không có `ARX_MACRO`).
+
 ---
 
 ## 7. Monitoring và cảnh báo Telegram
@@ -744,7 +766,8 @@ chạy lại sau đăng nhập; Docker Desktop vẫn phải được bật. Tắ
 4. **Giá cũ/nguồn lỗi:** đối chiếu `observedOn`, lịch giao dịch và trạng thái
    ingest (mục 6.2). Không bật seed synthetic để che feed hỏng. Với feed phút,
    xem `/api/v1/market/world/live`: `latest.observedAt`, `lastAttemptAt`,
-   `lastFetchAt`, `lastFetchSucceeded` (mục 8).
+   `lastFetchAt`, `lastFetchSucceeded` (mục 8). Với `ARX_MACRO` bị 422, kiểm provider
+   `fred` trong trạng thái ingest và ngày mới nhất trong `macro_observation` (mục 6.6).
 5. **Sai release/image:** so last-good với `/api/release` và Docker image ID.
    Khoá deploy còn tồn tại thì kiểm owner/build trước; không xoá theo tuổi.
 6. **Backup đỏ/quá hạn:** đọc đúng build `goldcast-backup`, xác minh

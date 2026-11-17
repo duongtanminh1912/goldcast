@@ -116,6 +116,14 @@ app:
       # the parser is selected per provider, not hard-wired into the ingest service.
       url: https://sjc.com.vn/xml/tygiavang.xml
 
+  # Macro drivers for the ARX_MACRO model (US real yield, US dollar index) from FRED.
+  macro:
+    enabled: ${APP_MACRO_ENABLED:true}
+    base-url: https://fred.stlouisfed.org/graph/fredgraph.csv
+    history-days: 1200
+    # ARX_MACRO is not offered when the newest macro value trails the last gold close by more.
+    max-lag-days: 7
+
   forecast:
     default-horizon: 14
     max-horizon: 90

@@ -23,6 +23,7 @@ const MODELS = [
   { key: "SMA", label: "SMA" },
   { key: "HOLT_DAMPED", label: "Holt" },
   { key: "AR_DIFF", label: "AR(p)" },
+  { key: "ARX_MACRO", label: "ARX vĩ mô" },
 ];
 
 const HORIZONS = [7, 14, 30, 60, 90];

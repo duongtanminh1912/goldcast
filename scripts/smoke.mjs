@@ -188,10 +188,36 @@ async function thuForecast() {
   }
 }
 
+async function thuForecastMacro() {
+  console.log("\n[5] ARX_MACRO: macro drivers are available and only for world gold");
+  const f = await layJson("/api/v1/forecast/XAUUSD?model=ARX_MACRO&horizon=7");
+  kiem("ARX_MACRO forecast model and horizon", f.model === "ARX_MACRO" && f.horizon === 7);
+  kiem("ARX_MACRO reports lagged driver coefficients",
+    !!f.params && Number.isFinite(f.params.realYield10y_lag1) && Number.isFinite(f.params.usdBroad_lag1),
+    "params=" + JSON.stringify(f.params));
+  const pts = f.points || [];
+  kiem("ARX_MACRO has seven finite ordered steps", pts.length === 7 && pts.every(p => {
+    const v = [p.lower95, p.lower80, p.value, p.upper80, p.upper95].map(Number);
+    return v.every(Number.isFinite) && v[2] > 0 && v.every((x, j) => j === 0 || v[j - 1] <= x);
+  }));
+
+  const ctrl = new AbortController();
+  const hen = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await fetch(BASE + "/api/v1/forecast/SJC_HCM?model=ARX_MACRO&horizon=7", { signal: ctrl.signal });
+    const body = await res.json().catch(() => ({}));
+    kiem("ARX_MACRO on a domestic series is refused with 422 macro-unavailable",
+      res.status === 422 && String(body.type || "").endsWith("/macro-unavailable"),
+      "HTTP " + res.status + " type=" + body.type);
+  } finally {
+    clearTimeout(hen);
+  }
+}
+
 async function main() {
   console.log("Smoke test GoldCast  --  BASE_URL = " + BASE);
 
-  for (const thu of [thuInstruments, thuMarketSummary, thuModels, thuForecast]) {
+  for (const thu of [thuInstruments, thuMarketSummary, thuModels, thuForecast, thuForecastMacro]) {
     try {
       await thu();
     } catch (e) {

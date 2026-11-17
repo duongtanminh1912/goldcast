@@ -38,7 +38,7 @@ class IngestConcurrencyTest {
         properties = new AppProperties(null,
                 new AppProperties.Ingest(true, false, "0 7 * * * *", true, 1200, 20), null, null);
         service = new IngestService(instruments, mock(PricePointRepository.class), List.of(),
-                mock(SyntheticSeedGenerator.class), properties, transactions);
+                mock(SyntheticSeedGenerator.class), properties, transactions, null);
     }
 
     @Test
@@ -120,7 +120,7 @@ class IngestConcurrencyTest {
                 .thenReturn(List.of())
                 .thenThrow(new IllegalStateException("feed unavailable"));
         service = new IngestService(instruments, mock(PricePointRepository.class), List.of(provider),
-                mock(SyntheticSeedGenerator.class), properties, transactions);
+                mock(SyntheticSeedGenerator.class), properties, transactions, null);
         service.run();
         var success = service.status().lastProviderSuccess().get("feed");
         assertNotNull(success);

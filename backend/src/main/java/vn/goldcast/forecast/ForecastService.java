@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import vn.goldcast.api.InsufficientHistoryException;
+import vn.goldcast.api.MacroDataUnavailableException;
 import vn.goldcast.api.dto.BacktestDto;
 import vn.goldcast.api.dto.ForecastDto;
 import vn.goldcast.api.dto.HorizonAccuracyDto;
@@ -15,7 +16,13 @@ import vn.goldcast.config.AppProperties;
 import vn.goldcast.domain.ForecastPoint;
 import vn.goldcast.domain.ForecastRun;
 import vn.goldcast.domain.Instrument;
+import vn.goldcast.domain.InstrumentKind;
 import vn.goldcast.domain.PricePoint;
+import vn.goldcast.macro.MacroAlignment;
+import vn.goldcast.macro.MacroProperties;
+import vn.goldcast.macro.MacroSeries;
+import vn.goldcast.macro.MacroStore;
+import vn.goldcast.macro.SyntheticMacroGenerator;
 import vn.goldcast.market.Amounts;
 import vn.goldcast.market.PriceSeriesService;
 import vn.goldcast.market.TradingCalendar;
@@ -29,6 +36,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 
 /**
  * Produces forecasts, and the evidence needed to judge them.
@@ -48,15 +56,25 @@ public class ForecastService {
     private final ForecastRunRepository runs;
     private final AppProperties properties;
     private final ObjectMapper objectMapper;
+    private final MacroStore macroStore;
+    private final MacroProperties macroProperties;
+
+    /** Lags of the gold price change and of each macro driver change in ARX_MACRO. */
+    static final int ARX_ORDER = 2;
+    static final int ARX_DRIVER_LAGS = 2;
 
     public ForecastService(PriceSeriesService series,
                            ForecastRunRepository runs,
                            AppProperties properties,
-                           ObjectMapper objectMapper) {
+                           ObjectMapper objectMapper,
+                           MacroStore macroStore,
+                           MacroProperties macroProperties) {
         this.series = series;
         this.runs = runs;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.macroStore = macroStore;
+        this.macroProperties = macroProperties;
     }
 
     @Transactional
@@ -73,8 +91,9 @@ public class ForecastService {
 
         Backtester backtester = new Backtester(properties.forecast().backtestMaxOrigins());
         int minTrain = Math.min(properties.forecast().backtestMinTrain(), closes.length / 2);
+        MacroInputs macro = macroInputs(instrument, history);
 
-        Selection selection = select(wanted, closes, horizon, backtester, minTrain);
+        Selection selection = select(wanted, closes, horizon, backtester, minTrain, macro);
         Forecaster forecaster = selection.forecaster();
         BacktestResult accuracy = selection.backtest();
 
@@ -103,7 +122,10 @@ public class ForecastService {
         }
 
         boolean synthetic = PriceSeriesService.containsSynthetic(history);
-        List<String> warnings = buildWarnings(closes.length, horizon, accuracy, synthetic);
+        boolean usesMacro = forecaster.model() == ForecastModel.ARX_MACRO;
+        List<String> warnings = buildWarnings(closes.length, horizon, accuracy, synthetic,
+                usesMacro, usesMacro && macro.synthetic(),
+                wanted == ForecastModel.AUTO && macro.available());
 
         ForecastDto dto = new ForecastDto(
                 InstrumentDto.from(instrument),
@@ -146,7 +168,12 @@ public class ForecastService {
         String best = null;
         double bestScore = Double.POSITIVE_INFINITY;
 
-        for (Forecaster candidate : Forecasters.candidates(closes.length, horizon)) {
+        List<Forecaster> candidates = new ArrayList<>(Forecasters.candidates(closes.length, horizon));
+        MacroInputs macro = macroInputs(instrument, history);
+        if (macro.available() && closes.length >= macro.forecaster().minObservations() + horizon) {
+            candidates.add(macro.forecaster());
+        }
+        for (Forecaster candidate : candidates) {
             BacktestResult result = backtester.run(closes, candidate, horizon, minTrain);
             if (!result.hasData()) {
                 continue;
@@ -205,11 +232,22 @@ public class ForecastService {
      * catalogue order and ties go to whichever came first, which favours the simpler model.
      */
     private Selection select(ForecastModel wanted, double[] closes, int horizon,
-                             Backtester backtester, int minTrain) {
+                             Backtester backtester, int minTrain, MacroInputs macro) {
 
-        List<Forecaster> candidates = wanted == ForecastModel.AUTO
-                ? Forecasters.candidates(closes.length, horizon)
-                : List.of(Forecasters.create(wanted));
+        List<Forecaster> candidates;
+        if (wanted == ForecastModel.AUTO) {
+            candidates = new ArrayList<>(Forecasters.candidates(closes.length, horizon));
+            if (macro.available() && closes.length >= macro.forecaster().minObservations() + horizon) {
+                candidates.add(macro.forecaster());
+            }
+        } else if (wanted == ForecastModel.ARX_MACRO) {
+            if (!macro.available()) {
+                throw new MacroDataUnavailableException(macro.unavailableReason());
+            }
+            candidates = List.of(macro.forecaster());
+        } else {
+            candidates = List.of(Forecasters.create(wanted));
+        }
 
         Forecaster chosen = null;
         BacktestResult chosenResult = null;
@@ -266,6 +304,56 @@ public class ForecastService {
         return Double.isFinite(rmse) ? rmse : Double.POSITIVE_INFINITY;
     }
 
+    /**
+     * Macro drivers aligned to the price dates, when ARX_MACRO can be offered: world spot
+     * gold only, every driver present on the last price date, the newest driver value no
+     * older than {@code app.macro.max-lag-days}, and enough overlapping rows to fit.
+     */
+    private MacroInputs macroInputs(Instrument instrument, List<PricePoint> history) {
+        if (instrument.getKind() != InstrumentKind.SPOT_GOLD) {
+            return MacroInputs.unavailable("Mô hình ARX_MACRO chỉ áp dụng cho giá vàng thế giới (XAU/USD).");
+        }
+        List<LocalDate> dates = PriceSeriesService.dates(history);
+        LocalDate first = dates.get(0).minusDays(14);
+        LocalDate last = dates.get(dates.size() - 1);
+        MacroSeries[] all = MacroSeries.values();
+        double[][] drivers = new double[all.length][];
+        String[] names = new String[all.length];
+        boolean synthetic = false;
+        for (int k = 0; k < all.length; k++) {
+            NavigableMap<LocalDate, Double> observations = macroStore.since(all[k], first);
+            Map.Entry<LocalDate, Double> latest = observations.floorEntry(last);
+            if (latest == null) {
+                return MacroInputs.unavailable("Chưa có dữ liệu " + all[k].label()
+                        + ". Hãy đợi ingest lấy dữ liệu từ FRED.");
+            }
+            if (latest.getKey().isBefore(last.minusDays(macroProperties.maxLagDays()))) {
+                return MacroInputs.unavailable("Dữ liệu " + all[k].label() + " mới nhất là ngày "
+                        + latest.getKey() + ", cũ hơn " + macroProperties.maxLagDays()
+                        + " ngày so với giá vàng gần nhất (" + last + ").");
+            }
+            drivers[k] = MacroAlignment.asOf(dates, observations);
+            names[k] = all[k].paramName();
+            synthetic |= macroStore.hasSourceSince(all[k], first, SyntheticMacroGenerator.SOURCE);
+        }
+        ArxMacroForecaster forecaster = new ArxMacroForecaster(drivers, names, ARX_ORDER, ARX_DRIVER_LAGS);
+        int aligned = 0;
+        for (int i = 0; i < dates.size(); i++) {
+            boolean complete = true;
+            for (double[] driver : drivers) {
+                complete &= Double.isFinite(driver[i]);
+            }
+            if (complete) {
+                aligned++;
+            }
+        }
+        if (aligned < forecaster.minObservations()) {
+            return MacroInputs.unavailable("Mới có " + aligned + " ngày giá vàng có đủ dữ liệu vĩ mô, cần "
+                    + forecaster.minObservations() + ".");
+        }
+        return new MacroInputs(forecaster, synthetic, null);
+    }
+
     private List<PricePoint> loadHistory(Instrument instrument) {
         List<PricePoint> history =
                 series.recent(instrument.getId(), properties.forecast().maxTrainWindow());
@@ -287,7 +375,8 @@ public class ForecastService {
     }
 
     private List<String> buildWarnings(int trainSize, int horizon, BacktestResult accuracy,
-                                       boolean synthetic) {
+                                       boolean synthetic, boolean usesMacro, boolean macroSynthetic,
+                                       boolean macroAvailable) {
         List<String> warnings = new ArrayList<>();
 
         if (synthetic) {
@@ -307,8 +396,22 @@ public class ForecastService {
             warnings.add("Sai số tăng theo căn bậc hai của số ngày dự báo. Ở tầm " + horizon
                     + " ngày, khoảng tin cậy rộng hơn giá trị điểm rất nhiều.");
         }
-        warnings.add("Dự báo là ngoại suy thống kê từ giá quá khứ. Nó không mô hình hoá chính sách "
-                + "tiền tệ, biến động địa chính trị hay can thiệp thị trường vàng trong nước.");
+        if (macroSynthetic) {
+            warnings.add("Lợi suất thực và chỉ số USD dùng trong mô hình là dữ liệu mô phỏng, "
+                    + "không phải số liệu thật từ FRED.");
+        }
+        if (usesMacro) {
+            warnings.add("Mô hình có dùng biến động của lợi suất thực 10 năm Mỹ và chỉ số USD đến "
+                    + "phiên trước, và giả định hai biến này đứng yên trong tương lai. Nó vẫn không biết "
+                    + "trước quyết định của Fed, tin tức hay biến động địa chính trị.");
+        } else if (macroAvailable) {
+            warnings.add("Dự báo là ngoại suy thống kê từ giá quá khứ. Mô hình ARX_MACRO có tính tới "
+                    + "lợi suất thực và chỉ số USD nhưng không thắng trong backtest lần này, nên không "
+                    + "được chọn. Không mô hình nào biết trước tin tức hay biến động địa chính trị.");
+        } else {
+            warnings.add("Dự báo là ngoại suy thống kê từ giá quá khứ. Nó không mô hình hoá chính sách "
+                    + "tiền tệ, biến động địa chính trị hay can thiệp thị trường vàng trong nước.");
+        }
         return warnings;
     }
 
@@ -398,4 +501,14 @@ public class ForecastService {
                              List<ForecastDto.ModelScore> scores) {}
 
     private record Scored(Forecaster forecaster, BacktestResult result) {}
+
+    private record MacroInputs(ArxMacroForecaster forecaster, boolean synthetic, String unavailableReason) {
+        static MacroInputs unavailable(String reason) {
+            return new MacroInputs(null, false, reason);
+        }
+
+        boolean available() {
+            return forecaster != null;
+        }
+    }
 }

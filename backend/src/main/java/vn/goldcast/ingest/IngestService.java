@@ -8,6 +8,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import vn.goldcast.config.AppProperties;
 import vn.goldcast.domain.Instrument;
 import vn.goldcast.domain.PricePoint;
+import vn.goldcast.macro.MacroIngest;
 import vn.goldcast.repository.InstrumentRepository;
 import vn.goldcast.repository.PricePointRepository;
 
@@ -42,6 +43,7 @@ public class IngestService {
     private final SyntheticSeedGenerator seedGenerator;
     private final AppProperties properties;
     private final TransactionTemplate transactions;
+    private final MacroIngest macroIngest;
     private final AtomicBoolean running = new AtomicBoolean(false);
     private final Map<String, OffsetDateTime> lastProviderSuccess = new HashMap<>();
     private OffsetDateTime lastAttempt;
@@ -53,13 +55,15 @@ public class IngestService {
                          List<PriceProvider> providers,
                          SyntheticSeedGenerator seedGenerator,
                          AppProperties properties,
-                         PlatformTransactionManager transactionManager) {
+                         PlatformTransactionManager transactionManager,
+                         MacroIngest macroIngest) {
         this.instruments = instruments;
         this.prices = prices;
         this.providers = providers;
         this.seedGenerator = seedGenerator;
         this.properties = properties;
         this.transactions = new TransactionTemplate(transactionManager);
+        this.macroIngest = macroIngest;
     }
 
     public IngestReport run() {
@@ -72,6 +76,16 @@ public class IngestService {
             // a @Transactional method's finally would be too early: its proxy
             // commits after the method has returned.
             IngestReport report = transactions.execute(status -> ingest());
+            // Macro drivers run after prices have committed, in their own transactions,
+            // so a FRED outage or a bad row can never roll back price data.
+            if (macroIngest != null) {
+                List<IngestReport.ProviderOutcome> outcomes = new ArrayList<>(report.providers());
+                IngestReport.ProviderOutcome macro = macroIngest.refresh(properties.ingest().seedOnEmpty());
+                outcomes.add(macro);
+                report = new IngestReport(report.startedAt(), OffsetDateTime.now(), List.copyOf(outcomes),
+                        report.inserted() + macro.inserted(), report.updated() + macro.updated(),
+                        report.seededInstruments());
+            }
             synchronized (this) {
                 lastCommittedReport = report;
                 lastTransactionFailed = false;
