@@ -7,6 +7,9 @@ import vn.goldcast.domain.Instrument;
 import vn.goldcast.domain.InstrumentKind;
 import vn.goldcast.domain.PricePoint;
 import vn.goldcast.ingest.IngestService;
+import vn.goldcast.macro.MacroProperties;
+import vn.goldcast.macro.MacroSeries;
+import vn.goldcast.macro.MacroStore;
 import vn.goldcast.market.PriceSeriesService;
 
 import java.time.Clock;
@@ -21,9 +24,11 @@ import static org.mockito.Mockito.*;
 
 class GoldcastMetricsTest {
     private final PriceSeriesService series = mock(PriceSeriesService.class);
+    private final MacroStore macroStore = mock(MacroStore.class);
     private final SimpleMeterRegistry registry = new SimpleMeterRegistry();
     private final GoldcastMetrics metrics = new GoldcastMetrics(series, mock(IngestService.class),
-            mock(AppProperties.class), List.of(), "candidate-42",
+            mock(AppProperties.class), List.of(), macroStore,
+            new MacroProperties(true, "https://fred.example/csv", 1200, 7), "candidate-42",
             Clock.fixed(Instant.parse("2026-10-19T03:00:00Z"), ZoneId.of("Asia/Ho_Chi_Minh")));
 
     private Instrument instrument() {
@@ -86,5 +91,40 @@ class GoldcastMetricsTest {
         when(series.activeInstruments()).thenReturn(List.of());
         metrics.refresh();
         assertNull(registry.find("goldcast.market.observation.present").gauge());
+    }
+
+    private double macroLag(String fredId) {
+        return registry.get("goldcast.macro.observation.lag.days").tag("series", fredId).gauge().value();
+    }
+
+    @Test
+    void macroLagIsCountedFromTheLastGoldCloseLikeArxAvailability() {
+        var gold = instrument();
+        when(series.activeInstruments()).thenReturn(List.of(gold));
+        PricePoint close = mock(PricePoint.class);
+        when(close.getObservedOn()).thenReturn(LocalDate.of(2026, 10, 16));
+        when(series.latest(1L)).thenReturn(Optional.of(close));
+        when(macroStore.latestDate(MacroSeries.REAL_YIELD_10Y)).thenReturn(Optional.of(LocalDate.of(2026, 10, 15)));
+        when(macroStore.latestDate(MacroSeries.USD_BROAD)).thenReturn(Optional.of(LocalDate.of(2026, 10, 6)));
+        metrics.bindTo(registry);
+        metrics.refresh();
+        assertEquals(1, macroLag("DFII10"));
+        assertEquals(10, macroLag("DTWEXBGS"));
+        assertEquals(7, value("goldcast.macro.max.lag.days"));
+        assertEquals(1, value("goldcast.macro.enabled"));
+        assertEquals(1, registry.get("goldcast.ingest.provider.enabled").tag("provider", "fred").gauge().value());
+    }
+
+    @Test
+    void missingMacroSeriesIsExplicitlyAbsentAndAFailingStoreFailsTheRefresh() {
+        when(series.activeInstruments()).thenReturn(List.of());
+        when(macroStore.latestDate(any())).thenReturn(Optional.empty());
+        metrics.bindTo(registry);
+        metrics.refresh();
+        assertEquals(0, registry.get("goldcast.macro.observation.present").tag("series", "DFII10").gauge().value());
+        assertEquals(1, value("goldcast.market.refresh.success"));
+        when(macroStore.latestDate(any())).thenThrow(new IllegalStateException("db down"));
+        metrics.refresh();
+        assertEquals(0, value("goldcast.market.refresh.success"));
     }
 }

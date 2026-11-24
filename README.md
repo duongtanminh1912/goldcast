@@ -80,11 +80,12 @@ goldcast/
 │   ├── components/  UI dùng chung + biểu đồ
 │   └── lib/         API client có kiểu, types.ts (đối chiếu với DTO Java), format
 ├── Jenkinsfile, .github/workflows/ci.yml    Pipeline
+├── .github/workflows/external-probe.yml     Probe HTTPS từ bên ngoài mỗi 10 phút
 ├── docker-compose{,.ci,.prod}.yml           Dev · G2 · production
-├── scripts/         G2, smoke, release/rollback, bootstrap, backup và test của chúng
+├── scripts/         G2, smoke, release/rollback, bootstrap, backup, probe ngoài và test của chúng
 ├── deploy/          Caddyfile, script dựng máy chủ, script siết SSH
 ├── jenkins/         Image Jenkins, job backup và diễn tập rollback
-├── monitoring/      Prometheus, Alertmanager, Grafana, luật cảnh báo
+├── monitoring/      Prometheus, Alertmanager, Grafana, luật cảnh báo, Watchdog
 └── docs/huong-dan.md
 ```
 
@@ -219,7 +220,9 @@ ngày của giá trong nước**, không phải giá mới nhất.
 | `APP_INGEST_CRON` | `0 7 * * * *` | Lịch ingest (hằng giờ, phút thứ 7) |
 | `APP_INGEST_SEED_ON_EMPTY` | dev `true`, production `false` | Seed dữ liệu mô phỏng cho chuỗi trống |
 | `APP_LIVE_GOLD_ENABLED` | `true` | Bật/tắt lấy giá theo phút |
+| `APP_LIVE_GOLD_URL` | `https://api.gold-api.com/price/XAU` | Nguồn giá XAU/USD theo phút |
 | `APP_LIVE_GOLD_POLL_SECONDS` | `60` | Chu kỳ lấy giá theo phút |
+| `APP_LIVE_GOLD_TIMEOUT_SECONDS` | `10` | Thời gian chờ tối đa mỗi lần gọi Gold API |
 | `APP_LIVE_GOLD_STALE_SECONDS` | `180` | Quá ngưỡng này thì giá phút bị coi là cũ |
 | `APP_LIVE_GOLD_RETENTION_DAYS` | `30` | Số ngày giữ giá theo phút |
 | `APP_MACRO_ENABLED` | `true` | Lấy lợi suất thực và chỉ số USD từ FRED cho `ARX_MACRO` |
@@ -268,6 +271,8 @@ nhất:
 - `IndicatorsTest`, `GoldUnitsTest`, `TradingCalendarTest`, `DataFreshnessTest`
 - `StooqCsvParserTest`, `SjcXmlParserTest`, `DateParsingTest`: CSV có dòng `N/D`,
   XML hỏng, trang HTML lỗi thay XML, số kiểu `78.500` vs `1,5`, giá trị sai đơn vị
+- `AdminTokenFilterTest`, `AdminCorsTest`, `ReleaseControllerTest`, `GoldcastMetricsTest`: khoá
+  endpoint admin khi token rỗng, CORS, định danh release, metric cho Prometheus
 - `IngestConcurrencyTest` và các test `market/live`: khoá ingest, parser và lưu
   trữ giá theo phút
 - `ArxMacroForecasterTest`, `FredCsvParserTest`, `MacroAlignmentTest`: khôi phục đúng hệ số
@@ -294,7 +299,7 @@ git push
 
 | | GitHub Actions | Jenkins |
 |---|---|---|
-| Vai trò | tín hiệu xanh/đỏ trên PR | build image, G2, triển khai thật |
+| Vai trò | tín hiệu xanh/đỏ trên PR, probe site từ bên ngoài | build image, G2, triển khai thật |
 | Môi trường | sạch mỗi lần | bền vững, giữ cache Maven/Docker |
 | Chạy ở đâu | hạ tầng GitHub | máy cá nhân |
 
@@ -304,8 +309,8 @@ biên dịch, nên thiếu cổng này thì đổi tên một trường ở back
 và `tsc` xanh, còn người dùng thấy ô trống.
 
 **G2 — kiểm image trước deploy.** Dùng đúng digest sẽ triển khai, dựng Compose riêng
-để kiểm cài mới và nâng cấp từ schema V1 có dữ liệu mẫu: 35 bất biến API và ba trang
-SSR. Ví dụ `worldVndPerGram × troyOunceInGrams` phải bằng `usdPerOunce × vndPerUsd`,
+để kiểm cài mới và nâng cấp từ schema V1 có dữ liệu mẫu: 39 phép thử bất biến API (gồm
+`ARX_MACRO` trên dữ liệu vĩ mô mô phỏng) và ba trang SSR. Ví dụ `worldVndPerGram × troyOunceInGrams` phải bằng `usdPerOunce × vndPerUsd`,
 nên công thức quy đổi sai là lộ ngay.
 → [`scripts/g2.sh`](scripts/g2.sh) · [`scripts/smoke.mjs`](scripts/smoke.mjs)
 
@@ -319,7 +324,7 @@ Backup DB và cấu hình release chạy hằng đêm ra ngoài VPS, có phục 
 
 **Giám sát:** Prometheus, Alertmanager, Grafana và Blackbox chạy trên máy Jenkins,
 nối về VPS qua SSH tunnel; 35 luật cảnh báo gửi Telegram (HTTPS, tài nguyên,
-container, API, độ mới dữ liệu, sai digest, Jenkins, backup). Hai đường độc lập với
+container, API, độ mới dữ liệu kể cả dữ liệu vĩ mô, sai digest, Jenkins, backup) cùng luật `GoldcastWatchdog`. Hai đường độc lập với
 máy đó: Watchdog gửi nhịp sống tới healthchecks.io (bộ giám sát chết là có tin báo),
 và một workflow GitHub Actions kiểm site từ bên ngoài mỗi 10 phút.
 
