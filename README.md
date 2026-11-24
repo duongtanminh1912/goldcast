@@ -189,6 +189,10 @@ sai ba chữ số.
   kinh điển của giá vàng, nhưng `ARX_MACRO` chỉ dùng biến động **đến phiên trước** (không nhìn
   thấy thông tin của ngày cần dự báo) và giả định hai biến đứng yên trong tương lai. Nó cạnh
   tranh với các mô hình khác trong cùng backtest; AUTO không chọn nó nếu nó không thắng.
+- **Backtest được nhớ theo đúng dữ liệu đầu vào.** Khoá cache chứa cả chuỗi giá (và dữ liệu vĩ
+  mô đã căn ngày với `ARX_MACRO`), nên chỉ cần một giá mới hay một giá bị sửa là backtest chạy lại;
+  không cần xoá cache bằng tay. Database chỉ được giữ trong lúc đọc dữ liệu, phần tính toán chạy
+  sau khi đã trả connection.
 - **Đọc MASE:** dưới 1 thì mô hình mang thêm thông tin, từ 1 trở lên thì không,
   bất kể MAPE đẹp đến đâu. Giá vàng theo ngày rất gần bước đi ngẫu nhiên, nên
   MASE quanh 1 là bình thường và giao diện cảnh báo đúng lúc đó.

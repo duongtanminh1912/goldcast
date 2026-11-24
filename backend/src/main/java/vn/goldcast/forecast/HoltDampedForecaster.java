@@ -42,7 +42,7 @@ public final class HoltDampedForecaster implements Forecaster {
         for (double alpha : ALPHA_GRID) {
             for (double beta : BETA_GRID) {
                 for (double phi : PHI_GRID) {
-                    double sse = sse(series, alpha, beta, phi);
+                    double sse = sse(series, alpha, beta, phi, bestSse);
                     if (sse < bestSse) {
                         bestSse = sse;
                         bestAlpha = alpha;
@@ -69,7 +69,12 @@ public final class HoltDampedForecaster implements Forecaster {
                 "alpha", bestAlpha, "beta", bestBeta, "phi", bestPhi, "trainRmse", rmse));
     }
 
-    private static double sse(double[] y, double alpha, double beta, double phi) {
+    /**
+     * Sum of squared one-step errors, abandoned once it reaches {@code limit}. Every term is
+     * non-negative, so a partial sum at or above the best so far can only end there too: the
+     * grid search picks exactly the same parameters, most combinations just stop early.
+     */
+    private static double sse(double[] y, double alpha, double beta, double phi, double limit) {
         double level = y[0];
         double trend = y[1] - y[0];
         double sse = 0;
@@ -77,6 +82,9 @@ public final class HoltDampedForecaster implements Forecaster {
             double forecast = level + phi * trend;
             double error = y[t] - forecast;
             sse += error * error;
+            if (sse >= limit) {
+                return sse;
+            }
 
             double prevLevel = level;
             level = alpha * y[t] + (1 - alpha) * forecast;

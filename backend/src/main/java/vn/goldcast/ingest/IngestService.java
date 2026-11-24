@@ -17,11 +17,8 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -72,10 +69,13 @@ public class IngestService {
         }
         synchronized (this) { lastAttempt = OffsetDateTime.now(); }
         try {
+            // Network first, with no transaction or connection held: a provider may take up
+            // to its timeout, and a pooled connection idling through that helps nobody.
+            Fetched fetched = fetch();
             // execute returns only after commit/rollback. Releasing the guard in
             // a @Transactional method's finally would be too early: its proxy
             // commits after the method has returned.
-            IngestReport report = transactions.execute(status -> ingest());
+            IngestReport report = transactions.execute(status -> store(fetched));
             // Macro drivers run after prices have committed, in their own transactions,
             // so a FRED outage or a bad row can never roll back price data.
             if (macroIngest != null) {
@@ -114,7 +114,14 @@ public class IngestService {
     public record Status(boolean running, OffsetDateTime lastAttempt, boolean lastTransactionFailed,
                          Map<String, OffsetDateTime> lastProviderSuccess, IngestReport lastCommittedReport) {}
 
-    private IngestReport ingest() {
+    /** What the providers returned, gathered before any write. */
+    private record Fetched(OffsetDateTime startedAt, List<Instrument> active, Map<String, Instrument> byCode,
+                           List<Pass> passes) {}
+
+    /** One provider's result: quotes to write, or a finished outcome when there is nothing to write. */
+    private record Pass(PriceProvider provider, List<ProviderQuote> quotes, IngestReport.ProviderOutcome outcome) {}
+
+    private Fetched fetch() {
         OffsetDateTime startedAt = OffsetDateTime.now();
         List<Instrument> active = instruments.findByActiveTrueOrderBySortOrderAscCodeAsc();
         Map<String, Instrument> byCode = new HashMap<>();
@@ -122,10 +129,7 @@ public class IngestService {
             byCode.put(instrument.getCode().toUpperCase(), instrument);
         }
 
-        List<IngestReport.ProviderOutcome> outcomes = new ArrayList<>();
-        AtomicInteger totalInserted = new AtomicInteger();
-        AtomicInteger totalUpdated = new AtomicInteger();
-
+        List<Pass> passes = new ArrayList<>();
         for (PriceProvider provider : providers) {
             List<String> codes = active.stream()
                     .filter(instrument -> provider.id().equalsIgnoreCase(instrument.getSource()))
@@ -136,21 +140,38 @@ public class IngestService {
                 continue;
             }
             if (!provider.enabled()) {
-                outcomes.add(new IngestReport.ProviderOutcome(
-                        provider.id(), false, 0, 0, 0, "Provider đang tắt trong cấu hình"));
+                passes.add(new Pass(provider, List.of(), new IngestReport.ProviderOutcome(
+                        provider.id(), false, 0, 0, 0, "Provider đang tắt trong cấu hình")));
                 continue;
             }
 
-            List<ProviderQuote> quotes;
             try {
-                quotes = provider.fetch(codes, properties.ingest().historyDays());
+                passes.add(new Pass(provider, provider.fetch(codes, properties.ingest().historyDays()), null));
             } catch (RuntimeException ex) {
                 log.warn("Provider {} lỗi: {}", provider.id(), ex.getMessage());
-                outcomes.add(new IngestReport.ProviderOutcome(
-                        provider.id(), true, 0, 0, 0, "Lỗi: " + ex.getMessage()));
+                passes.add(new Pass(provider, List.of(), new IngestReport.ProviderOutcome(
+                        provider.id(), true, 0, 0, 0, "Lỗi: " + ex.getMessage())));
+            }
+        }
+        return new Fetched(startedAt, active, byCode, List.copyOf(passes));
+    }
+
+    private IngestReport store(Fetched fetched) {
+        OffsetDateTime startedAt = fetched.startedAt();
+        List<Instrument> active = fetched.active();
+        Map<String, Instrument> byCode = fetched.byCode();
+
+        List<IngestReport.ProviderOutcome> outcomes = new ArrayList<>();
+        AtomicInteger totalInserted = new AtomicInteger();
+        AtomicInteger totalUpdated = new AtomicInteger();
+
+        for (Pass pass : fetched.passes()) {
+            if (pass.outcome() != null) {
+                outcomes.add(pass.outcome());
                 continue;
             }
-
+            PriceProvider provider = pass.provider();
+            List<ProviderQuote> quotes = pass.quotes();
             WriteResult result = write(quotes, byCode, provider.id());
             totalInserted.addAndGet(result.inserted());
             totalUpdated.addAndGet(result.updated());
@@ -203,9 +224,9 @@ public class IngestService {
             return new WriteResult(0, 0);
         }
 
-        // Pre-load the dates already stored per instrument so the common case — a quote we
-        // already have — costs no database round trip at all.
-        Map<Long, Set<LocalDate>> known = new HashMap<>();
+        // Pre-load the rows already stored per instrument, once, so the common case on an
+        // hourly run (a quote we already have) costs no further database round trip.
+        Map<Long, Map<LocalDate, PricePoint>> known = new HashMap<>();
         LocalDate earliest = quotes.stream()
                 .map(ProviderQuote::observedOn)
                 .min(LocalDate::compareTo)
@@ -222,22 +243,28 @@ public class IngestService {
                 continue;
             }
 
-            Set<LocalDate> dates = known.computeIfAbsent(instrument.getId(),
-                    id -> new HashSet<>(prices.findObservedDatesSince(id, earliest)));
+            Map<LocalDate, PricePoint> stored = known.computeIfAbsent(instrument.getId(), id -> {
+                Map<LocalDate, PricePoint> byDate = new HashMap<>();
+                for (PricePoint point : prices.findSince(id, earliest)) {
+                    byDate.put(point.getObservedOn(), point);
+                }
+                return byDate;
+            });
 
-            if (!dates.contains(quote.observedOn())) {
-                pending.add(new PricePoint(instrument, quote.observedOn(), quote.close(),
-                        quote.buy(), quote.sell(), source));
-                dates.add(quote.observedOn());
+            PricePoint existing = stored.get(quote.observedOn());
+            if (existing == null) {
+                PricePoint point = new PricePoint(instrument, quote.observedOn(), quote.close(),
+                        quote.buy(), quote.sell(), source);
+                pending.add(point);
+                stored.put(quote.observedOn(), point);
                 inserted++;
                 continue;
             }
 
             // Already stored. Dealers revise the same day's quote, so refresh when it moved.
-            Optional<PricePoint> existing =
-                    prices.findByInstrumentIdAndObservedOn(instrument.getId(), quote.observedOn());
-            if (existing.isPresent() && hasChanged(existing.get(), quote)) {
-                PricePoint point = existing.get();
+            // The row is managed by this transaction, so the change is flushed at commit.
+            if (hasChanged(existing, quote)) {
+                PricePoint point = existing;
                 point.setClosePrice(quote.close());
                 point.setBuyPrice(quote.buy());
                 point.setSellPrice(quote.sell());

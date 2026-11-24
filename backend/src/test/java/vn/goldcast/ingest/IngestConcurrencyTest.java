@@ -57,7 +57,9 @@ class IngestConcurrencyTest {
                 assertThrows(IngestAlreadyRunningException.class,
                         () -> new AdminController(service, List.of()).ingest());
                 assertDoesNotThrow(() -> new IngestScheduler(service, properties).onSchedule());
-                verify(transactions, times(1)).getTransaction(any());
+                // The first run is still fetching, before its write transaction; the two
+                // rejected calls must not have read anything or opened anything either.
+                verify(transactions, never()).getTransaction(any());
                 verify(instruments, times(1)).findByActiveTrueOrderBySortOrderAscCodeAsc();
             } finally {
                 finish.countDown();
@@ -78,11 +80,14 @@ class IngestConcurrencyTest {
     }
 
     @Test
-    void failedTransactionReleasesGuardAfterRollback() {
+    void failureBeforeTheWriteReleasesGuardWithoutOpeningATransaction() {
+        // Reading the active instruments now happens with the fetch, before the write
+        // transaction; a failed write rolling back is covered by IngestWriteTest.
         when(instruments.findByActiveTrueOrderBySortOrderAscCodeAsc())
                 .thenThrow(new IllegalStateException("database error")).thenReturn(List.of());
         assertThrows(IllegalStateException.class, service::run);
-        verify(transactions).rollback(any());
+        verify(transactions, never()).getTransaction(any());
+        assertTrue(service.status().lastTransactionFailed());
         assertNotNull(service.run());
     }
 
