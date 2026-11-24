@@ -116,7 +116,7 @@ pipeline {
             }
             post {
                 unsuccessful {
-                    timeout(time: 14, unit: 'MINUTES') {
+                    timeout(time: 16, unit: 'MINUTES') {
                       withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
                         sh 'ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new "$VPS" "test ! -f \'$RELEASE_DIR/scripts/release.sh\' || sh \'$RELEASE_DIR/scripts/remote-release.sh\' rollback \'$RELEASE_DIR\'"'
                       }

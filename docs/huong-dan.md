@@ -543,6 +543,19 @@ và backend khớp; Caddy đợi frontend healthy. Probe thử lại tối đa n
 lỗi kết nối/502/503/504, mỗi request tối đa 15 giây. HTTP 200 nhưng sai định
 danh hoặc trang hiển thị lỗi vẫn bị từ chối.
 
+**Giới hạn RAM.** Mỗi container production có `mem_limit`: db 384 MB, backend 768 MB,
+frontend 320 MB, Caddy 128 MB, tổng 1600 MB trên VPS 2 GB. Giới hạn này bắt buộc chứ
+không chỉ để phòng xa: backend chạy `-XX:MaxRAMPercentage=75`, nên heap JVM tính theo
+giới hạn của container; thiếu giới hạn thì JVM tính theo RAM cả máy và giành chỗ với
+Postgres. G2 chạy db, backend và frontend dưới cùng giới hạn để lỗi thiếu RAM lộ ra
+trước khi deploy. `scripts/tests/test_compose_limits.py` đỏ nếu một service production
+thiếu giới hạn, tổng vượt 2048 − 400 MB, hoặc G2 lệch production. Đổi gói VPS thì đổi
+`VPS_RAM_MB` trong test đó cùng lúc.
+
+Frontend gọi backend với timeout mặc định 5 giây (`API_TIMEOUT_MS`), tính cả phần thân
+phản hồi. Backend treo thì trang hiện thông báo lỗi chung chung thay vì chờ khoảng năm phút; URL nội bộ
+chỉ ghi vào log của container frontend, không hiện cho người xem.
+
 ### 6.2 Độ mới dữ liệu và ingest
 
 `MarketSummary.warnings` cảnh báo từng mã khi thiếu dữ liệu, ngày quan sát ở
@@ -567,7 +580,13 @@ và scheduler dùng chung khoá; yêu cầu chạy chồng trả HTTP 409.
 - Pipeline giới hạn 45 phút, giữ 30 build và artifact của 20 build gần nhất.
 - SSH kết nối tối đa 10 giây, ngắt sau ba lần không phản hồi (mỗi 15 giây).
 - `remote-release.sh` dùng `flock` để lệnh trên VPS không đua với rollback khi
-  mất SSH: chờ khoá tối đa 390 giây, lệnh release tối đa 360 giây.
+  mất SSH: chờ khoá tối đa 390 giây. Mỗi thao tác có ngân sách riêng, đủ chứa các
+  bước bên trong nó: `deploy` 600 giây (pull + `up --wait-timeout 300`), `verify`
+  240 giây, `rollback` 480 giây (`up --wait-timeout 300` + verify). Rollback bị
+  `timeout` giết giữa chừng sẽ không ghi được `.last-good-release` và để lại khoá,
+  nên ngân sách phải dư. Jenkins chờ rollback 16 phút, lâu hơn trường hợp chậm nhất
+  (chờ khoá + ngân sách + thời gian kill). `scripts/tests/test_release_budgets.py`
+  đọc các con số này từ `remote-release.sh`, `release.sh` và `Jenkinsfile`, rồi đỏ khi chúng không còn khớp.
 - Log mỗi service production xoay vòng `3 × 10 MB`. Không chạy Docker prune
   toàn máy và không tự xoá image trên GHCR khi release/backup còn cần nó.
 

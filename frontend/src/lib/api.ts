@@ -23,6 +23,17 @@ const BASE_URL =
     ? process.env.API_BASE_URL_INTERNAL ?? "http://localhost:8080"
     : "";
 
+/**
+ * Upper bound for one backend call, headers and body together. Without it a stalled JVM
+ * holds every page render for undici's default of about five minutes, and requests pile
+ * up in the Node process. It stays under the 15 s each page gets in check-pages.mjs.
+ */
+const TIMEOUT_MS = Number(process.env.API_TIMEOUT_MS) || 5000;
+
+/** Shown to visitors; the URL and the cause go to the server log only. */
+const UNREACHABLE = "Không kết nối được tới máy chủ dữ liệu. Vui lòng thử lại sau ít phút.";
+const TOO_SLOW = "Máy chủ dữ liệu không phản hồi kịp. Vui lòng thử lại sau ít phút.";
+
 /** An HTTP failure carrying the backend's problem document, when it sent one. */
 export class ApiError extends Error {
   readonly status: number;
@@ -51,6 +62,16 @@ interface FetchOptions {
   signal?: AbortSignal;
 }
 
+function transportError(url: string, cause: unknown): ApiError {
+  const timedOut = cause instanceof Error && cause.name === "TimeoutError";
+  // The internal URL helps whoever reads the logs and nobody else.
+  console.error(
+    `API ${url}: ${timedOut ? `không phản hồi sau ${TIMEOUT_MS} ms` : "lỗi kết nối hoặc phản hồi hỏng"}`,
+    cause,
+  );
+  return new ApiError(0, null, timedOut ? TOO_SLOW : UNREACHABLE);
+}
+
 async function request<T>(path: string, options: FetchOptions = {}): Promise<T> {
   const url = `${BASE_URL}${path}`;
   const revalidate = options.revalidate ?? 60;
@@ -59,18 +80,12 @@ async function request<T>(path: string, options: FetchOptions = {}): Promise<T> 
   try {
     response = await fetch(url, {
       headers: { Accept: "application/json" },
-      signal: options.signal,
+      signal: options.signal ?? AbortSignal.timeout(TIMEOUT_MS),
       // next.revalidate is ignored outside the Next server, which is harmless.
       next: { revalidate },
     });
   } catch (cause) {
-    // A connection failure is by far the most common problem in local development,
-    // so say which URL failed rather than surfacing a bare "fetch failed".
-    throw new ApiError(
-      0,
-      null,
-      `Không kết nối được tới API tại ${url}. Kiểm tra backend đã chạy chưa.`,
-    );
+    throw transportError(url, cause);
   }
 
   if (!response.ok) {
@@ -83,7 +98,13 @@ async function request<T>(path: string, options: FetchOptions = {}): Promise<T> 
     throw new ApiError(response.status, problem, `API trả về lỗi ${response.status}`);
   }
 
-  return (await response.json()) as T;
+  try {
+    // The timeout also covers the body: a backend that sends headers and then stalls
+    // must end the same way as one that never answers.
+    return (await response.json()) as T;
+  } catch (cause) {
+    throw transportError(url, cause);
+  }
 }
 
 function query(params: Record<string, string | number | undefined | null>): string {

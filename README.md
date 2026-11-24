@@ -229,6 +229,7 @@ ngày của giá trong nước**, không phải giá mới nhất.
 | `APP_CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | Origin được phép gọi API |
 | `APP_ADMIN_TOKEN` | rỗng | Header `X-Admin-Token` cho `/api/v1/admin/**`; rỗng thì khoá endpoint |
 | `API_BASE_URL_INTERNAL` | Compose: `http://backend:8080` | URL backend mà frontend gọi từ phía máy chủ |
+| `API_TIMEOUT_MS` | `5000` | Thời gian tối đa cho mỗi lời gọi backend từ frontend, kể cả phần thân phản hồi |
 | `RELEASE_ID`, `BACKEND_IMAGE`, `FRONTEND_IMAGE` | bắt buộc với Compose CI/production | Lấy từ artifact `release.env` của build đã qua G2 |
 
 Schema database do **Flyway** quản lý (`backend/src/main/resources/db/migration`),
