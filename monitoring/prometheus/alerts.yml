@@ -216,6 +216,14 @@ groups:
           summary: "Nguồn {{ $labels.provider }} không nhận dữ liệu trong ba giờ"
           description: "Thành công là nhận được dữ liệu và commit; không đồng nghĩa giá mới. Telemetry reset khi restart."
           runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/huong-dan.md#runbook
+      - alert: GoldcastMacroDataStale
+        expr: '((goldcast_macro_observation_present == 0) or (goldcast_macro_observation_lag_days > on(job,instance) group_left goldcast_macro_max_lag_days)) and on(job,instance) (goldcast_macro_enabled == 1) and on(job,instance) (goldcast_market_refresh_success == 1)'
+        for: 1h
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "Dữ liệu vĩ mô {{ $labels.series }} quá cũ, ARX_MACRO đang bị loại"
+          description: "Giá trị mới nhất trễ hơn app.macro.max-lag-days so với giá vàng gần nhất, nên AUTO không còn xét ARX_MACRO. Kiểm provider fred trong trạng thái ingest và lịch phát hành của FRED (DTWEXBGS cập nhật theo tuần)."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/huong-dan.md#runbook
       - alert: GoldcastIngestTransactionFailed
         expr: "goldcast_ingest_last_transaction_failed == 1"
         for: 5m

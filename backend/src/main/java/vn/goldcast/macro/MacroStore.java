@@ -11,6 +11,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NavigableMap;
+import java.util.Optional;
 import java.util.TreeMap;
 
 /** Reads and writes {@code macro_observation}. Writes join the caller's transaction. */
@@ -70,6 +71,13 @@ public class MacroStore {
                 },
                 series.name(), Date.valueOf(from));
         return out;
+    }
+
+    /** Newest stored observation date of a series, whatever its source. */
+    public Optional<LocalDate> latestDate(MacroSeries series) {
+        Date latest = jdbc.queryForObject(
+                "SELECT max(observed_on) FROM macro_observation WHERE series_code = ?", Date.class, series.name());
+        return Optional.ofNullable(latest).map(Date::toLocalDate);
     }
 
     public long count(MacroSeries series) {

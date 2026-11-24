@@ -385,6 +385,181 @@
           ]
         }
       ]
+    },
+    {
+      "name": "macro driver older than max-lag-days for an hour pages once per series",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "goldcast_macro_enabled{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\"}",
+          "values": "1x120"
+        },
+        {
+          "series": "goldcast_macro_max_lag_days{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\"}",
+          "values": "7x120"
+        },
+        {
+          "series": "goldcast_market_refresh_success{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\"}",
+          "values": "1x120"
+        },
+        {
+          "series": "goldcast_macro_observation_present{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",series=\"DTWEXBGS\"}",
+          "values": "1x120"
+        },
+        {
+          "series": "goldcast_macro_observation_lag_days{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",series=\"DTWEXBGS\"}",
+          "values": "10x120"
+        },
+        {
+          "series": "goldcast_macro_observation_present{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",series=\"DFII10\"}",
+          "values": "1x120"
+        },
+        {
+          "series": "goldcast_macro_observation_lag_days{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",series=\"DFII10\"}",
+          "values": "1x120"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "30m",
+          "alertname": "GoldcastMacroDataStale",
+          "exp_alerts": []
+        },
+        {
+          "eval_time": "70m",
+          "alertname": "GoldcastMacroDataStale",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "job": "goldcast-backend",
+                "instance": "metrics-tunnel:19091",
+                "severity": "warning",
+                "site": "goldcast",
+                "series": "DTWEXBGS"
+              },
+              "exp_annotations": {
+                "summary": "Dữ liệu vĩ mô DTWEXBGS quá cũ, ARX_MACRO đang bị loại",
+                "description": "Giá trị mới nhất trễ hơn app.macro.max-lag-days so với giá vàng gần nhất, nên AUTO không còn xét ARX_MACRO. Kiểm provider fred trong trạng thái ingest và lịch phát hành của FRED (DTWEXBGS cập nhật theo tuần).",
+                "runbook": "https://github.com/duongtanminh1912/goldcast/blob/main/docs/huong-dan.md#runbook"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "macro lag exactly at max-lag-days stays quiet",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "goldcast_macro_enabled{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\"}",
+          "values": "1x120"
+        },
+        {
+          "series": "goldcast_macro_max_lag_days{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\"}",
+          "values": "7x120"
+        },
+        {
+          "series": "goldcast_market_refresh_success{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\"}",
+          "values": "1x120"
+        },
+        {
+          "series": "goldcast_macro_observation_present{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",series=\"DFII10\"}",
+          "values": "1x120"
+        },
+        {
+          "series": "goldcast_macro_observation_lag_days{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",series=\"DFII10\"}",
+          "values": "7x120"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "90m",
+          "alertname": "GoldcastMacroDataStale",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "macro disabled in config never pages even with no data",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "goldcast_macro_enabled{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\"}",
+          "values": "0x120"
+        },
+        {
+          "series": "goldcast_macro_max_lag_days{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\"}",
+          "values": "7x120"
+        },
+        {
+          "series": "goldcast_market_refresh_success{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\"}",
+          "values": "1x120"
+        },
+        {
+          "series": "goldcast_macro_observation_present{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",series=\"DFII10\"}",
+          "values": "0x120"
+        },
+        {
+          "series": "goldcast_macro_observation_lag_days{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",series=\"DFII10\"}",
+          "values": "0x120"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "90m",
+          "alertname": "GoldcastMacroDataStale",
+          "exp_alerts": []
+        }
+      ]
+    },
+    {
+      "name": "missing macro series pages after an hour",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "goldcast_macro_enabled{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\"}",
+          "values": "1x120"
+        },
+        {
+          "series": "goldcast_macro_max_lag_days{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\"}",
+          "values": "7x120"
+        },
+        {
+          "series": "goldcast_market_refresh_success{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\"}",
+          "values": "1x120"
+        },
+        {
+          "series": "goldcast_macro_observation_present{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",series=\"DFII10\"}",
+          "values": "0x120"
+        },
+        {
+          "series": "goldcast_macro_observation_lag_days{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",series=\"DFII10\"}",
+          "values": "0x120"
+        }
+      ],
+      "alert_rule_test": [
+        {
+          "eval_time": "70m",
+          "alertname": "GoldcastMacroDataStale",
+          "exp_alerts": [
+            {
+              "exp_labels": {
+                "job": "goldcast-backend",
+                "instance": "metrics-tunnel:19091",
+                "severity": "warning",
+                "site": "goldcast",
+                "series": "DFII10"
+              },
+              "exp_annotations": {
+                "summary": "Dữ liệu vĩ mô DFII10 quá cũ, ARX_MACRO đang bị loại",
+                "description": "Giá trị mới nhất trễ hơn app.macro.max-lag-days so với giá vàng gần nhất, nên AUTO không còn xét ARX_MACRO. Kiểm provider fred trong trạng thái ingest và lịch phát hành của FRED (DTWEXBGS cập nhật theo tuần).",
+                "runbook": "https://github.com/duongtanminh1912/goldcast/blob/main/docs/huong-dan.md#runbook"
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }

@@ -54,3 +54,11 @@ inhibit_rules:
   - source_matchers: ['alertname="GoldcastRuntimeCollectorStale"']
     target_matchers: ['alertname=~"GoldcastContainerNotReady|GoldcastPublicVersionMismatch|GoldcastImageMismatch|GoldcastReleaseLockStuck"']
     equal: [site]
+  # Backend down: readiness (critical) speaks for the whole JVM, and the data-freshness
+  # rules only go quiet because their metrics vanished, not because data is stale.
+  - source_matchers: ['alertname="GoldcastBackendNotReady"']
+    target_matchers: ['alertname="GoldcastBackendMetricsUnavailable"']
+    equal: [site]
+  - source_matchers: ['alertname=~"GoldcastBackendMetricsUnavailable|GoldcastBackendNotReady"']
+    target_matchers: ['alertname=~"GoldcastMarketMetricsStale|GoldcastMacroDataStale"']
+    equal: [site]

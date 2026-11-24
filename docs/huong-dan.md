@@ -435,7 +435,7 @@ bộ luồng; nhánh khác `main` (hoặc PR) dừng sau G2.
 - **G2:** `scripts/g2.sh` dựng `docker-compose.ci.yml` trên Docker của Jenkins,
   project riêng cho mỗi build, DB riêng, không publish cổng, provider ngoài tắt
   và seed mô phỏng bật để kết quả lặp lại được. Hai ca:
-  - *Cài mới:* Flyway khởi tạo, kiểm lịch sử migration, 35 bất biến API trong
+  - *Cài mới:* Flyway khởi tạo, kiểm lịch sử migration, 39 bất biến API trong
     `scripts/smoke.mjs` (ví dụ `worldVndPerGram × troyOunceInGrams` phải bằng
     `usdPerOunce × vndPerUsd`), dự báo NAIVE và ba trang SSR qua Caddy.
   - *Nâng cấp:* tạo DB ở Flyway target V1, nạp `scripts/fixtures/upgrade-v1.sql`,
@@ -622,7 +622,7 @@ diễn tập trong mạng/DB riêng, không SSH vào VPS. Nhập `RELEASE_ID`,
 
 - `FAIL_AT=G3`: dựng baseline, deploy candidate có bộ digest khác, cố ý làm sai
   định danh frontend để G3 lỗi. Nhánh `post.unsuccessful` phải rollback và kiểm
-  lại image, định danh, ba trang, 35 phép kiểm API, con trỏ và khoá.
+  lại image, định danh, ba trang, 39 phép kiểm API, con trỏ và khoá.
 - `FAIL_AT=G2`: định danh không hợp lệ, Jenkins phải dừng trước deploy.
 
 Job cố ý kết thúc **FAILURE**. Chỉ kết luận diễn tập đạt khi artifact
@@ -649,6 +649,12 @@ docker exec goldcast-db psql -U goldcast -d goldcast -c \
 
 Migration V4 chỉ thêm bảng, nên rollback về bản trước vẫn chạy được (không có `ARX_MACRO`).
 
+**Giám sát:** backend xuất `goldcast_macro_observation_lag_days{series}`, tính bằng số ngày
+từ giá trị vĩ mô mới nhất tới phiên giá vàng gần nhất, đúng cách `ForecastService` quyết
+định có xét `ARX_MACRO` hay không. Vượt `app.macro.max-lag-days` liên tục 1 giờ thì luật
+`GoldcastMacroDataStale` báo Telegram. FRED mất hẳn trên 3 giờ thì `GoldcastProviderUnavailable`
+báo với `provider="fred"`. Tắt `APP_MACRO_ENABLED` thì cả hai im.
+
 ---
 
 ## 7. Monitoring và cảnh báo Telegram
@@ -674,7 +680,7 @@ flowchart LR
 
 Có hai đường giám sát độc lập với nhau, để một máy chết không làm mù cả hệ thống:
 
-- **Trên Mac:** Prometheus và Alertmanager, đầy đủ 35 luật (mục 7.1).
+- **Trên Mac:** Prometheus và Alertmanager, đầy đủ 36 luật (mục 7.1).
 - **Ngoài Mac:** healthchecks.io canh *bản thân* bộ giám sát (Watchdog), còn GitHub
   Actions kiểm site từ bên ngoài khi Mac tắt (mục 7.4).
 
@@ -686,17 +692,21 @@ Có hai đường giám sát độc lập với nhau, để một máy chết kh
 | VPS | CPU trên 90% trong 10 phút, RAM khả dụng dưới 10%, đĩa còn dưới 15% |
 | Container | Running/health, restart, OOM |
 | Backend | Readiness (DB, JVM, pool), API 5xx trên 5%, p95 trên 2 giây khi đủ mẫu |
-| Dữ liệu | Thiếu quan sát, chậm trên 2 ngày công bố, ngày tương lai, synthetic, ingest/provider ngừng |
+| Dữ liệu | Thiếu quan sát, chậm trên 2 ngày công bố, ngày tương lai, synthetic, ingest/provider ngừng (gồm `fred`), dữ liệu vĩ mô trễ quá `max-lag-days` nên `ARX_MACRO` bị loại |
 | Giá theo phút | Lịch poll treo, fetch lỗi kéo dài, timestamp nguồn cũ |
 | Release | Image ID khác digest trong last-good, định danh HTTPS lệch, khoá tồn tại quá 20 phút |
 | CI/backup | Kết quả `goldcast-ci`, `goldcast-backup`; backup thành công quá 30 giờ; job treo |
 | Bộ giám sát | SSH tunnel mất, exporter lỗi, collector hoặc poll Jenkins ngừng cập nhật; Watchdog ngừng ping healthchecks.io |
 
-35 luật nằm trong `monitoring/prometheus/alerts.yml`, gồm `GoldcastWatchdog` luôn firing
+36 luật nằm trong `monitoring/prometheus/alerts.yml`, gồm `GoldcastWatchdog` luôn firing
 (mục 7.4); `monitoring/check.sh` khẳng định nó chỉ đi tới dead-man, không tới Telegram. Luật `info` chỉ hiện trên
 dashboard; `warning`/`critical` gửi Telegram kèm tin phục hồi, gom theo
 site/alertname, lặp sau 6 giờ. Mất tunnel/collector thì Alertmanager chặn các
-cảnh báo phụ liên quan. Sai phiên bản/image được bỏ qua trong lúc giữ khoá
+cảnh báo phụ liên quan. Backend chết thì chỉ còn `GoldcastBackendNotReady` (cùng
+`GoldcastWebsiteUnavailable` nếu site công khai cũng hỏng): metrics không thu được và các
+luật độ mới dữ liệu bị chặn, vì chúng chỉ im theo metrics chứ dữ liệu chưa chắc đã cũ.
+`monitoring/check.sh` chạy một Alertmanager thật với cấu hình này, đẩy chùm cảnh báo
+"backend chết" vào và khẳng định chỉ hai cảnh báo trên được gửi. Sai phiên bản/image được bỏ qua trong lúc giữ khoá
 Deploy/G3/backup; khoá treo có luật riêng.
 
 ### 7.2 Cổng, bí mật và lưu trữ
@@ -814,7 +824,9 @@ repo không có hoạt động (GitHub gửi email báo trước). Watchdog khô
    ingest (mục 6.2). Không bật seed synthetic để che feed hỏng. Với feed phút,
    xem `/api/v1/market/world/live`: `latest.observedAt`, `lastAttemptAt`,
    `lastFetchAt`, `lastFetchSucceeded` (mục 8). Với `ARX_MACRO` bị 422, kiểm provider
-   `fred` trong trạng thái ingest và ngày mới nhất trong `macro_observation` (mục 6.6).
+   `fred` trong trạng thái ingest và ngày mới nhất trong `macro_observation` (mục 6.6);
+   cùng cách xử lý khi `GoldcastMacroDataStale` báo. `DTWEXBGS` phát hành theo tuần, nên
+   trễ vài ngày quanh cuối tuần hoặc ngày lễ Mỹ là bình thường.
 5. **Sai release/image:** so last-good với `/api/release` và Docker image ID.
    Khoá deploy còn tồn tại thì kiểm owner/build trước; không xoá theo tuổi.
 6. **Backup đỏ/quá hạn:** đọc đúng build `goldcast-backup`, xác minh
