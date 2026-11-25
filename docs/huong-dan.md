@@ -622,8 +622,9 @@ Postgres thật với 618 quote đã có: số lần quét bảng `price_point` 
 - Máy Jenkins: sau mỗi build, `scripts/ci-cleanup.sh` chỉ giữ 3 image mới nhất
   của mỗi repo `goldcast-backend`/`goldcast-frontend`. Các image cũ bị xoá theo
   tên, không dùng `-f`: image còn container dùng (G2 của job khác) bị từ chối và
-  được giữ lại. Script cũng giới hạn BuildKit cache ở 10 GB và không bao giờ làm
-  build đỏ. Trước khi có bước này, máy Jenkins tích 74 image (~12,6 GB) cùng
+  được giữ lại. Script cũng giới hạn BuildKit cache ở 10 GB cho **từng** builder
+  (cả builder `docker-container` như `multiarch`, có cache trong volume riêng) và
+  không bao giờ làm build đỏ. Trước khi có bước này, máy Jenkins tích 74 image (~12,6 GB) cùng
   12,6 GB cache.
 
 Dọn thư mục release cũ (cần Python ≥ 3.9 trên VPS):
