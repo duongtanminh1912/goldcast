@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Plan backup/release retention. Deletion requires --apply; never prune Docker globally."""
+"""Plan backup/release retention. Deletion requires --apply; never prune Docker globally.
+
+Release retention also removes local goldcast images no remaining release names:
+nothing else ever removed them, so every deploy left two more on the VPS disk.
+"""
 import argparse
 from datetime import datetime, timezone
 import hashlib
@@ -77,6 +81,45 @@ def release_candidates(root, keep, minimum_age_days=7, active_paths=()):
             and now - p.stat().st_mtime >= minimum_age_days * 86400]
 
 
+IMAGE_REPOSITORIES = ('ghcr.io/duongtanminh1912/goldcast-backend',
+                     'ghcr.io/duongtanminh1912/goldcast-frontend')
+
+
+def release_images(path):
+    """Image digests a release deploys, read as data like release.sh does."""
+    try:
+        lines = (path / 'release.env').read_text().splitlines()
+    except OSError:
+        return set()
+    return {value for key, _, value in (line.partition('=') for line in lines)
+            if key in ('BACKEND_IMAGE', 'FRONTEND_IMAGE') and value}
+
+
+def image_candidates(local_images, kept_releases):
+    """Local goldcast images by digest that no kept release would deploy or roll back to.
+
+    Only the two application repositories, only digest references: another project's
+    image, a tag, or an image without a registry digest is never touched. An image a
+    container still uses is refused by `docker image rm` (never forced).
+    """
+    needed = set()
+    for path in kept_releases:
+        needed |= release_images(path)
+    return sorted(image for image in local_images
+                  if image.partition('@')[0] in IMAGE_REPOSITORIES
+                  and '@sha256:' in image and image not in needed)
+
+
+def local_images():
+    images = set()
+    for repository in IMAGE_REPOSITORIES:
+        result = subprocess.run(['docker', 'image', 'ls', '--digests', '--format',
+                                 '{{.Repository}}@{{.Digest}}', repository],
+                                capture_output=True, check=True, timeout=30, text=True)
+        images.update(line.strip() for line in result.stdout.splitlines() if line.strip())
+    return images
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('kind', choices=('backup', 'release'))
@@ -112,6 +155,17 @@ def main():
             print(('DELETE ' if args.apply else 'WOULD DELETE ') + str(path))
             if args.apply:
                 shutil.rmtree(path)
+        if args.kind == 'release':
+            releases = (root / 'releases').resolve()
+            kept = [p for p in releases.iterdir()
+                    if p.is_dir() and not p.is_symlink() and p not in candidates]
+            for image in image_candidates(local_images(), kept):
+                if not args.apply:
+                    print('WOULD DELETE IMAGE ' + image)
+                    continue
+                removed = subprocess.run(['docker', 'image', 'rm', image],
+                                         capture_output=True, timeout=60, text=True)
+                print(('DELETE IMAGE ' if removed.returncode == 0 else 'KEEP IMAGE (in use) ') + image)
     finally:
         if lock:
             lock.close()

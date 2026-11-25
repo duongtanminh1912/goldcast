@@ -1,6 +1,6 @@
 import { pathToFileURL } from 'node:url';
 
-export async function checkPages(base, { releaseId, attempts = 5, retryDelayMs = 2000 } = {}) {
+export async function checkPages(base, { releaseId, attempts = 5, retryDelayMs = 2000, checkNotFound = true } = {}) {
   if (!base) throw new Error('Missing base URL');
   if (!releaseId) throw new Error('Missing release identity');
   if (!Number.isInteger(attempts) || attempts < 1 || attempts > 10) throw new Error('Invalid attempts');
@@ -40,6 +40,17 @@ export async function checkPages(base, { releaseId, attempts = 5, retryDelayMs =
     }
     console.log(`OK page ${path}`);
   }
+  // Pages answer with real statuses. If an unknown code ever renders as 200 again, an
+  // outage page would pass every status check too, so G2/G3 prove the 404 still happens.
+  // That is a property of the release, so the availability probe skips it.
+  if (!checkNotFound) return;
+  const missing = '/instruments/G3-KHONG-TON-TAI';
+  const notFound = await request(missing);
+  await notFound.body?.cancel();
+  if (notFound.status !== 404) {
+    throw new Error(`Page check failed: ${missing} should be 404 (${notFound.status})`);
+  }
+  console.log(`OK page ${missing} is 404`);
 }
 
 if ((process.argv[1] === '-' && import.meta.url.endsWith('/[eval1]')) || (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href)) {

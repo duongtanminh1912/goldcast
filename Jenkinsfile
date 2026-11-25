@@ -8,6 +8,9 @@ pipeline {
     environment {
         REG = 'ghcr.io/duongtanminh1912'
         VPS = 'deploy@103.175.248.236'
+        // The VPS host key is pinned in the repo: a lost ~/.ssh/known_hosts on the Jenkins
+        // machine must fail the deploy, not silently trust whoever answers at that IP.
+        SSH_OPTS = '-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=deploy/known_hosts'
     }
     stages {
         stage('Checkout identity') {
@@ -29,8 +32,10 @@ pipeline {
             steps {
                 dir('backend') { sh 'mvn -B test' }
                 // Tests use only Python's standard library and POSIX sh; no Docker socket.
+                // They also read Jenkinsfile, compose files and deploy/: test_jenkins.py
+                // fails if a test reads anything this list leaves out.
                 sh '''
-                    COPYFILE_DISABLE=1 tar -cf - scripts monitoring |
+                    COPYFILE_DISABLE=1 tar -cf - scripts monitoring deploy Jenkinsfile docker-compose.prod.yml docker-compose.ci.yml |
                       docker run --rm -i python:3.13-alpine sh -ec '
                         mkdir /src; cd /src; tar -xf -;
                         python3 -m unittest discover -s scripts/tests -v'
@@ -97,11 +102,10 @@ pipeline {
                         withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
                             sh '''
                                 set -eu
-                                mkdir -p ~/.ssh
-                                ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new "$VPS" "mkdir -p '$RELEASE_DIR'"
+                                ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "mkdir -p '$RELEASE_DIR'"
                                 COPYFILE_DISABLE=1 tar -cf - release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs scripts/remote-release.sh scripts/retention.py |
-                                  ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new "$VPS" "tar -xf - -C '$RELEASE_DIR'"
-                                ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new "$VPS" "sh '$RELEASE_DIR/scripts/remote-release.sh' deploy '$RELEASE_DIR' '$BUILD_URL'"
+                                  ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "tar -xf - -C '$RELEASE_DIR'"
+                                ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "sh '$RELEASE_DIR/scripts/remote-release.sh' deploy '$RELEASE_DIR' '$BUILD_URL'"
                             '''
                         }
                     }
@@ -109,7 +113,7 @@ pipeline {
                 stage('G3 - verify and promote') {
                     steps {
                         withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
-                            sh 'ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new "$VPS" "sh \'$RELEASE_DIR/scripts/remote-release.sh\' verify \'$RELEASE_DIR\'"'
+                            sh 'ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "sh \'$RELEASE_DIR/scripts/remote-release.sh\' verify \'$RELEASE_DIR\'"'
                         }
                     }
                 }
@@ -118,7 +122,7 @@ pipeline {
                 unsuccessful {
                     timeout(time: 16, unit: 'MINUTES') {
                       withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
-                        sh 'ssh -i "$SSH_KEY" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=accept-new "$VPS" "test ! -f \'$RELEASE_DIR/scripts/release.sh\' || sh \'$RELEASE_DIR/scripts/remote-release.sh\' rollback \'$RELEASE_DIR\'"'
+                        sh 'ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "test ! -f \'$RELEASE_DIR/scripts/release.sh\' || sh \'$RELEASE_DIR/scripts/remote-release.sh\' rollback \'$RELEASE_DIR\'"'
                       }
                     }
                 }
@@ -126,6 +130,10 @@ pipeline {
         }
     }
     post {
-        always { sh 'docker logout ghcr.io || true' }
+        always {
+            sh 'docker logout ghcr.io || true'
+            // Old goldcast images and BuildKit cache otherwise pile up on this machine.
+            sh 'sh scripts/ci-cleanup.sh "$REG" 3 10gb || true'
+        }
     }
 }

@@ -32,7 +32,7 @@ export async function probe(base, { attempts = 3, retryDelayMs = 5000 } = {}) {
   if (identity.backendReleaseId !== releaseId) {
     throw new Error(`Frontend ${releaseId} and backend ${identity.backendReleaseId} disagree`);
   }
-  await checkPages(base, { releaseId, attempts, retryDelayMs });
+  await checkPages(base, { releaseId, attempts, retryDelayMs, checkNotFound: false });
   return releaseId;
 }
 

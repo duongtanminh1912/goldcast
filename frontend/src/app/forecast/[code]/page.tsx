@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { api, ApiError } from "@/lib/api";
 import { ForecastChart } from "@/components/charts";
@@ -13,8 +14,6 @@ import {
 } from "@/lib/format";
 import type { Forecast, Instrument, Series } from "@/lib/types";
 import { InstrumentTabs } from "@/components/InstrumentTabs";
-
-export const revalidate = 300;
 
 const MODELS = [
   { key: "AUTO", label: "Tự chọn" },
@@ -77,22 +76,9 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
         />
       );
     }
-    if (error instanceof ApiError && error.isNotFound) {
-      return (
-        <EmptyState
-          title="Không có chuỗi giá này"
-          description={`Mã '${code}' chưa được khai báo.`}
-          action={{ href: "/", label: "Về trang tổng quan" }}
-        />
-      );
-    }
-    return (
-      <EmptyState
-        title="Không tạo được dự báo"
-        description={error instanceof ApiError ? error.message : "Lỗi không xác định."}
-        action={{ href: "/", label: "Về trang tổng quan" }}
-      />
-    );
+    // Too little history is a normal page state; unknown code is 404, the rest 500.
+    if (error instanceof ApiError && error.isNotFound) notFound();
+    throw error;
   }
 
   const [history, instruments] = await Promise.all([historyRequest, instrumentsRequest]);
