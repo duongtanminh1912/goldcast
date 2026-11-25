@@ -48,6 +48,7 @@ services:
       timeout: 3s
       retries: 20
   db:
+    mem_limit: 384m  # giong production, de G2 chay JVM duoi cung gioi han
     image: postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     environment:
       POSTGRES_DB: goldcast
@@ -59,6 +60,7 @@ services:
       timeout: 3s
       retries: 30
   backend:
+    mem_limit: 768m  # giong production, de G2 chay JVM duoi cung gioi han
     image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE to a digest}
     platform: linux/amd64
     depends_on:
@@ -88,6 +90,7 @@ services:
       retries: 60
       start_period: 30s
   frontend:
+    mem_limit: 320m  # giong production, de G2 chay JVM duoi cung gioi han
     image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE to a digest}
     platform: linux/amd64
     depends_on:

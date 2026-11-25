@@ -5,7 +5,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import vn.goldcast.api.InsufficientHistoryException;
 import vn.goldcast.api.MacroDataUnavailableException;
 import vn.goldcast.api.dto.BacktestDto;
@@ -58,6 +61,7 @@ public class ForecastService {
     private final ObjectMapper objectMapper;
     private final MacroStore macroStore;
     private final MacroProperties macroProperties;
+    private final TransactionTemplate auditWrites;
 
     /** Lags of the gold price change and of each macro driver change in ARX_MACRO. */
     static final int ARX_ORDER = 2;
@@ -68,16 +72,22 @@ public class ForecastService {
                            AppProperties properties,
                            ObjectMapper objectMapper,
                            MacroStore macroStore,
-                           MacroProperties macroProperties) {
+                           MacroProperties macroProperties,
+                           PlatformTransactionManager transactionManager) {
         this.series = series;
         this.runs = runs;
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.macroStore = macroStore;
         this.macroProperties = macroProperties;
+        // Storing a run is auditing, not part of answering. It gets its own transaction that
+        // commits (and flushes) inside persist(), so a failed write is caught there instead of
+        // marking the request's transaction rollback-only and turning the answer into a 500.
+        this.auditWrites = new TransactionTemplate(transactionManager);
+        this.auditWrites.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public ForecastDto forecast(String code, ForecastModel requested, Integer requestedHorizon,
                                 boolean persist) {
         Instrument instrument = series.requireInstrument(code);
@@ -464,7 +474,7 @@ public class ForecastService {
                 run.addPoint(new ForecastPoint(step.step(), step.date(), step.value(),
                         step.lower80(), step.upper80(), step.lower95(), step.upper95()));
             }
-            runs.save(run);
+            auditWrites.executeWithoutResult(status -> runs.saveAndFlush(run));
         } catch (RuntimeException ex) {
             // Storing the run is for later auditing; failing to store it must not fail the request.
             log.warn("Không lưu được forecast run cho {}: {}", instrument.getCode(), ex.getMessage());

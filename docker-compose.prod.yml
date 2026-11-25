@@ -6,6 +6,10 @@
 #   - khong build, chi keo image tu GHCR
 #   - chi Caddy publish cong Internet 80 va 443
 #   - management backend 9091 chi bind loopback cho monitoring qua SSH
+# Gioi han RAM cho moi container, tong 1600 MB tren VPS 2 GB (cong 2 GB swap), de lai
+# phan con lai cho he dieu hanh, sshd va bo thu monitoring. JVM dung -XX:MaxRAMPercentage=75
+# nen heap chi dung dung khi container co gioi han; thieu gioi han thi JVM tinh theo RAM
+# ca may va gianh cho voi Postgres. scripts/tests/test_compose_limits.py giu bat bien nay.
 # Bound per-container logs; release retention is an explicit maintenance command.
 x-logging: &logging
   driver: json-file
@@ -16,6 +20,7 @@ services:
   db:
     image: postgres@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     container_name: goldcast-db
+    mem_limit: 384m
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -34,6 +39,7 @@ services:
   backend:
     image: ${BACKEND_IMAGE:?Set BACKEND_IMAGE from the tested release.env}
     container_name: goldcast-backend
+    mem_limit: 768m
     depends_on:
       db:
         condition: service_healthy
@@ -72,6 +78,7 @@ services:
   frontend:
     image: ${FRONTEND_IMAGE:?Set FRONTEND_IMAGE from the tested release.env}
     container_name: goldcast-frontend
+    mem_limit: 320m
     depends_on:
       backend:
         condition: service_healthy
@@ -91,6 +98,7 @@ services:
   caddy:
     image: caddy@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
     container_name: goldcast-caddy
+    mem_limit: 128m
     depends_on:
       frontend:
         condition: service_healthy
