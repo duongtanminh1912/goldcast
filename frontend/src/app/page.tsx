@@ -1,5 +1,5 @@
 import Link from "next/link";
-import LiveWorldGold from "@/components/LiveWorldGold";
+import LiveWorldGold, { type LiveGoldConversion } from "@/components/LiveWorldGold";
 import type { ReactNode } from "react";
 import { api, ApiError } from "@/lib/api";
 import {
@@ -70,6 +70,9 @@ export default async function DashboardPage() {
   }
 
   const { world, fx, conversion, domestic } = summary;
+  const liveConversion: LiveGoldConversion | null = fx && conversion
+    ? { vndPerUsd: fx.vndPerUsd, fxAsOf: fx.asOf, troyOunceInGrams: conversion.troyOunceInGrams, taelInGrams: conversion.taelInGrams }
+    : null;
   const sparks = await loadSparks([
     world?.instrument.code ?? "XAUUSD",
     fx?.instrument.code ?? "USDVND",
@@ -95,7 +98,7 @@ export default async function DashboardPage() {
         }
       />
 
-      <LiveWorldGold />
+      <LiveWorldGold conversion={liveConversion} />
 
       <WarningList warnings={summary.warnings} />
 

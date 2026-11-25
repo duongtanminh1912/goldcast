@@ -14,7 +14,7 @@ import {
 } from "@/lib/format";
 import type { Indicators, Instrument, Series } from "@/lib/types";
 import { InstrumentTabs } from "@/components/InstrumentTabs";
-import LiveWorldGold from "@/components/LiveWorldGold";
+import LiveWorldGold, { type LiveGoldConversion } from "@/components/LiveWorldGold";
 
 export const revalidate = 60;
 
@@ -88,6 +88,20 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
   ]);
 
   const { instrument } = series;
+
+  // The VND figure beside the minute price is optional; the card works without it.
+  let liveConversion: LiveGoldConversion | null = null;
+  if (instrument.code === "XAUUSD") {
+    try {
+      const { fx, conversion } = await api.summary();
+      if (fx && conversion) {
+        liveConversion = { vndPerUsd: fx.vndPerUsd, fxAsOf: fx.asOf,
+          troyOunceInGrams: conversion.troyOunceInGrams, taelInGrams: conversion.taelInGrams };
+      }
+    } catch {
+      liveConversion = null;
+    }
+  }
   const latest = series.points.length > 0 ? series.points[series.points.length - 1] : null;
 
   return (
@@ -118,7 +132,7 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
         }
       />
 
-      {instrument.code === "XAUUSD" && <LiveWorldGold />}
+      {instrument.code === "XAUUSD" && <LiveWorldGold conversion={liveConversion} />}
 
       {series.containsSyntheticData && (
         <WarningList
