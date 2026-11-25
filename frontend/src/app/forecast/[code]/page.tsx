@@ -46,9 +46,18 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
   const parsedHorizon = Number.parseInt(search.horizon ?? "", 10);
   const horizon = HORIZONS.includes(parsedHorizon) ? parsedHorizon : 14;
 
+  // The three calls do not depend on each other, so start them together and wait for the
+  // slowest instead of their sum. The two optional ones settle to a fallback right away,
+  // so an early return on a forecast error never leaves a rejection unhandled.
+  const forecastRequest = api.forecast(code, model, horizon);
+  // Enough history to give the forecast visual context without dwarfing it.
+  const historyRequest = api.prices(code, Math.max(90, horizon * 4)).catch((): Series | null => null);
+  // The switcher is a convenience; the page stands on its own without it.
+  const instrumentsRequest = api.instruments().catch((): Instrument[] => []);
+
   let forecast: Forecast;
   try {
-    forecast = await api.forecast(code, model, horizon);
+    forecast = await forecastRequest;
   } catch (error) {
     if (error instanceof ApiError && error.isInsufficientHistory) {
       return (
@@ -86,20 +95,7 @@ export default async function ForecastPage({ params, searchParams }: PageProps) 
     );
   }
 
-  // Enough history to give the forecast visual context without dwarfing it.
-  let history: Series | null = null;
-  try {
-    history = await api.prices(code, Math.max(90, horizon * 4));
-  } catch {
-    history = null;
-  }
-
-  let instruments: Instrument[] = [];
-  try {
-    instruments = await api.instruments();
-  } catch {
-    // The switcher is a convenience; the page stands on its own without it.
-  }
+  const [history, instruments] = await Promise.all([historyRequest, instrumentsRequest]);
 
   const { instrument, accuracy } = forecast;
   const finalStep = forecast.points[forecast.points.length - 1];

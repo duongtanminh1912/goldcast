@@ -42,9 +42,27 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
 
   const selected = RANGES.find((option) => option.key === range) ?? RANGES[2];
 
+  // Started together: the page waits for the slowest call, not the sum of three. The
+  // optional ones settle to a fallback right away, so an early return leaves nothing unhandled.
+  const seriesRequest = api.prices(code, selected.limit);
+  // Indicators need a longer history than the chart range; a short series is a normal
+  // state for a freshly seeded instrument, not an error worth interrupting the page for.
+  const indicatorsRequest = api
+    .indicators(code, Math.max(selected.limit, 180))
+    .then((indicators) => ({ indicators, notice: null as string | null }))
+    .catch((error: unknown) => ({
+      indicators: null as Indicators | null,
+      notice:
+        error instanceof ApiError && error.isInsufficientHistory
+          ? error.message
+          : "Chưa tính được chỉ báo kỹ thuật cho chuỗi này.",
+    }));
+  // The switcher is a convenience; the page stands on its own without it.
+  const instrumentsRequest = api.instruments().catch((): Instrument[] => []);
+
   let series: Series;
   try {
-    series = await api.prices(code, selected.limit);
+    series = await seriesRequest;
   } catch (error) {
     if (error instanceof ApiError && error.isNotFound) {
       return (
@@ -64,25 +82,10 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
     );
   }
 
-  // Indicators need a longer history than the chart range; a short series is a normal
-  // state for a freshly seeded instrument, not an error worth interrupting the page for.
-  let indicators: Indicators | null = null;
-  let indicatorNotice: string | null = null;
-  try {
-    indicators = await api.indicators(code, Math.max(selected.limit, 180));
-  } catch (error) {
-    indicatorNotice =
-      error instanceof ApiError && error.isInsufficientHistory
-        ? error.message
-        : "Chưa tính được chỉ báo kỹ thuật cho chuỗi này.";
-  }
-
-  let instruments: Instrument[] = [];
-  try {
-    instruments = await api.instruments();
-  } catch {
-    // The switcher is a convenience; the page stands on its own without it.
-  }
+  const [{ indicators, notice: indicatorNotice }, instruments] = await Promise.all([
+    indicatorsRequest,
+    instrumentsRequest,
+  ]);
 
   const { instrument } = series;
   const latest = series.points.length > 0 ? series.points[series.points.length - 1] : null;

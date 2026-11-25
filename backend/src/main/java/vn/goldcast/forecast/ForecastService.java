@@ -7,7 +7,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import vn.goldcast.api.InsufficientHistoryException;
 import vn.goldcast.api.MacroDataUnavailableException;
@@ -62,6 +61,9 @@ public class ForecastService {
     private final MacroStore macroStore;
     private final MacroProperties macroProperties;
     private final TransactionTemplate auditWrites;
+    private final TransactionTemplate reads;
+    /** About 7 models × 5 horizons × 5 series for the pages, plus the methodology backtests. */
+    private final BacktestCache backtests = new BacktestCache(256);
 
     /** Lags of the gold price change and of each macro driver change in ARX_MACRO. */
     static final int ARX_ORDER = 2;
@@ -85,23 +87,62 @@ public class ForecastService {
         // marking the request's transaction rollback-only and turning the answer into a 500.
         this.auditWrites = new TransactionTemplate(transactionManager);
         this.auditWrites.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
+        // Reading is the only part that needs the database. The backtest that follows is pure
+        // CPU, so it runs after this short transaction has handed its connection back.
+        this.reads = new TransactionTemplate(transactionManager);
+        this.reads.setReadOnly(true);
     }
 
-    @Transactional(readOnly = true)
+    /** What a forecast or backtest reads from the database, loaded in one short transaction. */
+    private record Inputs(Instrument instrument, int horizon, List<PricePoint> history, MacroInputs macro) {}
+
+    private Inputs load(String code, Integer requestedHorizon, boolean wantsMacro) {
+        return reads.execute(status -> {
+            Instrument instrument = series.requireInstrument(code);
+            int horizon = resolveHorizon(requestedHorizon);
+            List<PricePoint> history = loadHistory(instrument);
+            MacroInputs macro = wantsMacro
+                    ? macroInputs(instrument, history)
+                    : MacroInputs.unavailable("Không cần dữ liệu vĩ mô cho mô hình này.");
+            return new Inputs(instrument, horizon, history, macro);
+        });
+    }
+
+    /**
+     * Backtests through the cache. Candidates always come from Forecasters.create with the
+     * default window and order, so the model name plus the inputs identify the result.
+     */
+    private BacktestResult backtest(Forecaster candidate, double[] closes, int horizon,
+                                    Backtester backtester, int minTrain) {
+        double[][] drivers = candidate instanceof ArxMacroForecaster arx ? arx.drivers() : null;
+        return backtests.get(candidate.model(), closes, drivers, horizon, minTrain,
+                properties.forecast().backtestMaxOrigins(),
+                () -> backtester.run(closes, candidate, horizon, minTrain));
+    }
+
+    long cacheHits() {
+        return backtests.hits();
+    }
+
+    long cacheMisses() {
+        return backtests.misses();
+    }
+
     public ForecastDto forecast(String code, ForecastModel requested, Integer requestedHorizon,
                                 boolean persist) {
-        Instrument instrument = series.requireInstrument(code);
-        int horizon = resolveHorizon(requestedHorizon);
         ForecastModel wanted = requested != null ? requested : ForecastModel.AUTO;
-
-        List<PricePoint> history = loadHistory(instrument);
+        Inputs inputs = load(code, requestedHorizon,
+                wanted == ForecastModel.AUTO || wanted == ForecastModel.ARX_MACRO);
+        Instrument instrument = inputs.instrument();
+        int horizon = inputs.horizon();
+        List<PricePoint> history = inputs.history();
         double[] closes = PriceSeriesService.closes(history);
         LocalDate lastDate = history.get(history.size() - 1).getObservedOn();
         BigDecimal lastClose = history.get(history.size() - 1).getClosePrice();
 
         Backtester backtester = new Backtester(properties.forecast().backtestMaxOrigins());
         int minTrain = Math.min(properties.forecast().backtestMinTrain(), closes.length / 2);
-        MacroInputs macro = macroInputs(instrument, history);
+        MacroInputs macro = inputs.macro();
 
         Selection selection = select(wanted, closes, horizon, backtester, minTrain, macro);
         Forecaster forecaster = selection.forecaster();
@@ -163,12 +204,11 @@ public class ForecastService {
     }
 
     /** Rolling-origin comparison of every candidate model, for the methodology page. */
-    @Transactional(readOnly = true)
     public BacktestDto backtest(String code, Integer requestedHorizon) {
-        Instrument instrument = series.requireInstrument(code);
-        int horizon = resolveHorizon(requestedHorizon);
-
-        List<PricePoint> history = loadHistory(instrument);
+        Inputs inputs = load(code, requestedHorizon, true);
+        Instrument instrument = inputs.instrument();
+        int horizon = inputs.horizon();
+        List<PricePoint> history = inputs.history();
         double[] closes = PriceSeriesService.closes(history);
 
         Backtester backtester = new Backtester(properties.forecast().backtestMaxOrigins());
@@ -179,12 +219,12 @@ public class ForecastService {
         double bestScore = Double.POSITIVE_INFINITY;
 
         List<Forecaster> candidates = new ArrayList<>(Forecasters.candidates(closes.length, horizon));
-        MacroInputs macro = macroInputs(instrument, history);
+        MacroInputs macro = inputs.macro();
         if (macro.available() && closes.length >= macro.forecaster().minObservations() + horizon) {
             candidates.add(macro.forecaster());
         }
         for (Forecaster candidate : candidates) {
-            BacktestResult result = backtester.run(closes, candidate, horizon, minTrain);
+            BacktestResult result = backtest(candidate, closes, horizon, backtester, minTrain);
             if (!result.hasData()) {
                 continue;
             }
@@ -268,7 +308,7 @@ public class ForecastService {
             if (closes.length < candidate.minObservations()) {
                 continue;
             }
-            BacktestResult result = backtester.run(closes, candidate, horizon, minTrain);
+            BacktestResult result = backtest(candidate, closes, horizon, backtester, minTrain);
             scored.add(new Scored(candidate, result));
 
             double score = scoreOf(result);
@@ -282,7 +322,7 @@ public class ForecastService {
         if (chosen == null) {
             // Nothing could be scored — the series is short. Naive always fits.
             chosen = new NaiveForecaster();
-            chosenResult = backtester.run(closes, chosen, horizon, minTrain);
+            chosenResult = backtest(chosen, closes, horizon, backtester, minTrain);
             scored.add(new Scored(chosen, chosenResult));
             log.debug("Không chấm điểm được mô hình nào, dùng NAIVE");
         }

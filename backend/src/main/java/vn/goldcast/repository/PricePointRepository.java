@@ -12,8 +12,6 @@ import java.util.Optional;
 
 public interface PricePointRepository extends JpaRepository<PricePoint, Long> {
 
-    Optional<PricePoint> findByInstrumentIdAndObservedOn(Long instrumentId, LocalDate observedOn);
-
     Optional<PricePoint> findTopByInstrumentIdOrderByObservedOnDesc(Long instrumentId);
 
     /** Most recent observation at or before a date — used to align two series on one day. */
@@ -32,9 +30,12 @@ public interface PricePointRepository extends JpaRepository<PricePoint, Long> {
     @Query("select p from PricePoint p where p.instrument.id = :instrumentId order by p.observedOn desc")
     List<PricePoint> findRecent(@Param("instrumentId") Long instrumentId, Pageable pageable);
 
-    /** Dates already stored, so ingest can skip rows instead of round-tripping each one. */
-    @Query("select p.observedOn from PricePoint p where p.instrument.id = :instrumentId "
+    /**
+     * Rows stored since a date, loaded once per instrument so ingest can skip or update
+     * quotes it already has without a query per quote.
+     */
+    @Query("select p from PricePoint p where p.instrument.id = :instrumentId "
             + "and p.observedOn >= :from")
-    List<LocalDate> findObservedDatesSince(@Param("instrumentId") Long instrumentId,
-                                           @Param("from") LocalDate from);
+    List<PricePoint> findSince(@Param("instrumentId") Long instrumentId,
+                               @Param("from") LocalDate from);
 }

@@ -575,6 +575,11 @@ ra Internet.
 Ingest thủ công: `make seed` (local) hoặc `scripts/ingest.sh`. Ingest thủ công
 và scheduler dùng chung khoá; yêu cầu chạy chồng trả HTTP 409.
 
+Mỗi lượt ingest gọi mọi provider trước, không giữ transaction hay connection nào,
+rồi mới ghi trong một transaction ngắn. Các dòng đã lưu của mỗi chuỗi được đọc một
+lần; quote trùng thì bỏ qua, quote bị sửa giá thì cập nhật đúng dòng đó. Đo trên
+Postgres thật với 618 quote đã có: số lần quét bảng `price_point` giảm từ 620 còn 2.
+
 ### 6.3 Giới hạn thời gian và dọn release
 
 - Pipeline giới hạn 45 phút, giữ 30 build và artifact của 20 build gần nhất.

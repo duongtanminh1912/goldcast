@@ -40,6 +40,11 @@ public final class ArxMacroForecaster implements Forecaster {
      * @param order       p, lags of the price change
      * @param driverLags  q, lags of each driver change
      */
+    /** The aligned drivers this instance reads; part of its identity for caching. Not a copy. */
+    double[][] drivers() {
+        return drivers;
+    }
+
     public ArxMacroForecaster(double[][] drivers, String[] driverNames, int order, int driverLags) {
         if (drivers == null || drivers.length == 0 || driverNames == null
                 || driverNames.length != drivers.length) {
