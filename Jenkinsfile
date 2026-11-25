@@ -41,6 +41,8 @@ pipeline {
                         python3 -m unittest discover -s scripts/tests -v'
                 '''
                 sh 'sh monitoring/check.sh'
+                // Lint, then apply to a disposable Ubuntu container twice; never touches the VPS.
+                sh 'sh ansible/check.sh'
                 // Jenkins has Docker and Maven; Node runs in a disposable container.
                 sh '''
                     COPYFILE_DISABLE=1 tar --exclude=frontend/node_modules --exclude=frontend/.next -cf - frontend scripts |

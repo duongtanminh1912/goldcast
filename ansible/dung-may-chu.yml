@@ -1,0 +1,16 @@
+---
+# Tuong duong deploy/dung-may-chu.sh (+ muc 3.5, 3.7 cua docs/huong-dan.md).
+# Xem truoc: ansible-playbook dung-may-chu.yml --check --diff
+#
+# KHONG tat dang nhap mat khau o day: do la siet-ssh.yml, chi chay sau khi
+# dang nhap bang khoa da duoc chung minh.
+- name: Dung may chu GoldCast
+  hosts: all
+  become: true
+  roles:
+    - role: co_ban
+    - role: swap
+    - role: docker
+    - role: nguoi_trien_khai
+    - role: tuong_lua
+    - role: kiem_lai

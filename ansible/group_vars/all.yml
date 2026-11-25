@@ -1,0 +1,21 @@
+---
+# Tuong ung bien moi truong cua deploy/dung-may-chu.sh va deploy/siet-ssh.sh.
+goldcast_nguoi_trien_khai: deploy   # NGUOI_TRIEN_KHAI
+goldcast_swap: 2G                   # SWAP, don vi IEC nhu numfmt --from=iec
+goldcast_mui_gio: Asia/Ho_Chi_Minh  # MUI_GIO
+
+# Muc 3.5 va 3.7 cua docs/huong-dan.md, truoc day go tay.
+goldcast_sudo_khong_mat_khau: true
+goldcast_thu_muc_ung_dung: /opt/goldcast
+
+# Khoa SSH cho user trien khai. Rong thi sao tu /root/.ssh/authorized_keys nhu
+# script, nhung chi khi file cua user con trong: khong ghi de khoa Jenkins (muc 4.1).
+goldcast_khoa_trien_khai: []
+
+# TOI_DA_KIEM_KHOA. Chi dat `-e goldcast_toi_da_kiem_khoa=yes` sau khi da chay
+# `ssh deploy@<ip> 'sudo -n id && echo SUDO_OK'` tu may ca nhan va thay SUDO_OK.
+goldcast_toi_da_kiem_khoa: false
+
+# Chi ansible/check.sh dat true: container thu khong co systemd, khong duoc
+# swapon, sysctl hay sua netfilter. Cac buoc do bi bo qua, moi buoc khac van chay.
+goldcast_trong_container: false

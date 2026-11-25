@@ -1,0 +1,68 @@
+---
+# Khong chi in ra: kiem that su va fail neu sai. In ra roi di tiep chinh la
+# cach bo sot loi da gap o swap va o dong ho. --check khong kiem: may chua doi.
+- name: Kiem lai sau khi dung may
+  when: not ansible_check_mode
+  block:
+    - name: Doc phien ban Docker va Compose
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - docker --version
+        - docker compose version
+      register: kiem_lai_docker
+      changed_when: false
+
+    - name: Doc nhom cua {{ goldcast_nguoi_trien_khai }}
+      ansible.builtin.command: id -nG {{ goldcast_nguoi_trien_khai }}
+      register: kiem_lai_nhom
+      changed_when: false
+
+    - name: Doc mui gio
+      ansible.builtin.stat:
+        path: /etc/localtime
+      register: kiem_lai_mui_gio
+
+    - name: Doc swap, dong ho va ufw
+      ansible.builtin.command: "{{ item }}"
+      loop:
+        - swapon --show=NAME,SIZE --noheadings --bytes
+        - timedatectl show --property=NTP --value
+        - ufw status
+      register: kiem_lai_he_thong
+      changed_when: false
+      when: not goldcast_trong_container
+
+    - name: Trang thai phai dung
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - kiem_lai_docker.results | map(attribute='rc') | max == 0
+          - "'docker' in kiem_lai_nhom.stdout.split()"
+          - kiem_lai_mui_gio.stat.lnk_target is search(goldcast_mui_gio ~ '$')
+
+    - name: Swap, NTP va ufw phai dung
+      ansible.builtin.assert:
+        quiet: true
+        that:
+          - kiem_lai_he_thong.results[0].stdout is search('/swapfile\s+' ~ (goldcast_swap | human_to_bytes))
+          - kiem_lai_he_thong.results[1].stdout == 'yes'
+          - "'Status: active' in kiem_lai_he_thong.results[2].stdout_lines"
+          - kiem_lai_he_thong.results[2].stdout is search('22/tcp\s+ALLOW')
+          - kiem_lai_he_thong.results[2].stdout is search('80/tcp\s+ALLOW')
+          - kiem_lai_he_thong.results[2].stdout is search('443/tcp\s+ALLOW')
+      when: not goldcast_trong_container
+
+    - name: Ket qua
+      ansible.builtin.debug:
+        msg:
+          - "{{ kiem_lai_docker.results | map(attribute='stdout') | list }}"
+          - "{{ goldcast_nguoi_trien_khai }}: {{ kiem_lai_nhom.stdout }}"
+
+- name: DOC KY - UFW KHONG CHAN DUOC CONG DO DOCKER MO
+  ansible.builtin.debug:
+    msg:
+      - Docker ghi rule thang vao iptables, TRUOC rule cua ufw. Container co
+        `ports - 5432:5432` se mo 5432 ra internet THAT du `ufw status` bao deny.
+      - Cach duy nhat chac chan, compose tren may chu KHONG khai `ports` cho db,
+        backend, frontend; chi Caddy publish 80 va 443; can truy cap thi dung SSH tunnel.
+      - Kiem tu NGOAI may chu bang `nmap -Pn <ip>`, chi duoc thay 22, 80, 443.

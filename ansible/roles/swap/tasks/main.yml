@@ -1,0 +1,85 @@
+---
+# Khong phai vi thieu RAM: ba container chi dung ~370 MB. Swap la bao hiem,
+# bien "bi OOM killer giet dot ngot" thanh "cham di mot luc".
+- name: Doc swap dang bat
+  ansible.builtin.command: swapon --show=NAME --noheadings
+  register: swap_dang_bat
+  changed_when: false
+  check_mode: false
+
+- name: Tao /swapfile khi swap chua bat
+  when: "'/swapfile' not in swap_dang_bat.stdout_lines"
+  block:
+    - name: Doc kich thuoc /swapfile
+      ansible.builtin.stat:
+        path: /swapfile
+        get_checksum: false
+      register: swap_file
+
+    # Kiem KICH THUOC chu khong kiem su ton tai: image goc cua InterData co san
+    # /swapfile rong 0 byte; chi kiem ton tai thi bo qua no roi mkswap chet.
+    - name: Cap phat /swapfile {{ goldcast_swap }}
+      ansible.builtin.shell: |
+        set -eu
+        rm -f /swapfile
+        fallocate -l {{ goldcast_swap }} /swapfile 2>/dev/null \
+          || dd if=/dev/zero of=/swapfile bs=1M count={{ (goldcast_swap | human_to_bytes) // 1048576 }} status=none
+      changed_when: true
+      when: (swap_file.stat.size | default(0)) != (goldcast_swap | human_to_bytes)
+
+    - name: Quyen 600 cho /swapfile
+      ansible.builtin.file:
+        path: /swapfile
+        owner: root
+        group: root
+        mode: "0600"
+      # --check tren may moi: buoc cap phat bi bo qua nen file chua co.
+      when: swap_file.stat.exists or not ansible_check_mode
+
+    # mkswap lai mot file da dinh dang se doi UUID moi lan chay; chi lam khi
+    # file chua co chu ky swap.
+    - name: Doc chu ky /swapfile
+      ansible.builtin.command: blkid --probe --match-tag TYPE --output value /swapfile
+      register: swap_chu_ky
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Dinh dang /swapfile
+      ansible.builtin.command: mkswap /swapfile
+      changed_when: true
+      when: swap_chu_ky.stdout != 'swap'
+
+    - name: Bat swap
+      ansible.builtin.command: swapon /swapfile
+      changed_when: true
+      when: not goldcast_trong_container
+
+- name: Swap trong /etc/fstab
+  ansible.builtin.lineinfile:
+    path: /etc/fstab
+    regexp: '^/swapfile\s'
+    line: /swapfile none swap sw 0 0
+    mode: "0644"
+
+# swappiness=10: uu tien RAM, chi dung swap khi that su can.
+- name: Ghi vm.swappiness vao /etc/sysctl.conf
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.conf
+    regexp: '^vm\.swappiness'
+    line: vm.swappiness=10
+    create: true
+    mode: "0644"
+
+- name: Doc vm.swappiness dang dung
+  ansible.builtin.slurp:
+    src: /proc/sys/vm/swappiness
+  register: swap_swappiness
+  when: not goldcast_trong_container
+
+- name: Ap dung vm.swappiness ngay
+  ansible.builtin.command: sysctl -q -w vm.swappiness=10
+  changed_when: true
+  when:
+    - not goldcast_trong_container
+    - (swap_swappiness.content | b64decode | trim) != '10'

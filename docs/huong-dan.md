@@ -39,7 +39,7 @@ Thay bằng giá trị của bạn. Khi đổi, sửa cả các chỗ cố đị
 
 | Đổi gì | Sửa ở đâu |
 |---|---|
-| IP máy chủ | `VPS` trong `Jenkinsfile`; mặc định `--host`/`--ssh-host` của `scripts/backup.py`, `monitoring/configure.py`, `monitoring/create-forward-key.py` (hoặc truyền tham số khi chạy) |
+| IP máy chủ | `VPS` trong `Jenkinsfile`; `ansible_host` trong `ansible/inventory.example.yml`; mặc định `--host`/`--ssh-host` của `scripts/backup.py`, `monitoring/configure.py`, `monitoring/create-forward-key.py` (hoặc truyền tham số khi chạy) |
 | Registry / tài khoản GitHub | `REG` trong `Jenkinsfile`; hai repository cho phép trong `validate_manifest` của `scripts/release.sh` |
 | Tên miền | `deploy/Caddyfile`; `public_base` trong `scripts/release.sh`; URL trong `scripts/backup-remote.sh`, `monitoring/prometheus/prometheus.yml`, `monitoring/vps/collect.py` |
 
@@ -99,6 +99,7 @@ Toàn bộ G1 (giống check `backend-test` trên GitHub Actions) còn gồm:
 ```bash
 python3 -m unittest discover -s scripts/tests -v
 sh monitoring/check.sh
+sh ansible/check.sh          # playbook dựng máy, áp dụng hai lần lên container (mục 3.10)
 (cd frontend && npm ci && npm run typecheck)
 node --test scripts/tests/test_*.mjs
 ```
@@ -220,6 +221,9 @@ ssh root@$IP "apt-get update -qq && apt-get install -y -qq git && \
   git clone https://github.com/$REPO.git /root/goldcast && ls /root/goldcast/deploy"
 ssh root@$IP 'bash /root/goldcast/deploy/dung-may-chu.sh 2>&1 | tee /root/dung-may-chu.log'
 ```
+
+Muốn trạng thái khai báo và xem trước được bằng `--check --diff`, dùng playbook
+Ansible ở mục 3.10 thay cho bước này, 3.5 và 3.6; script vẫn là đường dự phòng.
 
 Đọc `deploy/dung-may-chu.sh` trước khi chạy. Script làm sáu việc: đặt múi giờ,
 tạo swap 2 GB, cài Docker, tạo user `deploy`, mở ufw cho 22/80/443, rồi in lại
@@ -362,6 +366,119 @@ Bootstrap xác minh readiness, image ID, `RELEASE_ID` công khai qua
 `/api/release` và các trang HTTPS rồi mới ghi con trỏ. Lỗi thì sửa nguyên nhân
 và chạy lại; không tự tạo `.last-good-release`.
 
+### 3.10 Dựng máy bằng Ansible thay cho script
+
+`ansible/` mô tả đúng trạng thái máy chủ mà hai script ở `deploy/` tạo ra, cộng
+sudo cho `deploy` (mục 3.5) và thư mục rỗng `/opt/goldcast` (mục 3.7), dưới dạng
+khai báo. Mỗi task đọc trạng thái trước và chỉ đổi khi máy khác mô tả, nên chạy
+lại báo `changed=0`, còn `--check --diff` cho xem trước mọi thay đổi mà không ghi
+gì. Playbook chỉ dùng module `ansible.builtin`, không cần collection nào.
+
+Hai script **vẫn giữ nguyên làm đường dự phòng**, ví dụ khi máy cá nhân không
+cài được Ansible: chạy script hay playbook đều đưa máy về cùng một trạng thái.
+
+| Script | Playbook | Role |
+|---|---|---|
+| `deploy/dung-may-chu.sh` (+ 3.5, thư mục ở 3.7) | `ansible/dung-may-chu.yml` | `co_ban`, `swap`, `docker`, `nguoi_trien_khai`, `tuong_lua`, `kiem_lai` |
+| `deploy/siet-ssh.sh` | `ansible/siet-ssh.yml` | `siet_ssh` |
+| Cả hai, để chạy lại về sau | `ansible/site.yml` | |
+
+Tham số (user, kích thước swap, múi giờ...) nằm ở `ansible/group_vars/all.yml`,
+tương ứng các biến môi trường của script.
+
+Cài ansible-core trên máy cá nhân, đúng phiên bản `ansible/check.sh` kiểm:
+
+```bash
+python3 -m venv ~/.venvs/ansible
+~/.venvs/ansible/bin/pip install 'ansible-core==2.20.11'
+export PATH="$HOME/.venvs/ansible/bin:$PATH"
+cd ansible && cp inventory.example.yml inventory.yml   # sửa ansible_host nếu đổi IP
+```
+
+`inventory.yml` không được commit, và trong đó không có bí mật: xác thực chỉ
+bằng khoá SSH. Host key lấy từ `deploy/known_hosts` (mục 4.2), nên máy lạ trả lời
+ở cùng IP làm kết nối đỏ. Với máy mới, cập nhật file đó trước.
+
+**Máy mới**, thay cho 3.4 và 3.5 (sau 3.3, khi root còn vào được bằng khoá).
+Luôn xem trước rồi mới áp dụng:
+
+```bash
+ansible-playbook dung-may-chu.yml -u root --check --diff
+ansible-playbook dung-may-chu.yml -u root
+ssh deploy@$IP 'sudo -n id && echo SUDO_OK'
+```
+
+**Kiểm:** dòng `PLAY RECAP` có `failed=0`. Role `kiem_lai` tự kiểm và đỏ nếu sai:
+Docker và Compose chạy được, `deploy` thuộc nhóm `docker`, múi giờ, swap đúng kích
+thước, NTP bật, ufw active và mở 22/80/443. Chạy lại lệnh thứ hai phải ra
+`changed=0`. Lệnh cuối ra `uid=0(root)` kèm `SUDO_OK`.
+
+**Siết SSH**, thay cho 3.6. Vẫn cần hai cửa sổ: cửa sổ A giữ `ssh root@$IP` làm
+đường lui. Cửa sổ B chạy bằng `deploy` + sudo như trong inventory, nên chính việc
+playbook kết nối được đã chứng minh khoá của `deploy` dùng được:
+
+```bash
+ansible-playbook siet-ssh.yml -e goldcast_toi_da_kiem_khoa=yes --check --diff
+ansible-playbook siet-ssh.yml -e goldcast_toi_da_kiem_khoa=yes
+ssh deploy@$IP 'echo VAO_DUOC'
+```
+
+Ra `VAO_DUOC` thì mới đóng cửa sổ A; không ra thì hoàn tác như ở 3.6. Các lớp an
+toàn của script được giữ nguyên:
+
+- Thiếu `-e goldcast_toi_da_kiem_khoa=yes` thì dừng với `DUNG LAI`; user triển
+  khai không tồn tại hoặc `authorized_keys` không có khoá nào thì dừng với
+  `KHONG CO KHOA`. Cả hai chạy trước mọi thay đổi.
+- `Include` được đưa lên dòng 1 của `sshd_config` (bản gốc giữ ở
+  `sshd_config.truoc-goldcast`), và drop-in vẫn là `01-goldcast.conf` để đọc
+  trước `50-cloud-init.conf`.
+- Cả hai file được ghi qua `validate: sshd -t -f %s`: cấu hình sai thì file không
+  bị thay. Handler chạy `sshd -t` trên toàn bộ cấu hình rồi mới
+  `systemctl reload ssh` (reload, không restart). Sau đó playbook hỏi `sshd -T` và
+  đỏ nếu một trong bốn giá trị sai.
+
+**Chạy lại về sau**, ví dụ sau khi sửa playbook hoặc nghi máy bị sửa tay:
+
+```bash
+ansible-playbook site.yml -e goldcast_toi_da_kiem_khoa=yes --check --diff
+ansible-playbook site.yml -e goldcast_toi_da_kiem_khoa=yes
+```
+
+**Kiểm:** máy đúng mô tả thì cả hai ra `changed=0`; khác 0 thì `--diff` chỉ đúng
+chỗ lệch. Ba chỗ playbook cố ý khác script để chạy lại an toàn: khoá của root chỉ
+được sao sang `deploy` khi `authorized_keys` của `deploy` còn rỗng (script ghi đè,
+sẽ xoá khoá Jenkins của mục 4.1); `mkswap` chỉ chạy khi file chưa có chữ ký swap;
+kho và gói Docker luôn được đảm bảo, thay vì bỏ qua khi đã có lệnh `docker`.
+
+**Cổng G1.** `sh ansible/check.sh` chỉ cần Docker và không bao giờ kết nối máy chủ
+thật. Nó chạy `ansible-lint` (profile `production`) và `--syntax-check`, rồi dựng
+một container `ubuntu:24.04` dùng một lần (ghim digest trong `ansible/images.env`,
+có `openssh-server` và `50-cloud-init.conf` bật mật khẩu như VPS) và kiểm theo thứ tự:
+
+1. `siet-ssh.yml` dừng khi thiếu biến, và khi `deploy` chưa có khoá.
+2. `--check --diff` trên máy mới chạy được và không ghi gì lên máy.
+3. Áp dụng `site.yml` bằng root, như lần đầu trên VPS.
+4. Gửi SIGHUP cho `sshd`: root bị từ chối, `deploy` vào được bằng khoá và `sudo -n` được.
+5. Chạy lại bằng `deploy` + sudo, rồi `--check`: cả hai phải `changed=0`.
+
+Container không có systemd và không có quyền kernel, nên biến
+`goldcast_trong_container` bỏ qua đúng những bước sau, và chúng chỉ được kiểm trên
+VPS thật (role `kiem_lai`): `timedatectl set-ntp`, bật dịch vụ `unattended-upgrades`
+và `docker`, `swapon`, `sysctl -w`, `ufw --force enable` và `systemctl reload ssh`.
+Mọi bước khác vẫn chạy thật trong container: cài gói và Docker từ kho chính thức,
+múi giờ, cấp phát và `mkswap` swapfile (64M cho nhanh), `fstab`, `sysctl.conf`,
+user, khoá, sudoers qua `visudo`, rule ufw, `Include` và drop-in sshd qua `sshd -t`.
+
+Thử phá để thấy cổng chặn: xoá dòng `when: swap_chu_ky.stdout != 'swap'` trong
+`ansible/roles/swap/tasks/main.yml` (mkswap chạy mỗi lần, đổi UUID swap):
+
+```bash
+sh ansible/check.sh
+```
+
+**Kiểm:** lần chạy bằng `deploy` liệt kê `doi: swap : Dinh dang /swapfile` và
+dừng với `playbook khong idempotent`. Hoàn nguyên bằng `git restore ansible/`.
+
 ---
 
 ## 4. Cho Jenkins tự deploy
@@ -432,7 +549,9 @@ bộ luồng; nhánh khác `main` (hoặc PR) dừng sau G2.
 
 - **G1:** test Java (gồm hợp đồng API và công thức quy đổi), TypeScript
   typecheck, bộ test release/rollback/backup bằng `python:3.13-alpine`, test
-  probe/snapshot bằng Node 22, và `monitoring/check.sh` (promtool/amtool).
+  probe/snapshot bằng Node 22, `monitoring/check.sh` (promtool/amtool), và
+  `ansible/check.sh` (lint playbook dựng máy, áp dụng hai lần lên container
+  Ubuntu dùng một lần, lần hai phải `changed=0`; mục 3.10).
   Container test không được gắn Docker socket. Khác với GitHub Actions (chạy trên
   cả repo), Jenkins chỉ đưa vào container Python những gì lệnh `tar` liệt kê
   (`scripts monitoring deploy Jenkinsfile docker-compose.prod.yml docker-compose.ci.yml`).
@@ -1022,6 +1141,9 @@ Khi đó không có `runtime.env`; cấu hình bí mật lấy từ nơi bạn l
 
 Làm theo mục 3.1 → 3.7 với IP mới: thuê máy, **sửa DNS trước** (mục 3.2), đẩy
 khoá, chạy kịch bản dựng máy, cấp sudo, siết SSH, tạo `/opt/goldcast` và `.env`.
+Dựng máy, cấp sudo, siết SSH và tạo `/opt/goldcast` cũng làm được bằng playbook
+Ansible (mục 3.10): sửa `ansible_host` trong `ansible/inventory.yml` và cập nhật
+`deploy/known_hosts` trước.
 
 ### 9.4 Phục hồi manifest và database
 
@@ -1138,6 +1260,9 @@ khi nối lại Jenkins.
 - **Một máy chủ, không dự phòng:** máy chết là dịch vụ chết; mỗi lần deploy gián
   đoạn vài giây.
 - **Rollback không phục hồi DB:** migration phải tương thích với bản trước.
+- **IaC chỉ phủ bên trong máy chủ:** playbook Ansible (mục 3.10) mô tả gói, user,
+  swap, tường lửa và SSH; thuê VPS, DNS và host key vẫn làm tay, chưa có Terraform.
+  `ufw enable`, `swapon`, `sysctl -w` và reload `sshd` chỉ chạy trên VPS thật.
 - **G2 nâng cấp từ baseline V1 và dữ liệu mẫu:** chưa bao phủ mọi phiên bản cũ
   hay hình dạng dữ liệu production. Khi schema phát triển, bổ sung fixture.
 - **Rollback tự động sang digest khác** mới được diễn tập trong môi trường riêng

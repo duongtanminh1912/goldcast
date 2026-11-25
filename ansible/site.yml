@@ -1,0 +1,8 @@
+---
+# Toan bo trang thai may chu. Dung de chay lai tren may da siet SSH;
+# can -e goldcast_toi_da_kiem_khoa=yes vi bao gom ca siet-ssh.yml.
+- name: Dung may chu
+  ansible.builtin.import_playbook: dung-may-chu.yml
+
+- name: Siet SSH
+  ansible.builtin.import_playbook: siet-ssh.yml

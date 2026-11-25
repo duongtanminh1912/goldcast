@@ -1,0 +1,50 @@
+---
+# Dong ho dung la dieu kien cho TLS: may lech vai ngay se bi tu choi chung chi
+# voi thong bao kho hieu "certificate not yet valid".
+- name: Cai cong cu co ban
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - gnupg
+      - ufw
+      - unattended-upgrades
+      # Hai goi duoi co san tren image VPS; khai ra de container thu cung co.
+      - tzdata   # /usr/share/zoneinfo cho mui gio
+      - sudo     # muc 3.5, va become khi chay bang user deploy
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+# timedatectl set-timezone chi doi symlink nay; ghi thang thi chay duoc ca khi
+# khong co systemd. Dich tuong doi dung y nhu systemd tao, nen hai cach khong
+# gianh nhau.
+- name: Mui gio {{ goldcast_mui_gio }}
+  ansible.builtin.file:
+    src: ../usr/share/zoneinfo/{{ goldcast_mui_gio }}
+    dest: /etc/localtime
+    state: link
+    force: true
+
+- name: Doc trang thai NTP
+  ansible.builtin.command: timedatectl show --property=NTP --value
+  register: co_ban_ntp
+  changed_when: false
+  check_mode: false
+  when: not goldcast_trong_container
+
+- name: Bat dong bo dong ho
+  ansible.builtin.command: timedatectl set-ntp true
+  changed_when: true
+  when:
+    - not goldcast_trong_container
+    - co_ban_ntp.stdout != 'yes'
+
+# Khong apt-get upgrade toan bo: cham, kho doan, co the doi restart.
+# unattended-upgrades tu va cac ban va bao mat.
+- name: Bat unattended-upgrades
+  ansible.builtin.systemd_service:
+    name: unattended-upgrades
+    enabled: true
+    state: started
+  when: not goldcast_trong_container
