@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { formatDate, formatPrice } from "@/lib/format";
 import type { LiveGold } from "@/lib/types";
 import { Sparkline } from "@/components/ui";
+import { vndPerTael, type LiveGoldConversion } from "@/lib/live";
 
 function sourceTime(value: string): string {
   return new Intl.DateTimeFormat("vi-VN", {
@@ -11,24 +12,7 @@ function sourceTime(value: string): string {
   }).format(new Date(value));
 }
 
-/**
- * Daily USD/VND rate and unit constants from the market summary. The minute price is
- * converted with them in the browser, so the VND figure moves with every minute quote.
- */
-export type LiveGoldConversion = {
-  vndPerUsd: number;
-  fxAsOf: string;
-  troyOunceInGrams: number;
-  taelInGrams: number;
-};
-
 const VND = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
-
-function vndPerTael(usdPerOunce: number, conversion: LiveGoldConversion): number {
-  // Round to the nearest thousand VND: the inputs are not more precise than that.
-  const raw = usdPerOunce * conversion.vndPerUsd / conversion.troyOunceInGrams * conversion.taelInGrams;
-  return Math.round(raw / 1000) * 1000;
-}
 
 export default function LiveWorldGold({ conversion }: { conversion?: LiveGoldConversion | null }) {
   const [data, setData] = useState<LiveGold | null>(null);

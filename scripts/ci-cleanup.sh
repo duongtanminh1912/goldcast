@@ -35,8 +35,17 @@ for service in backend frontend; do
         done
 done
 
-# BuildKit cache is only cache: cap it instead of letting it grow without bound.
-docker buildx prune -f --max-used-space "$cache_limit" >/dev/null 2>&1 ||
-    docker buildx prune -f --keep-storage "$cache_limit" >/dev/null 2>&1 ||
-    echo 'buildx cache prune skipped'
+# BuildKit cache is only cache: cap it instead of letting it grow without bound. Every
+# builder keeps its own cache (a docker-container builder such as `multiarch` holds it in
+# its own volume), so cap each one, not just the current. `buildx ls` also prints node
+# names; those are not builders and are refused, which is harmless.
+pruned=0
+for builder in $(docker buildx ls --format '{{.Name}}' 2>/dev/null | awk '!seen[$0]++'); do
+    if docker buildx prune -f --builder "$builder" --max-used-space "$cache_limit" >/dev/null 2>&1 ||
+       docker buildx prune -f --builder "$builder" --keep-storage "$cache_limit" >/dev/null 2>&1; then
+        echo "capped build cache of $builder at $cache_limit"
+        pruned=1
+    fi
+done
+test "$pruned" = 1 || echo 'buildx cache prune skipped'
 exit 0

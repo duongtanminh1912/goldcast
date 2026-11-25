@@ -40,7 +40,10 @@ case "$1 $2" in
         for (i = 1; i <= n; i++) if (names[i] != ref) kept = kept (kept ? " " : "") names[i];
         if (kept == "" && $4 != "") next; $4 = kept; print }' "$MOCK_ROOT/images" > "$MOCK_ROOT/images.new"
     mv "$MOCK_ROOT/images.new" "$MOCK_ROOT/images";;
-  'buildx prune') exit "${MOCK_PRUNE_FAILURE:-0}";;
+  'buildx ls') printf '%s\\n' multiarch multiarch0 desktop-linux desktop-linux default;;
+  'buildx prune')
+    [ "${MOCK_PRUNE_FAILURE:-0}" = 1 ] && exit 1
+    case "$*" in *'--builder multiarch0 '*|*'--builder default '*) exit 1;; esac;;
 esac
 ''')
         docker.chmod(0o755)
@@ -82,9 +85,14 @@ esac
         self.assertEqual(removed, [])
         self.assertIn('buildx cache prune skipped', result.stdout)
 
-    def test_cache_is_capped(self):
-        self.run_cleanup('3', '7gb')
-        self.assertIn('buildx prune -f --max-used-space 7gb', (self.root / 'docker.log').read_text())
+    def test_every_builder_cache_is_capped_not_only_the_current_one(self):
+        result, _ = self.run_cleanup('3', '7gb')
+        log = (self.root / 'docker.log').read_text()
+        self.assertIn('buildx prune -f --builder multiarch --max-used-space 7gb', log)
+        self.assertIn('buildx prune -f --builder desktop-linux --max-used-space 7gb', log)
+        self.assertEqual(log.count('--builder desktop-linux --max-used-space'), 1)  # ten lap chi chay mot lan
+        self.assertIn('capped build cache of multiarch at 7gb', result.stdout)
+        self.assertNotIn('of multiarch0', result.stdout)  # ten node, khong phai builder
 
     def test_invalid_keep_is_rejected_before_touching_docker(self):
         result = subprocess.run(['sh', str(SCRIPT), REG, 'all'], env=self.env, capture_output=True, text=True)
