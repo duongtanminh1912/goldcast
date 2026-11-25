@@ -15,7 +15,8 @@ import {
 } from "@/lib/format";
 import type { Indicators, Instrument, Series } from "@/lib/types";
 import { InstrumentTabs } from "@/components/InstrumentTabs";
-import LiveWorldGold, { type LiveGoldConversion } from "@/components/LiveWorldGold";
+import LiveWorldGold from "@/components/LiveWorldGold";
+import { liveConversion, type LiveGoldConversion } from "@/lib/live";
 
 const RANGES = [
   { key: "30", label: "1 tháng", limit: 30 },
@@ -58,6 +59,12 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
     }));
   // The switcher is a convenience; the page stands on its own without it.
   const instrumentsRequest = api.instruments().catch((): Instrument[] => []);
+  // The VND figure beside the minute price is optional, and started with the rest so the
+  // gold page does not wait for one more call in series.
+  const conversionRequest: Promise<LiveGoldConversion | null> =
+    decodeURIComponent(code).toUpperCase() === "XAUUSD"
+      ? api.summary().then(liveConversion).catch(() => null)
+      : Promise.resolve(null);
 
   let series: Series;
   try {
@@ -69,26 +76,13 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
     throw error;
   }
 
-  const [{ indicators, notice: indicatorNotice }, instruments] = await Promise.all([
+  const [{ indicators, notice: indicatorNotice }, instruments, conversion] = await Promise.all([
     indicatorsRequest,
     instrumentsRequest,
+    conversionRequest,
   ]);
 
   const { instrument } = series;
-
-  // The VND figure beside the minute price is optional; the card works without it.
-  let liveConversion: LiveGoldConversion | null = null;
-  if (instrument.code === "XAUUSD") {
-    try {
-      const { fx, conversion } = await api.summary();
-      if (fx && conversion) {
-        liveConversion = { vndPerUsd: fx.vndPerUsd, fxAsOf: fx.asOf,
-          troyOunceInGrams: conversion.troyOunceInGrams, taelInGrams: conversion.taelInGrams };
-      }
-    } catch {
-      liveConversion = null;
-    }
-  }
   const latest = series.points.length > 0 ? series.points[series.points.length - 1] : null;
 
   return (
@@ -119,7 +113,7 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
         }
       />
 
-      {instrument.code === "XAUUSD" && <LiveWorldGold conversion={liveConversion} />}
+      {instrument.code === "XAUUSD" && <LiveWorldGold conversion={conversion} />}
 
       {series.containsSyntheticData && (
         <WarningList
