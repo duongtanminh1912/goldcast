@@ -746,7 +746,8 @@ flowchart LR
 
 Có hai đường giám sát độc lập với nhau, để một máy chết không làm mù cả hệ thống:
 
-- **Trên Mac:** Prometheus và Alertmanager, đầy đủ 36 luật (mục 7.1).
+- **Trên Mac:** Prometheus và Alertmanager, đầy đủ 40 luật cảnh báo: 36 luật ngưỡng (mục 7.1)
+  và 4 luật burn rate theo SLO (mục 7.5).
 - **Ngoài Mac:** healthchecks.io canh *bản thân* bộ giám sát (Watchdog), còn GitHub
   Actions kiểm site từ bên ngoài khi Mac tắt (mục 7.4).
 
@@ -763,6 +764,7 @@ Có hai đường giám sát độc lập với nhau, để một máy chết kh
 | Release | Image ID khác digest trong last-good, định danh HTTPS lệch, khoá tồn tại quá 20 phút |
 | CI/backup | Kết quả `goldcast-ci`, `goldcast-backup`; backup thành công quá 30 giờ; job treo |
 | Bộ giám sát | SSH tunnel mất, exporter lỗi, collector hoặc poll Jenkins ngừng cập nhật; Watchdog ngừng ping healthchecks.io |
+| SLO | HTTPS công khai 99,5% và API backend 99% trong 7 ngày cuốn; cảnh báo khi ngân sách lỗi bị đốt nhanh (mục 7.5) |
 
 36 luật nằm trong `monitoring/prometheus/alerts.yml`, gồm `GoldcastWatchdog` luôn firing
 (mục 7.4); `monitoring/check.sh` khẳng định nó chỉ đi tới dead-man, không tới Telegram. Luật `info` chỉ hiện trên
@@ -771,8 +773,9 @@ site/alertname, lặp sau 6 giờ. Mất tunnel/collector thì Alertmanager ch�
 cảnh báo phụ liên quan. Backend chết thì chỉ còn `GoldcastBackendNotReady` (cùng
 `GoldcastWebsiteUnavailable` nếu site công khai cũng hỏng): metrics không thu được và các
 luật độ mới dữ liệu bị chặn, vì chúng chỉ im theo metrics chứ dữ liệu chưa chắc đã cũ.
+Cảnh báo burn rate SLO cũng bị chặn khi cảnh báo triệu chứng tương ứng đang firing (mục 7.5).
 `monitoring/check.sh` chạy một Alertmanager thật với cấu hình này, đẩy chùm cảnh báo
-"backend chết" vào và khẳng định chỉ hai cảnh báo trên được gửi. Sai phiên bản/image được bỏ qua trong lúc giữ khoá
+"backend chết" (kể cả bốn cảnh báo SLO) vào và khẳng định chỉ hai cảnh báo trên được gửi. Sai phiên bản/image được bỏ qua trong lúc giữ khoá
 Deploy/G3/backup; khoá treo có luật riêng.
 
 ### 7.2 Cổng, bí mật và lưu trữ
@@ -789,7 +792,8 @@ Deploy/G3/backup; khoá treo có luật riêng.
   Overall/Read và Job/Read. SSH key của monitoring bị chặn shell/exec/SFTP/PTY
   và chỉ được forward tới `127.0.0.1:9091/9100` bằng `permitopen`. Không dùng
   key deploy toàn quyền cho monitoring.
-- Prometheus giữ tối đa 7 ngày, TSDB tối đa 512 MB. Cấu hình đang chạy được
+- Prometheus giữ tối đa 7 ngày, TSDB tối đa 512 MB. Cửa sổ SLO cũng là 7 ngày vì lý do
+  này (mục 7.5); tăng cửa sổ thì phải tăng retention trước. Cấu hình đang chạy được
   chụp vào `~/.local/share/goldcast-monitoring/releases/`, symlink `current` trỏ
   bản khởi động thành công, nên đổi nhánh Git không ảnh hưởng. Không chạy
   `down -v` khi bảo trì.
@@ -824,7 +828,8 @@ curl -fsS http://127.0.0.1:3001/api/health
 
 **Kiểm:** dashboard **GoldCast — Operations** (UID `goldcast-operations`) có mọi
 target UP, probe HTTPS/readiness đạt, tuổi collector dưới 180 giây,
-last-good/image/HTTPS khớp.
+last-good/image/HTTPS khớp. Dashboard **GoldCast — SLO** (UID `goldcast-slo`) có SLI,
+mục tiêu và ngân sách lỗi cho cả `availability` lẫn `api` (mục 7.5).
 
 Thử đường cảnh báo mà không đụng production:
 
@@ -875,6 +880,76 @@ DOWN → UP), nên sự cố kéo dài chỉ tạo một tin.
 Giới hạn của GitHub: lịch có thể trễ vài phút lúc GitHub bận, và lịch tự tắt sau 60 ngày
 repo không có hoạt động (GitHub gửi email báo trước). Watchdog không phụ thuộc điều này.
 
+### 7.5 SLO, error budget và cảnh báo burn rate
+
+Các luật ngưỡng ở mục 7.1 trả lời "lúc này có hỏng không". SLO trả lời câu khác: "trong
+7 ngày qua người dùng được phục vụ tốt tới đâu, và với nhịp lỗi hiện tại thì bao lâu nữa
+vượt mục tiêu". Hai SLO chỉ dựa trên series Prometheus đã thu sẵn, không thêm exporter hay
+dịch vụ nào trên VPS. Luật nằm trong `monitoring/prometheus/slo.yml`, test trong
+`rule-tests.json` (các test có tên bắt đầu bằng `slo:`).
+
+| SLO | SLI (sự kiện tốt / tổng) | Mục tiêu, cửa sổ | Ngân sách lỗi |
+|---|---|---|---|
+| `availability` | Probe Blackbox `probe_success{job="public"}` tới `https://goldcast.click/api/release` thành công; mỗi 30 giây một probe, phải trả định danh frontend và backend | 99,5% trong 7 ngày cuốn | ~50 phút probe lỗi mỗi 7 ngày |
+| `api` | Request backend `http_server_requests_seconds_count{job="goldcast-backend"}` không có `status` 5xx; bỏ `uri` `/actuator…` (scrape, probe) và `/api/v1/admin…` (ingest thủ công) | 99% trong 7 ngày cuốn | 1 request lỗi trên 100 |
+
+**Vì sao chọn các con số này:**
+
+- **99,5% cho HTTPS:** một VPS, không dự phòng; mỗi lần deploy gián đoạn vài giây, khởi động
+  lại máy hay bảo trì mất vài phút. 99,9% (10 phút/tuần) sẽ bị tiêu hết chỉ sau một lần
+  bảo trì, nên đặt vậy chỉ tạo cảnh báo vô ích. 99,5% vẫn đủ chặt để phát hiện lỗi chập chờn.
+- **99% cho API:** lưu lượng nhỏ (phần lớn là probe `/api/v1/release` và các trang SSR), nên
+  mỗi 5xx chiếm tỷ trọng lớn; endpoint dự báo và DB là phần nặng nhất. Lỗi 4xx (ví dụ 422
+  `insufficient-history`, 404) là câu trả lời đúng, không tính là lỗi.
+- **7 ngày thay vì 30 ngày:** Prometheus trên Mac chỉ giữ 7 ngày (mục 7.2). Cửa sổ dài hơn
+  retention sẽ âm thầm tính trên ít dữ liệu hơn mức đã hứa.
+
+**Cách tính.** `goldcast:slo_objective{slo}` là nguồn duy nhất của mục tiêu; luật cảnh báo
+và dashboard đều đọc từ đó. `goldcast:slo_errors:ratio_rate<cửa sổ>{slo}` là tỷ lệ lỗi cho
+5m, 30m, 1h, 2h, 6h (đánh giá mỗi 30 giây) và 1d, 3d, 7d (mỗi 2 phút cho nhẹ). Burn rate là
+tỷ lệ lỗi chia ngân sách (`1 - mục tiêu`): 1x nghĩa là hết đúng ngân sách vào cuối cửa sổ
+7 ngày; 14,4x hết trong khoảng 12 giờ. Khi API chưa từng có 5xx, tỷ lệ là 0 chứ không rỗng;
+khi không có request nào, tỷ lệ để trống (0/0 không phải SLI).
+
+**Cảnh báo multi-window, multi-burn-rate** (theo Google SRE Workbook). Mỗi mức cần cả cửa
+sổ dài (lỗi đủ nhiều để đáng báo) lẫn cửa sổ ngắn bằng 1/12 (lỗi vẫn đang xảy ra), nên một
+lần chập ngắn không báo và cảnh báo tự tắt vài phút sau khi hết lỗi:
+
+| Cảnh báo | Mức | Điều kiện (cả hai cửa sổ vượt) | Tiêu bao nhiêu ngân sách 7 ngày |
+|---|---|---|---|
+| `GoldcastSLOAvailabilityFastBurn`, `GoldcastSLOAPIFastBurn` | critical, `for: 2m` | 14,4x trên 1h và 5m, **hoặc** 6x trên 6h và 30m | ~9% trong 1 giờ, hoặc ~21% trong 6 giờ |
+| `GoldcastSLOAvailabilitySlowBurn`, `GoldcastSLOAPISlowBurn` | warning, `for: 15m` | 3x trên 1d và 2h, **hoặc** 1x trên 3d và 6h | ~43% trong 1 hoặc 3 ngày |
+
+Cả hai mức đều gửi Telegram (route mặc định); nhãn `slo` cho biết SLO nào. Với HTTPS, 14,4x
+tương ứng hơn 4 phút probe lỗi trong một giờ; 3x tương ứng khoảng 1 phút lỗi mỗi giờ kéo
+dài cả ngày, kiểu lỗi chập chờn mà `GoldcastWebsiteUnavailable` (cần lỗi liên tục 2 phút)
+không bắt được. `GoldcastSLOAPIFastBurn` còn cần ít nhất 20 request trong 1 giờ, để vài
+request lẻ lỗi lúc ít khách không gọi người dậy.
+
+**Chặn cảnh báo trùng.** Khi `GoldcastWebsiteUnavailable` firing thì hai cảnh báo SLO
+`availability` bị chặn; khi `GoldcastBackendNotReady` hoặc `GoldcastAPIErrors` firing thì hai
+cảnh báo SLO `api` bị chặn. Cùng một sự cố không nhắn hai lần. Khi cảnh báo triệu chứng đã
+phục hồi mà cảnh báo SLO vẫn firing, nó mới được gửi: ngân sách đã thật sự bị tiêu. Mức
+nhanh tự tắt trong khoảng 5–30 phút sau khi hết lỗi; mức chậm có thể còn tới 2–6 giờ (cửa
+sổ ngắn của nó), đó là dấu vết sự cố đã qua, không phải sự cố mới.
+
+**Dashboard GoldCast — SLO** (UID `goldcast-slo`, cùng thư mục GoldCast): SLI 7 ngày, mục
+tiêu, ngân sách lỗi còn lại (1 là chưa tiêu, âm là đã vi phạm), burn rate theo 5m/1h/6h/1d/3d
+có vạch ngưỡng 1x, 3x, 6x, 14,4x, tỷ lệ lỗi 1 giờ và số cảnh báo SLO đang firing.
+
+**Kiểm:** `sh monitoring/check.sh` chạy các test `slo:`: mất site 10 phút sau 6 giờ khoẻ thì
+báo critical và tự tắt; chập 2 phút sau một ngày khoẻ thì im dù cửa sổ 5 phút vượt ngưỡng;
+1 phút lỗi mỗi giờ thì chỉ warning; API 40% 5xx báo qua mức 1h dù actuator rất nhiều request;
+API 8% kéo dài báo qua mức 6h; API 4% cả ngày chỉ warning; lưu lượng khoẻ (chỉ có 5xx của
+admin và 4xx) giữ ngân sách 100% và không báo; dưới 20 request/giờ thì không báo critical.
+Mỗi test đã được chứng minh bằng cách cố ý làm hỏng luật (đổi hệ số, bỏ cửa sổ dài, bỏ loại
+trừ admin/actuator, bỏ `or vector(0)`, bỏ ngưỡng 20 request, bỏ luật chặn) và thấy check đỏ.
+
+**Giới hạn:** SLI chỉ được đo khi bộ giám sát trên Mac chạy. Lúc Mac tắt, probe HTTPS không
+có mẫu nên thời gian đó không tính vào `availability` (lỗi khi đó chỉ thấy qua External
+probe của GitHub); bộ đếm request của backend vẫn tăng nên `api` vẫn tính đủ khi Mac bật lại.
+Backend chết hẳn thì không có request nào được ghi, nên `api` im và `availability` báo thay.
+
 ### Runbook
 
 1. **Website/readiness đỏ:** thử HTTPS từ máy ngoài VPS, xem Jenkins Deploy/G3
@@ -906,6 +981,14 @@ repo không có hoạt động (GitHub gửi email báo trước). Watchdog khô
    Trong lúc đó xem trạng thái site ở workflow **External probe** trên GitHub.
 9. **External probe báo DOWN:** xử lý như mục 1. Nếu Prometheus trên Mac không báo
    cùng lúc, kiểm thêm Watchdog: có thể cả bộ giám sát trên Mac cũng đang chết.
+10. **SLO burn rate:** mở dashboard **GoldCast — SLO**, xem burn rate theo cửa sổ nào đang
+    cao và ngân sách còn bao nhiêu. `FastBurn` (critical) xử lý ngay như mục 1 (với
+    `availability`) hoặc đọc log backend, DB và release vừa deploy (với `api`; panel
+    "API 5xx/giây" của dashboard Operations, lọc theo `uri`). Lỗi bắt đầu ngay sau một
+    deploy thì rollback theo mục 5.2. `SlowBurn` (warning) không cần xử lý trong đêm: tìm
+    lỗi lặp lại (timeout, restart container, Caddy, endpoint dự báo) và sửa trong giờ làm
+    việc. Ngân sách đã âm thì tạm dừng thay đổi rủi ro cho tới khi nó hồi lại. Không nới
+    mục tiêu trong `slo.yml` chỉ để tắt cảnh báo.
 
 ---
 
@@ -1134,7 +1217,8 @@ khi nối lại Jenkins.
 
 - **Monitoring đầy đủ vẫn chạy trên máy Mac:** khi Mac tắt, Watchdog báo qua
   healthchecks.io và probe GitHub vẫn kiểm site, nhưng các luật chi tiết (tài nguyên
-  VPS, dữ liệu, backup...) tạm ngừng. Chưa có log tập trung, tracing hay SLO/error budget.
+  VPS, dữ liệu, backup...) tạm ngừng; SLI của SLO cũng chỉ được đo khi Mac chạy (mục 7.5).
+  Chưa có log tập trung hay tracing.
 - **Một máy chủ, không dự phòng:** máy chết là dịch vụ chết; mỗi lần deploy gián
   đoạn vài giây.
 - **Rollback không phục hồi DB:** migration phải tương thích với bản trước.

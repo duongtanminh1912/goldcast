@@ -1,0 +1,142 @@
+# SLO va canh bao burn rate (Google SRE workbook, multi-window, multi-burn-rate).
+# Chi dung series da scrape san: probe_success cua blackbox (job public) va
+# http_server_requests_seconds_count cua backend. Khong them exporter.
+#
+# Cua so SLO la 7 ngay cuon, bang retention cua Prometheus (compose.yml: 7d).
+# Burn rate 1x = tieu dung het ngan sach loi vao cuoi cua so 7 ngay.
+#   critical: 14.4x tren 1h va 5m, hoac 6x tren 6h va 30m
+#   warning:   3x tren 1d va 2h,  hoac 1x tren 3d va 6h
+# Cua so ngan (1/12 cua so dai) de canh bao tat nhanh sau khi het loi.
+groups:
+  - name: goldcast-slo-records
+    rules:
+      # Muc tieu SLO la nguon duy nhat: alert va dashboard deu doc tu day.
+      - record: goldcast:slo_objective
+        expr: vector(0.995)
+        labels: {slo: availability}
+      - record: goldcast:slo_objective
+        expr: vector(0.99)
+        labels: {slo: api}
+      # SLI 1: ty le probe HTTPS cong khai that bai (moi probe 30s la mot "phut thu").
+      - record: goldcast:slo_errors:ratio_rate5m
+        expr: 1 - avg(avg_over_time(probe_success{job="public"}[5m]))
+        labels: {slo: availability}
+      - record: goldcast:slo_errors:ratio_rate30m
+        expr: 1 - avg(avg_over_time(probe_success{job="public"}[30m]))
+        labels: {slo: availability}
+      - record: goldcast:slo_errors:ratio_rate1h
+        expr: 1 - avg(avg_over_time(probe_success{job="public"}[1h]))
+        labels: {slo: availability}
+      - record: goldcast:slo_errors:ratio_rate2h
+        expr: 1 - avg(avg_over_time(probe_success{job="public"}[2h]))
+        labels: {slo: availability}
+      - record: goldcast:slo_errors:ratio_rate6h
+        expr: 1 - avg(avg_over_time(probe_success{job="public"}[6h]))
+        labels: {slo: availability}
+      # SLI 2: ty le request API backend tra 5xx. Bo actuator (scrape/probe) va admin
+      # (ingest thu cong cua van hanh). "or vector(0)": chua tung co 5xx thi ty le la 0,
+      # khong phai rong; khong co request nao thi van rong (0/0 khong phai SLI).
+      - record: goldcast:slo_errors:ratio_rate5m
+        expr: (sum(rate(http_server_requests_seconds_count{job="goldcast-backend",status=~"5..",uri!~"/actuator.*|/api/v1/admin.*"}[5m])) or vector(0)) / sum(rate(http_server_requests_seconds_count{job="goldcast-backend",uri!~"/actuator.*|/api/v1/admin.*"}[5m]))
+        labels: {slo: api}
+      - record: goldcast:slo_errors:ratio_rate30m
+        expr: (sum(rate(http_server_requests_seconds_count{job="goldcast-backend",status=~"5..",uri!~"/actuator.*|/api/v1/admin.*"}[30m])) or vector(0)) / sum(rate(http_server_requests_seconds_count{job="goldcast-backend",uri!~"/actuator.*|/api/v1/admin.*"}[30m]))
+        labels: {slo: api}
+      - record: goldcast:slo_errors:ratio_rate1h
+        expr: (sum(rate(http_server_requests_seconds_count{job="goldcast-backend",status=~"5..",uri!~"/actuator.*|/api/v1/admin.*"}[1h])) or vector(0)) / sum(rate(http_server_requests_seconds_count{job="goldcast-backend",uri!~"/actuator.*|/api/v1/admin.*"}[1h]))
+        labels: {slo: api}
+      - record: goldcast:slo_errors:ratio_rate2h
+        expr: (sum(rate(http_server_requests_seconds_count{job="goldcast-backend",status=~"5..",uri!~"/actuator.*|/api/v1/admin.*"}[2h])) or vector(0)) / sum(rate(http_server_requests_seconds_count{job="goldcast-backend",uri!~"/actuator.*|/api/v1/admin.*"}[2h]))
+        labels: {slo: api}
+      - record: goldcast:slo_errors:ratio_rate6h
+        expr: (sum(rate(http_server_requests_seconds_count{job="goldcast-backend",status=~"5..",uri!~"/actuator.*|/api/v1/admin.*"}[6h])) or vector(0)) / sum(rate(http_server_requests_seconds_count{job="goldcast-backend",uri!~"/actuator.*|/api/v1/admin.*"}[6h]))
+        labels: {slo: api}
+      - record: goldcast:slo_api_requests:increase1h
+        expr: sum(increase(http_server_requests_seconds_count{job="goldcast-backend",uri!~"/actuator.*|/api/v1/admin.*"}[1h]))
+  # Cua so dai doc nhieu mau, nen tinh thua hon (2 phut, van duoi lookback 5 phut).
+  - name: goldcast-slo-records-long
+    interval: 2m
+    rules:
+      - record: goldcast:slo_errors:ratio_rate1d
+        expr: 1 - avg(avg_over_time(probe_success{job="public"}[1d]))
+        labels: {slo: availability}
+      - record: goldcast:slo_errors:ratio_rate3d
+        expr: 1 - avg(avg_over_time(probe_success{job="public"}[3d]))
+        labels: {slo: availability}
+      - record: goldcast:slo_errors:ratio_rate7d
+        expr: 1 - avg(avg_over_time(probe_success{job="public"}[7d]))
+        labels: {slo: availability}
+      - record: goldcast:slo_errors:ratio_rate1d
+        expr: (sum(rate(http_server_requests_seconds_count{job="goldcast-backend",status=~"5..",uri!~"/actuator.*|/api/v1/admin.*"}[1d])) or vector(0)) / sum(rate(http_server_requests_seconds_count{job="goldcast-backend",uri!~"/actuator.*|/api/v1/admin.*"}[1d]))
+        labels: {slo: api}
+      - record: goldcast:slo_errors:ratio_rate3d
+        expr: (sum(rate(http_server_requests_seconds_count{job="goldcast-backend",status=~"5..",uri!~"/actuator.*|/api/v1/admin.*"}[3d])) or vector(0)) / sum(rate(http_server_requests_seconds_count{job="goldcast-backend",uri!~"/actuator.*|/api/v1/admin.*"}[3d]))
+        labels: {slo: api}
+      - record: goldcast:slo_errors:ratio_rate7d
+        expr: (sum(rate(http_server_requests_seconds_count{job="goldcast-backend",status=~"5..",uri!~"/actuator.*|/api/v1/admin.*"}[7d])) or vector(0)) / sum(rate(http_server_requests_seconds_count{job="goldcast-backend",uri!~"/actuator.*|/api/v1/admin.*"}[7d]))
+        labels: {slo: api}
+  - name: goldcast-slo
+    rules:
+      - alert: GoldcastSLOAvailabilityFastBurn
+        expr: |
+          (
+            goldcast:slo_errors:ratio_rate1h{slo="availability"} > on(slo) (14.4 * (1 - goldcast:slo_objective))
+            and goldcast:slo_errors:ratio_rate5m{slo="availability"} > on(slo) (14.4 * (1 - goldcast:slo_objective))
+          ) or (
+            goldcast:slo_errors:ratio_rate6h{slo="availability"} > on(slo) (6 * (1 - goldcast:slo_objective))
+            and goldcast:slo_errors:ratio_rate30m{slo="availability"} > on(slo) (6 * (1 - goldcast:slo_objective))
+          )
+        for: 2m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "HTTPS công khai đang đốt nhanh ngân sách lỗi SLO 99,5%"
+          description: "Probe lỗi chập chờn hoặc kéo dài: ≥14,4x trong 1 giờ hoặc ≥6x trong 6 giờ, ngân sách 7 ngày cạn trong chưa tới 1,2 ngày. Tỷ lệ lỗi {{ $value | humanizePercentage }}. Xử lý như HTTPS đỏ."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/huong-dan.md#runbook
+      - alert: GoldcastSLOAvailabilitySlowBurn
+        expr: |
+          (
+            goldcast:slo_errors:ratio_rate1d{slo="availability"} > on(slo) (3 * (1 - goldcast:slo_objective))
+            and goldcast:slo_errors:ratio_rate2h{slo="availability"} > on(slo) (3 * (1 - goldcast:slo_objective))
+          ) or (
+            goldcast:slo_errors:ratio_rate3d{slo="availability"} > on(slo) (1 - goldcast:slo_objective)
+            and goldcast:slo_errors:ratio_rate6h{slo="availability"} > on(slo) (1 - goldcast:slo_objective)
+          )
+        for: 15m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "HTTPS công khai tiêu ngân sách lỗi nhanh hơn mức bền vững"
+          description: "≥3x trong 1 ngày hoặc ≥1x trong 3 ngày: giữ nhịp này là hết ngân sách 7 ngày. Tỷ lệ lỗi {{ $value | humanizePercentage }}. Tìm lỗi lặp lại (deploy, Caddy, timeout), không cần xử lý trong đêm."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/huong-dan.md#runbook
+      # Can it nhat 20 request/gio: luu luong thap thi mot loi 5xx da la vai phan tram.
+      - alert: GoldcastSLOAPIFastBurn
+        expr: |
+          (
+            (
+              goldcast:slo_errors:ratio_rate1h{slo="api"} > on(slo) (14.4 * (1 - goldcast:slo_objective))
+              and goldcast:slo_errors:ratio_rate5m{slo="api"} > on(slo) (14.4 * (1 - goldcast:slo_objective))
+            ) or (
+              goldcast:slo_errors:ratio_rate6h{slo="api"} > on(slo) (6 * (1 - goldcast:slo_objective))
+              and goldcast:slo_errors:ratio_rate30m{slo="api"} > on(slo) (6 * (1 - goldcast:slo_objective))
+            )
+          ) and on() (goldcast:slo_api_requests:increase1h >= 20)
+        for: 2m
+        labels: {severity: critical, site: goldcast}
+        annotations:
+          summary: "API backend đang đốt nhanh ngân sách lỗi SLO 99%"
+          description: "5xx ≥14,4x trong 1 giờ hoặc ≥6x trong 6 giờ (không tính actuator/admin), ngân sách 7 ngày cạn trong chưa tới 1,2 ngày. Tỷ lệ lỗi {{ $value | humanizePercentage }}. Kiểm log backend, DB và release vừa triển khai."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/huong-dan.md#runbook
+      - alert: GoldcastSLOAPISlowBurn
+        expr: |
+          (
+            goldcast:slo_errors:ratio_rate1d{slo="api"} > on(slo) (3 * (1 - goldcast:slo_objective))
+            and goldcast:slo_errors:ratio_rate2h{slo="api"} > on(slo) (3 * (1 - goldcast:slo_objective))
+          ) or (
+            goldcast:slo_errors:ratio_rate3d{slo="api"} > on(slo) (1 - goldcast:slo_objective)
+            and goldcast:slo_errors:ratio_rate6h{slo="api"} > on(slo) (1 - goldcast:slo_objective)
+          )
+        for: 15m
+        labels: {severity: warning, site: goldcast}
+        annotations:
+          summary: "API backend tiêu ngân sách lỗi nhanh hơn mức bền vững"
+          description: "5xx ≥3x trong 1 ngày hoặc ≥1x trong 3 ngày: giữ nhịp này là hết ngân sách 7 ngày. Tỷ lệ lỗi {{ $value | humanizePercentage }}. Tìm endpoint lỗi theo uri trên dashboard và log backend."
+          runbook: https://github.com/duongtanminh1912/goldcast/blob/main/docs/huong-dan.md#runbook

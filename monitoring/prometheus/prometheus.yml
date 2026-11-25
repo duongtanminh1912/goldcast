@@ -5,6 +5,7 @@ global:
     site: goldcast
 rule_files:
   - /etc/prometheus/alerts.yml
+  - /etc/prometheus/slo.yml
 alerting:
   alertmanagers:
     - static_configs:

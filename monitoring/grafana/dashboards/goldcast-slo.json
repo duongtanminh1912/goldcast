@@ -1,0 +1,375 @@
+{
+  "uid": "goldcast-slo",
+  "title": "GoldCast — SLO",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": false,
+  "refresh": "1m",
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "tags": [
+    "goldcast",
+    "devops",
+    "slo"
+  ],
+  "panels": [
+    {
+      "id": 1,
+      "title": "SLI 7 ngày",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - goldcast:slo_errors:ratio_rate7d",
+          "legendFormat": "{{slo}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 3
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Tỷ lệ thành công trong 7 ngày cuốn. availability: probe HTTPS công khai; api: request backend không 5xx (bỏ actuator/admin)."
+    },
+    {
+      "id": 2,
+      "title": "Mục tiêu SLO",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast:slo_objective",
+          "legendFormat": "{{slo}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 3,
+      "title": "Ngân sách lỗi còn lại (7 ngày)",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - goldcast:slo_errors:ratio_rate7d / on(slo) (1 - goldcast:slo_objective)",
+          "legendFormat": "{{slo}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.25
+              },
+              {
+                "color": "green",
+                "value": 0.5
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "1 là chưa tiêu gì, 0 là đã tiêu hết, âm là đã vi phạm SLO."
+    },
+    {
+      "id": 4,
+      "title": "Burn rate · HTTPS công khai",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast:slo_errors:ratio_rate5m{slo=\"availability\"} / on(slo) (1 - goldcast:slo_objective)",
+          "legendFormat": "5m"
+        },
+        {
+          "refId": "B",
+          "expr": "goldcast:slo_errors:ratio_rate1h{slo=\"availability\"} / on(slo) (1 - goldcast:slo_objective)",
+          "legendFormat": "1h"
+        },
+        {
+          "refId": "C",
+          "expr": "goldcast:slo_errors:ratio_rate6h{slo=\"availability\"} / on(slo) (1 - goldcast:slo_objective)",
+          "legendFormat": "6h"
+        },
+        {
+          "refId": "D",
+          "expr": "goldcast:slo_errors:ratio_rate1d{slo=\"availability\"} / on(slo) (1 - goldcast:slo_objective)",
+          "legendFormat": "1d"
+        },
+        {
+          "refId": "E",
+          "expr": "goldcast:slo_errors:ratio_rate3d{slo=\"availability\"} / on(slo) (1 - goldcast:slo_objective)",
+          "legendFormat": "3d"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "orange",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 6
+              },
+              {
+                "color": "dark-red",
+                "value": 14.4
+              }
+            ]
+          },
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Bội số so với tốc độ tiêu bền vững (1x hết ngân sách đúng cuối cửa sổ 7 ngày). Đường ngưỡng: 14,4x/6x critical, 3x/1x warning."
+    },
+    {
+      "id": 5,
+      "title": "Burn rate · API backend",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 6,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast:slo_errors:ratio_rate5m{slo=\"api\"} / on(slo) (1 - goldcast:slo_objective)",
+          "legendFormat": "5m"
+        },
+        {
+          "refId": "B",
+          "expr": "goldcast:slo_errors:ratio_rate1h{slo=\"api\"} / on(slo) (1 - goldcast:slo_objective)",
+          "legendFormat": "1h"
+        },
+        {
+          "refId": "C",
+          "expr": "goldcast:slo_errors:ratio_rate6h{slo=\"api\"} / on(slo) (1 - goldcast:slo_objective)",
+          "legendFormat": "6h"
+        },
+        {
+          "refId": "D",
+          "expr": "goldcast:slo_errors:ratio_rate1d{slo=\"api\"} / on(slo) (1 - goldcast:slo_objective)",
+          "legendFormat": "1d"
+        },
+        {
+          "refId": "E",
+          "expr": "goldcast:slo_errors:ratio_rate3d{slo=\"api\"} / on(slo) (1 - goldcast:slo_objective)",
+          "legendFormat": "3d"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "orange",
+                "value": 3
+              },
+              {
+                "color": "red",
+                "value": 6
+              },
+              {
+                "color": "dark-red",
+                "value": 14.4
+              }
+            ]
+          },
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "line"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {},
+      "description": "Bội số so với tốc độ tiêu bền vững (1x hết ngân sách đúng cuối cửa sổ 7 ngày). Đường ngưỡng: 14,4x/6x critical, 3x/1x warning."
+    },
+    {
+      "id": 6,
+      "title": "Ngân sách lỗi còn lại theo thời gian",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "1 - goldcast:slo_errors:ratio_rate7d / on(slo) (1 - goldcast:slo_objective)",
+          "legendFormat": "{{slo}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 7,
+      "title": "Tỷ lệ lỗi 1 giờ",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 14,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "goldcast:slo_errors:ratio_rate1h",
+          "legendFormat": "{{slo}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "options": {}
+    },
+    {
+      "id": 8,
+      "title": "Cảnh báo SLO đang firing",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "goldcast-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 22,
+        "w": 24,
+        "h": 5
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(ALERTS{alertname=~\"GoldcastSLO.*\",alertstate=\"firing\"}) or vector(0)",
+          "legendFormat": ""
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "options": {}
+    }
+  ]
+}
