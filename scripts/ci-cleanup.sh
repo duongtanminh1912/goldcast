@@ -21,11 +21,16 @@ for service in backend frontend; do
                 case "$reference" in "$repository":*|"$repository"@*) mine="$mine $reference";; esac
             done
             test -n "$mine" || continue
-            # shellcheck disable=SC2086
-            if docker image rm $mine >/dev/null 2>&1; then
-                echo "removed $repository $id"
+            # One name at a time: once the last name goes the image is deleted, and the
+            # remaining names then fail with "no such image" although nothing is wrong.
+            # Judge by whether the image still exists, not by the exit codes.
+            for reference in $mine; do
+                docker image rm "$reference" >/dev/null 2>&1 || true
+            done
+            if docker image inspect "$id" >/dev/null 2>&1; then
+                echo "kept $repository $id (in use or named by another project)"
             else
-                echo "kept $repository $id (in use or already gone)"
+                echo "removed $repository $id"
             fi
         done
 done
