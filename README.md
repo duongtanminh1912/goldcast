@@ -83,7 +83,7 @@ goldcast/
 ├── .github/workflows/external-probe.yml     Probe HTTPS từ bên ngoài mỗi 10 phút
 ├── docker-compose{,.ci,.prod}.yml           Dev · G2 · production
 ├── scripts/         G2, smoke, release/rollback, bootstrap, backup, probe ngoài và test của chúng
-├── deploy/          Caddyfile, script dựng máy chủ, script siết SSH
+├── deploy/          Caddyfile, host key VPS đã ghim, script dựng máy chủ, script siết SSH
 ├── jenkins/         Image Jenkins, job backup và diễn tập rollback
 ├── monitoring/      Prometheus, Alertmanager, Grafana, luật cảnh báo, Watchdog
 └── docs/huong-dan.md
@@ -321,6 +321,9 @@ nên công thức quy đổi sai là lộ ngay.
 
 **G3 — xác minh production.** Image ID đúng digest, readiness, các trang HTTPS qua
 Caddy, và `/api/release` phải trả đúng `RELEASE_ID` của cả frontend lẫn backend.
+Trang trả mã HTTP thật (mã không tồn tại là 404, backend lỗi là 500), nên cổng không
+phải dò lỗi qua câu chữ tiếng Việt. Jenkins SSH vào VPS với host key ghim trong
+[`deploy/known_hosts`](deploy/known_hosts).
 → [`scripts/release.sh`](scripts/release.sh)
 
 **Hạ tầng:** một VPS Ubuntu 24.04 dựng bằng script chạy lại được ([`deploy/`](deploy/)),

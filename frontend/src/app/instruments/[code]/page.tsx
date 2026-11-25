@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { api, ApiError } from "@/lib/api";
 import { IndicatorChart, PriceHistoryChart, RsiChart } from "@/components/charts";
-import { Badge, Card, EmptyState, SectionHeading, StatTile, WarningList } from "@/components/ui";
+import { Badge, Card, SectionHeading, StatTile, WarningList } from "@/components/ui";
 import {
   changeColor,
   formatDate,
@@ -15,8 +16,6 @@ import {
 import type { Indicators, Instrument, Series } from "@/lib/types";
 import { InstrumentTabs } from "@/components/InstrumentTabs";
 import LiveWorldGold from "@/components/LiveWorldGold";
-
-export const revalidate = 60;
 
 const RANGES = [
   { key: "30", label: "1 tháng", limit: 30 },
@@ -64,22 +63,10 @@ export default async function InstrumentPage({ params, searchParams }: PageProps
   try {
     series = await seriesRequest;
   } catch (error) {
-    if (error instanceof ApiError && error.isNotFound) {
-      return (
-        <EmptyState
-          title="Không có chuỗi giá này"
-          description={`Mã '${code}' chưa được khai báo. Xem danh sách các chuỗi đang theo dõi ở trang tổng quan.`}
-          action={{ href: "/", label: "Về trang tổng quan" }}
-        />
-      );
-    }
-    return (
-      <EmptyState
-        title="Không tải được dữ liệu"
-        description={error instanceof ApiError ? error.message : "Lỗi không xác định."}
-        action={{ href: "/", label: "Về trang tổng quan" }}
-      />
-    );
+    // Real HTTP statuses, so probes and G3 need not read Vietnamese copy: an unknown
+    // code is 404 (not-found.tsx), anything else is 500 (error.tsx).
+    if (error instanceof ApiError && error.isNotFound) notFound();
+    throw error;
   }
 
   const [{ indicators, notice: indicatorNotice }, instruments] = await Promise.all([

@@ -3,6 +3,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -79,3 +81,86 @@ class RetentionTest(unittest.TestCase):
         (self.root / '.last-good-release').write_text(str(old))
         os.utime(recent, None)
         self.assertNotIn(recent, retention.release_candidates(self.root, 1))
+
+
+BACKEND = 'ghcr.io/duongtanminh1912/goldcast-backend@sha256:'
+FRONTEND = 'ghcr.io/duongtanminh1912/goldcast-frontend@sha256:'
+
+
+class ImageRetentionTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name).resolve()
+
+    def release(self, name, backend, frontend, phase='promoted', age=1):
+        path = self.root / 'releases' / name
+        path.mkdir(parents=True)
+        (path / 'deploy-phase').write_text(phase)
+        (path / 'release.env').write_text(f'RELEASE_ID={name}\nBACKEND_IMAGE={BACKEND}{backend * 64}\n'
+                                          f'FRONTEND_IMAGE={FRONTEND}{frontend * 64}\n')
+        os.utime(path, (age, age))
+        return path
+
+    def test_only_unreferenced_goldcast_digests_are_candidates(self):
+        kept = [self.release('current', 'a', 'b'), self.release('previous', 'c', 'b')]
+        local = {BACKEND + 'a' * 64, BACKEND + 'c' * 64, FRONTEND + 'b' * 64,
+                 BACKEND + 'e' * 64, FRONTEND + 'f' * 64,
+                 'ghcr.io/duongtanminh1912/goldcast-backend@<none>',
+                 'docker.io/library/postgres@sha256:' + 'e' * 64}
+        self.assertEqual(retention.image_candidates(local, kept), [BACKEND + 'e' * 64, FRONTEND + 'f' * 64])
+
+    def test_a_release_without_manifest_protects_nothing_and_breaks_nothing(self):
+        broken = self.root / 'releases' / 'broken'
+        broken.mkdir(parents=True)
+        self.assertEqual(retention.image_candidates({BACKEND + 'e' * 64}, [broken]), [BACKEND + 'e' * 64])
+
+    def fake_docker(self):
+        state = self.root / 'state'
+        state.mkdir()
+        docker = state / 'docker'
+        container = {'Config': {'Labels': {'com.docker.compose.project.config_files':
+                                           str(self.root / 'releases/current/docker-compose.prod.yml')}}}
+        (state / 'inspect.json').write_text(json.dumps([container] * 4))
+        docker.write_text(f'''#!/bin/sh
+printf '%s\\n' "$*" >> {state}/docker.log
+case "$1 $2" in
+  'inspect goldcast-db') cat {state}/inspect.json;;
+  'image ls') case "$*" in
+      *goldcast-backend) printf '%s\\n' '{BACKEND}{"a" * 64}' '{BACKEND}{"d" * 64}' '{BACKEND}{"e" * 64}';;
+      *goldcast-frontend) printf '%s\\n' '{FRONTEND}{"b" * 64}';;
+    esac;;
+  'image rm') case "$3" in *eeee*) echo 'conflict: in use' >&2; exit 1;; esac;;
+esac
+''')
+        docker.chmod(0o755)
+        return state, dict(os.environ, PATH=f'{state}:{os.environ["PATH"]}')
+
+    def run_retention(self, env, *extra):
+        script = Path(__file__).resolve().parents[1] / 'retention.py'
+        return subprocess.run([sys.executable, str(script), 'release', str(self.root), '--keep', '5', *extra],
+                              env=env, capture_output=True, text=True)
+
+    def test_plan_lists_images_and_apply_removes_them_without_force(self):
+        current = self.release('current', 'a', 'b', age=10 ** 9)
+        (self.root / '.last-good-release').write_text(str(current))
+        # Six old releases: five are kept by count, the oldest (images d) goes.
+        for number in range(6):
+            self.release(f'old{number}', 'd' if number == 0 else 'a', 'b', age=1 + number)
+        state, env = self.fake_docker()
+
+        plan = self.run_retention(env)
+        self.assertEqual(plan.returncode, 0, plan.stderr)
+        self.assertIn('WOULD DELETE ' + str(self.root / 'releases/old0'), plan.stdout)
+        self.assertIn('WOULD DELETE IMAGE ' + BACKEND + 'd' * 64, plan.stdout)
+        self.assertIn('WOULD DELETE IMAGE ' + BACKEND + 'e' * 64, plan.stdout)  # mo coi tu truoc
+        self.assertNotIn(BACKEND + 'a' * 64, plan.stdout)
+        self.assertNotIn('image rm', (state / 'docker.log').read_text())
+
+        applied = self.run_retention(env, '--apply')
+        self.assertEqual(applied.returncode, 0, applied.stderr)
+        log = (state / 'docker.log').read_text()
+        self.assertIn('image rm ' + BACKEND + 'd' * 64, log)
+        self.assertNotIn('-f', [word for line in log.splitlines() if 'image rm' in line for word in line.split()])
+        self.assertIn('KEEP IMAGE (in use) ' + BACKEND + 'e' * 64, applied.stdout)
+        self.assertFalse((self.root / 'releases/old0').exists())

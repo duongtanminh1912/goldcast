@@ -62,8 +62,22 @@ compose() {
     (
     # Compose gives exported variables precedence over --env-file. The tested
     # manifest must remain authoritative, including when rolling back in CI.
-    unset BACKEND_IMAGE FRONTEND_IMAGE RELEASE_ID
+    unset BACKEND_IMAGE FRONTEND_IMAGE RELEASE_ID GOLDCAST_CADDYFILE
     validate_manifest "$release"
+    # Compose recreates a container whenever a bind-mount source path changes, even for
+    # an identical file, so a per-release path restarted Caddy (and dropped HTTPS) on
+    # every deploy. Mount it from a path named after its content instead: Caddy is
+    # recreated only when the Caddyfile really changes, rollback included.
+    if [ -f "$release/deploy/Caddyfile" ]; then
+        caddy_hash=$(sha256sum "$release/deploy/Caddyfile" | cut -c1-64)
+        caddy_dir="$root/caddy/$caddy_hash"
+        if [ ! -f "$caddy_dir/Caddyfile" ]; then
+            mkdir -p "$caddy_dir"
+            cp "$release/deploy/Caddyfile" "$caddy_dir/Caddyfile.tmp"
+            mv "$caddy_dir/Caddyfile.tmp" "$caddy_dir/Caddyfile"
+        fi
+        export GOLDCAST_CADDYFILE="$caddy_dir/Caddyfile"
+    fi
     runtime_env="$release/runtime.env"
     test -f "$runtime_env" || runtime_env="$root/.env"
     docker compose --env-file "$runtime_env" --env-file "$release/release.env" -p "$project" -f "$release/docker-compose.prod.yml" "$@"

@@ -395,18 +395,22 @@ Lấy khoá vào clipboard mà không in ra màn hình: `pbcopy < ~/.ssh/jenkins
 Khi đã có baseline và credential VPS, đổi **Branches to build** của
 `goldcast-ci` sang `*/main`.
 
-Nếu máy chủ từng được cài lại, container Jenkins vẫn nhớ host key cũ và Deploy
-đỏ với `Host key verification failed`. `StrictHostKeyChecking=accept-new` chỉ tự
-nhận host **mới tinh**; host đã biết mà đổi khoá thì vẫn bị chặn. Xoá bản ghi cũ
-bằng đường dẫn tuyệt đối (vì `docker exec` không chắc đặt `HOME`), rồi kiểm
-bằng chính file đó:
+Host key của VPS được ghim trong repo, ở `deploy/known_hosts`. Mọi lệnh SSH
+trong `Jenkinsfile` dùng `SSH_OPTS` với `StrictHostKeyChecking=yes` và
+`UserKnownHostsFile=deploy/known_hosts`. Jenkins không đọc và không ghi
+`~/.ssh/known_hosts` của mình, nên mất file đó không làm Deploy tin một máy lạ
+trả lời ở cùng IP. `scripts/tests/test_jenkins.py` đỏ nếu có lệnh SSH bỏ qua
+`SSH_OPTS` hoặc dùng lại `accept-new`/`no`.
+
+Khi cài lại VPS hoặc đổi IP, Deploy đỏ với `Host key verification failed`. Đó là
+hành vi đúng. Lấy fingerprint từ console của nhà cung cấp (không lấy qua mạng),
+so với key quét được, rồi cập nhật file bằng PR:
 
 ```bash
-docker exec jenkins ssh-keygen -f /var/jenkins_home/.ssh/known_hosts -R "$IP"
-docker exec jenkins ssh-keygen -F "$IP" -f /var/jenkins_home/.ssh/known_hosts
+ssh-keyscan -t rsa "$IP" > /tmp/vps.key && ssh-keygen -lf /tmp/vps.key   # so với console
+# Giữ các dòng chú thích ở đầu deploy/known_hosts, thay dòng key bằng /tmp/vps.key.
+ssh-keygen -lf deploy/known_hosts
 ```
-
-Không còn bản ghi thì lệnh `-F` không in gì và trả mã 1.
 
 **Kiểm:** đưa một thay đổi vào `main` qua PR, **không bấm gì trong Jenkins**.
 Trong 5 phút phải có build mới ghi "Started by an SCM change". G1, Build, G2,
@@ -429,7 +433,11 @@ bộ luồng; nhánh khác `main` (hoặc PR) dừng sau G2.
 - **G1:** test Java (gồm hợp đồng API và công thức quy đổi), TypeScript
   typecheck, bộ test release/rollback/backup bằng `python:3.13-alpine`, test
   probe/snapshot bằng Node 22, và `monitoring/check.sh` (promtool/amtool).
-  Container test không được gắn Docker socket.
+  Container test không được gắn Docker socket. Khác với GitHub Actions (chạy trên
+  cả repo), Jenkins chỉ đưa vào container Python những gì lệnh `tar` liệt kê
+  (`scripts monitoring deploy Jenkinsfile docker-compose.prod.yml docker-compose.ci.yml`).
+  `test_jenkins.py` quét các file mà test Python đọc và đỏ khi danh sách thiếu.
+  Thiếu là G1 đỏ trên Jenkins dù `backend-test` xanh, và `main` không được deploy.
 - **Build:** build/push một lần cho `linux/amd64`, tag `<commit>-<job>-<build>`,
   chốt `RELEASE_ID` và hai digest vào artifact `release.env`.
 - **G2:** `scripts/g2.sh` dựng `docker-compose.ci.yml` trên Docker của Jenkins,
@@ -437,7 +445,8 @@ bộ luồng; nhánh khác `main` (hoặc PR) dừng sau G2.
   và seed mô phỏng bật để kết quả lặp lại được. Hai ca:
   - *Cài mới:* Flyway khởi tạo, kiểm lịch sử migration, 39 bất biến API trong
     `scripts/smoke.mjs` (ví dụ `worldVndPerGram × troyOunceInGrams` phải bằng
-    `usdPerOunce × vndPerUsd`), dự báo NAIVE và ba trang SSR qua Caddy.
+    `usdPerOunce × vndPerUsd`), dự báo NAIVE và ba trang SSR qua Caddy. Migration
+    V5 phải đã xoá hai index trùng (`to_regclass` của chúng là NULL).
   - *Nâng cấp:* tạo DB ở Flyway target V1, nạp `scripts/fixtures/upgrade-v1.sql`,
     rồi chạy cùng image ở target mới nhất; `assert-upgrade.sql` kiểm dữ liệu cũ
     còn nguyên, smoke và các trang phải đạt lại.
@@ -453,6 +462,14 @@ bộ luồng; nhánh khác `main` (hoặc PR) dừng sau G2.
   Caddy tới các trang có nội dung thật, và `/api/release` phải trả
   `releaseId`/`backendReleaseId` bằng `RELEASE_ID`. Đạt thì ghi nguyên tử
   `.last-good-release`.
+
+Trang trả mã HTTP thật: mã chuỗi không tồn tại là 404 (`not-found.tsx`), backend
+lỗi hoặc không phản hồi là 500 (`error.tsx`, hiện mã `digest` khớp với dòng log
+của frontend). Chưa đủ lịch sử để dự báo vẫn là 200, vì đó là trạng thái bình
+thường của trang. Vì thế không có `app/loading.tsx`: khi có Suspense ở gốc, Next
+gửi status 200 trước khi trang kịp lỗi. `check-pages.mjs` (G2/G3) đòi
+`/instruments/G3-KHONG-TON-TAI` trả 404. Probe ngoài (`external-probe.mjs`) bỏ
+qua bước này, vì nó đo site còn sống chứ không kiểm một bản release.
 
 ### 5.1 Manifest được kiểm thế nào
 
@@ -540,8 +557,16 @@ PostgreSQL và Caddy được ghim bằng digest trong cả Compose CI lẫn pro
 
 Frontend có healthcheck gọi `/api/release`, chỉ healthy khi định danh frontend
 và backend khớp; Caddy đợi frontend healthy. Probe thử lại tối đa năm lần với
-lỗi kết nối/502/503/504, mỗi request tối đa 15 giây. HTTP 200 nhưng sai định
-danh hoặc trang hiển thị lỗi vẫn bị từ chối.
+lỗi kết nối/502/503/504, mỗi request tối đa 15 giây. Trang không 2xx, HTTP 200
+nhưng sai định danh, hoặc trang hiển thị lỗi đều bị từ chối.
+
+**Caddyfile theo nội dung.** Compose tạo lại container khi đường dẫn nguồn của
+bind mount đổi, kể cả khi file giống hệt. Nếu mount `./deploy/Caddyfile` của
+từng release thì mỗi lần deploy Caddy khởi động lại và HTTPS ngắt một lúc.
+`release.sh` chép Caddyfile vào `/opt/goldcast/caddy/<sha256>/Caddyfile` rồi đặt
+`GOLDCAST_CADDYFILE`, nên Caddy chỉ bị tạo lại khi nội dung thật sự đổi, kể cả
+khi rollback. Biến này đặt từ môi trường bên ngoài sẽ bị bỏ. Thư mục `caddy/`
+rất nhỏ và không bị retention xoá.
 
 **Giới hạn RAM.** Mỗi container production có `mem_limit`: db 384 MB, backend 768 MB,
 frontend 320 MB, Caddy 128 MB, tổng 1600 MB trên VPS 2 GB. Giới hạn này bắt buộc chứ
@@ -594,6 +619,12 @@ Postgres thật với 618 quote đã có: số lần quét bảng `price_point` 
   đọc các con số này từ `remote-release.sh`, `release.sh` và `Jenkinsfile`, rồi đỏ khi chúng không còn khớp.
 - Log mỗi service production xoay vòng `3 × 10 MB`. Không chạy Docker prune
   toàn máy và không tự xoá image trên GHCR khi release/backup còn cần nó.
+- Máy Jenkins: sau mỗi build, `scripts/ci-cleanup.sh` chỉ giữ 3 image mới nhất
+  của mỗi repo `goldcast-backend`/`goldcast-frontend`. Các image cũ bị xoá theo
+  tên, không dùng `-f`: image còn container dùng (G2 của job khác) bị từ chối và
+  được giữ lại. Script cũng giới hạn BuildKit cache ở 10 GB và không bao giờ làm
+  build đỏ. Trước khi có bước này, máy Jenkins tích 74 image (~12,6 GB) cùng
+  12,6 GB cache.
 
 Dọn thư mục release cũ (cần Python ≥ 3.9 trên VPS):
 
@@ -605,7 +636,14 @@ python3 "$RELEASE_DIR/scripts/retention.py" release /opt/goldcast --keep 14
 Lệnh trên chỉ in kế hoạch; thêm `--apply` để thực hiện. Script chỉ xét release
 `promoted`/`rolled-back` cũ ít nhất bảy ngày; luôn giữ last-good, mục tiêu
 rollback của nó, release đang chạy, release chưa hoàn tất và 14 release gần
-nhất. Có khoá deploy/backup thì từ chối. Không xoá volume hay image.
+nhất. Có khoá deploy/backup thì từ chối. Không xoá volume.
+
+Cùng lệnh đó còn liệt kê (`WOULD DELETE IMAGE`) image cục bộ của hai repo goldcast,
+theo digest, mà không release nào còn giữ lại tham chiếu tới, kể cả image mồ côi
+từ trước khi có bước này. Image của project khác, image theo tag và image chưa có
+digest không bao giờ bị đụng tới. Với `--apply`, mỗi image được xoá bằng
+`docker image rm` không `-f`; image còn container dùng in `KEEP IMAGE (in use)`.
+Image vẫn còn trên GHCR, nên rollback hay khôi phục backup chỉ cần pull lại.
 
 ### 6.4 Backup ngoài VPS
 
@@ -672,6 +710,9 @@ docker exec goldcast-db psql -U goldcast -d goldcast -c \
 ```
 
 Migration V4 chỉ thêm bảng, nên rollback về bản trước vẫn chạy được (không có `ARX_MACRO`).
+V5 chỉ xoá hai index trùng với btree của ràng buộc UNIQUE (`idx_price_point_instrument_date`,
+`idx_forecast_point_run`). Truy vấn vẫn dùng `price_point_unique` (quét ngược cho
+`ORDER BY observed_on DESC`), và bản trước chạy được trên schema này.
 
 **Giám sát:** backend xuất `goldcast_macro_observation_lag_days{series}`, tính bằng số ngày
 từ giá trị vĩ mô mới nhất tới phiên giá vàng gần nhất, đúng cách `ForecastService` quyết

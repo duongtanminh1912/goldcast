@@ -42,3 +42,14 @@ test('plain http is refused before any request', async t => {
   mockFetch(t, async () => { throw new Error('must not request'); });
   await assert.rejects(probe('http://example.test', fast), /https/);
 });
+
+test('availability does not depend on the release-level 404 check', async t => {
+  const calls = [];
+  mockFetch(t, async url => {
+    calls.push(url);
+    return url.endsWith('/api/release')
+      ? Response.json({ releaseId: 'abc-1', backendReleaseId: 'abc-1' }) : new Response(html);
+  });
+  assert.equal(await probe('https://example.test', fast), 'abc-1');
+  assert.ok(!calls.some(url => url.includes('KHONG-TON-TAI')));
+});

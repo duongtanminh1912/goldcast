@@ -3,6 +3,13 @@ DO $$ BEGIN
      OR EXISTS (SELECT 1 FROM flyway_schema_history WHERE NOT success) THEN
     RAISE EXCEPTION 'Upgrade migrations did not finish';
   END IF;
+  -- V5: duplicate indexes gone, the UNIQUE constraints that replace them still there.
+  IF to_regclass('idx_price_point_instrument_date') IS NOT NULL
+     OR to_regclass('idx_forecast_point_run') IS NOT NULL
+     OR to_regclass('price_point_unique') IS NULL
+     OR to_regclass('forecast_point_unique') IS NULL THEN
+    RAISE EXCEPTION 'V5 index cleanup did not run';
+  END IF;
   IF (SELECT count(*) FROM instrument WHERE code = 'CI_UPGRADE' AND name = 'Existing V1 instrument') <> 1
      OR (SELECT count(*) FROM price_point p JOIN instrument i ON i.id = p.instrument_id
          WHERE i.code = 'CI_UPGRADE' AND p.observed_on = DATE '2025-01-02' AND p.close_price = 2500.1250) <> 1

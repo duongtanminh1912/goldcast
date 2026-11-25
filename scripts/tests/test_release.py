@@ -23,6 +23,7 @@ class ReleaseTest(unittest.TestCase):
         docker = self.root / 'docker'
         docker.write_text('''#!/bin/sh
 printf '%s\\n' "$*" >> "$GOLDCAST_ROOT/docker.log"
+case "$*" in 'compose '*) printf '%s\\n' "${GOLDCAST_CADDYFILE:-}" >> "$GOLDCAST_ROOT/caddyfile.log";; esac
 case "$*" in
   'compose '*)
     if [ "${MOCK_ENFORCE_MANIFEST_ENV:-0}" = 1 ] && [ -n "${BACKEND_IMAGE:-}${FRONTEND_IMAGE:-}${RELEASE_ID:-}" ]; then exit 1; fi;;
@@ -59,6 +60,36 @@ exec /bin/{command} "$@"
 
     def run_release(self, action, *args, **env):
         return subprocess.run(['sh', str(SCRIPT), action, str(self.new), *args], env=dict(self.env, **env), capture_output=True, text=True)
+
+    def caddy_mount(self, content):
+        (self.new / 'deploy').mkdir(exist_ok=True)
+        (self.new / 'deploy/Caddyfile').write_text(content)
+        log = self.root / 'caddyfile.log'
+        log.unlink(missing_ok=True)
+        result = self.run_release('status')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        mounts = set(log.read_text().split())
+        self.assertEqual(len(mounts), 1, mounts)
+        return Path(mounts.pop())
+
+    def test_caddyfile_mount_follows_content_not_release_directory(self):
+        first = self.caddy_mount('goldcast.click {\n  reverse_proxy 127.0.0.1:3000\n}\n')
+        self.assertEqual(first.parent.parent, self.root / 'caddy')
+        self.assertNotIn(self.root / 'releases', first.parents)
+        self.assertEqual(first.read_text(), (self.new / 'deploy/Caddyfile').read_text())
+        # Another release with the same file must mount the same path, or Compose recreates Caddy.
+        self.assertEqual(self.caddy_mount('goldcast.click {\n  reverse_proxy 127.0.0.1:3000\n}\n'), first)
+        changed = self.caddy_mount('goldcast.click {\n  reverse_proxy 127.0.0.1:3001\n}\n')
+        self.assertNotEqual(changed, first)
+        self.assertIn('3001', changed.read_text())
+        self.assertIn('3000', first.read_text(), 'an older Caddyfile stays for rollback')
+
+    def test_exported_caddyfile_cannot_redirect_the_mount(self):
+        (self.new / 'deploy').mkdir()
+        (self.new / 'deploy/Caddyfile').write_text('x\n')
+        result = self.run_release('status', GOLDCAST_CADDYFILE='/tmp/attacker/Caddyfile')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn('/tmp/attacker', (self.root / 'caddyfile.log').read_text())
 
     def test_only_verified_release_is_promoted(self):
         self.assertEqual(self.run_release('deploy').returncode, 0)

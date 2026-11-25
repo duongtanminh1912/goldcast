@@ -1,0 +1,6 @@
+# Host key cua VPS production, ghim cho Jenkins (StrictHostKeyChecking=yes).
+# Doi chieu: ssh-keygen -lf deploy/known_hosts phai ra
+#   SHA256:dj/LnzUKGf1dpMSt/ofZJ5gfU7Wj61Pamb8RDuhq/3A (RSA 3072)
+# Khi cai lai VPS, cap nhat file nay sau khi xac minh fingerprint qua console nha cung cap.
+# 103.175.248.236:22 SSH-2.0-OpenSSH_9.6p1 Ubuntu-3ubuntu13
+103.175.248.236 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCafIRnv0YuPOvaafpG402tzg1TOjoqkNNG0SFPgSYty2Cmyvb/qzoDTlOixtNURj/ggW0Ghwihfr9K1sac0fTagZ8XGWEPvYCnxZad1fkKZgwKfKIcIXBQ2tkXYTv73p6Ceqjmosl1DcRsX7EekPtMyQ/fDApu/bgxC8b5dN2qVj9iT1sy8TWaLteW2HGcgDnVgwTR77uzzYk5BMTXB3btOac20RN0tIMtoJhI4c19htjULil5Dth9IFjXjTFVKg6aO8qu/x2A3ze1Fd2Y5qfNmTK2cGU1q/asmsNynIlPG21zu68rXjveJXeOnoe0xxT6FsZNGbEDxknyIjeosm1COqc6axH+UjH/mHIYiUn29TjdgmWHH5AzNQ/E6bTN/7ILdXPnEfdvwMiDQMVdsv5WwRWVuKd/2F+kMGXCWJ9PmPMoIVhRyCab8z9nWor7uJfsp1fJm6KBTG7teyzrzt/SuptuCCGEg4nDmOfr7Tca0g6yYjgtq7x2kSd5GcBYg5U=

@@ -1,7 +1,7 @@
 import Link from "next/link";
 import LiveWorldGold from "@/components/LiveWorldGold";
 import type { ReactNode } from "react";
-import { api, ApiError } from "@/lib/api";
+import { api } from "@/lib/api";
 import {
   changeColor,
   formatDate,
@@ -14,7 +14,6 @@ import {
   Badge,
   Card,
   ChangePill,
-  EmptyState,
   MiniStat,
   SectionHeading,
   Sparkline,
@@ -22,11 +21,7 @@ import {
   UpdatedAt,
   WarningList,
 } from "@/components/ui";
-import type { DomesticQuote, MarketSummary } from "@/lib/types";
-
-// Prices move through the day; a short window keeps the dashboard fresh without
-// hammering the API on every request.
-export const revalidate = 60;
+import type { DomesticQuote } from "@/lib/types";
 
 const SPARK_POINTS = 60;
 
@@ -42,32 +37,9 @@ async function loadSparks(codes: string[]): Promise<Record<string, number[]>> {
 }
 
 export default async function DashboardPage() {
-  let summary: MarketSummary;
-  try {
-    summary = await api.summary();
-  } catch (error) {
-    const message =
-      error instanceof ApiError
-        ? error.message
-        : "Không lấy được dữ liệu thị trường.";
-    return (
-      <div className="space-y-6">
-        <LiveWorldGold />
-        <EmptyState
-          title="Chưa hiển thị được dữ liệu"
-          description={
-            <>
-              <p>{message}</p>
-              <p className="mt-2">
-                Nếu bạn vừa khởi động stack, backend có thể đang chạy lượt thu thập dữ liệu
-                đầu tiên. Thử tải lại sau ít giây.
-              </p>
-            </>
-          }
-        />
-      </div>
-    );
-  }
+  // Without the summary there is no dashboard: let error.tsx answer with HTTP 500 so
+  // probes see the outage instead of a 200 page that only says so in Vietnamese.
+  const summary = await api.summary();
 
   const { world, fx, conversion, domestic } = summary;
   const sparks = await loadSparks([
