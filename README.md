@@ -314,9 +314,13 @@ biên dịch, nên thiếu cổng này thì đổi tên một trường ở back
 và `tsc` xanh, còn người dùng thấy ô trống.
 
 **G2 — kiểm image trước deploy.** Dùng đúng digest sẽ triển khai, dựng Compose riêng
-để kiểm cài mới và nâng cấp từ schema V1 có dữ liệu mẫu: 39 phép thử bất biến API (gồm
-`ARX_MACRO` trên dữ liệu vĩ mô mô phỏng) và ba trang SSR. Ví dụ `worldVndPerGram × troyOunceInGrams` phải bằng `usdPerOunce × vndPerUsd`,
-nên công thức quy đổi sai là lộ ngay.
+để kiểm cài mới, nâng cấp từ schema V1 có dữ liệu mẫu, và nâng cấp từ **bản backup
+production mới nhất**. Mỗi ca chạy 39 phép thử bất biến API (gồm `ARX_MACRO` trên dữ
+liệu vĩ mô mô phỏng) và ba trang SSR. Ví dụ `worldVndPerGram × troyOunceInGrams` phải
+bằng `usdPerOunce × vndPerUsd`, nên công thức quy đổi sai là lộ ngay. Thêm vào đó:
+- một **trình duyệt thật** (Playwright) kiểm những gì chỉ hiện khi JavaScript chạy;
+- **bản production đang chạy** phải vẫn chạy được trên schema mới. Rollback không
+  phục hồi DB, nên migration phá tương thích bị chặn ngay tại đây.
 → [`scripts/g2.sh`](scripts/g2.sh) · [`scripts/smoke.mjs`](scripts/smoke.mjs)
 
 **G3 — xác minh production.** Image ID đúng digest, readiness, các trang HTTPS qua
@@ -350,9 +354,9 @@ Cách dựng và vận hành từng phần: [docs/huong-dan.md](docs/huong-dan.m
 | Chưa có log tập trung, tracing, SLO | Log chỉ nằm trong Docker trên VPS; cảnh báo dựa trên ngưỡng |
 | Hạ tầng dựng bằng script shell, chưa có IaC | Dựng lại được nhưng không có trạng thái khai báo như Terraform |
 | Một máy chủ, không dự phòng | Máy chết là dịch vụ chết; mỗi lần deploy gián đoạn vài giây |
-| Rollback không phục hồi DB | Migration phải tương thích với bản ứng dụng trước |
-| G2 nâng cấp từ baseline V1 và dữ liệu mẫu | Chưa bao phủ mọi phiên bản cũ và dữ liệu production |
+| Rollback không phục hồi DB | Migration phải tương thích với bản trước; G2 kiểm bằng cách chạy bản production trên schema mới (bỏ qua khi site không trả lời) |
+| G2 nâng cấp từ dữ liệu backup | Dữ liệu chỉ mới như lần backup cuối; máy chưa có backup thì bỏ qua |
 | Khoá deploy không passphrase, Jenkins gắn `docker.sock` | Máy Jenkins bị chiếm là production bị chiếm |
-| Chưa kiểm trình duyệt tự động | G2/G3 kiểm HTML từ server, chưa kiểm tương tác JavaScript |
+| Kiểm trình duyệt chỉ ở G2 | G3 trên production vẫn chỉ đọc HTML từ server |
 
 Đây không phải lời khuyên đầu tư và không thay thế giá niêm yết chính thức tại quầy.

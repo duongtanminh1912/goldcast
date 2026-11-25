@@ -442,16 +442,42 @@ bộ luồng; nhánh khác `main` (hoặc PR) dừng sau G2.
   chốt `RELEASE_ID` và hai digest vào artifact `release.env`.
 - **G2:** `scripts/g2.sh` dựng `docker-compose.ci.yml` trên Docker của Jenkins,
   project riêng cho mỗi build, DB riêng, không publish cổng, provider ngoài tắt
-  và seed mô phỏng bật để kết quả lặp lại được. Hai ca:
+  và seed mô phỏng bật để kết quả lặp lại được. Ba ca:
   - *Cài mới:* Flyway khởi tạo, kiểm lịch sử migration, 39 bất biến API trong
     `scripts/smoke.mjs` (ví dụ `worldVndPerGram × troyOunceInGrams` phải bằng
     `usdPerOunce × vndPerUsd`), dự báo NAIVE và ba trang SSR qua Caddy. Migration
-    V5 phải đã xoá hai index trùng (`to_regclass` của chúng là NULL).
-  - *Nâng cấp:* tạo DB ở Flyway target V1, nạp `scripts/fixtures/upgrade-v1.sql`,
+    V5 phải đã xoá hai index trùng (`to_regclass` của chúng là NULL). Sau đó:
+    - **Trình duyệt thật** (`scripts/check-browser.mjs`, Chromium qua Playwright,
+      service `browser`) kiểm những gì chỉ hiện khi JavaScript chạy:
+      - thẻ giá phút có USD/oz và ≈ VND/lượng, khớp công thức với tỷ giá trên trang;
+      - biểu đồ lịch sử vẽ được đường;
+      - chuyển tab sang chuỗi khác phía trình duyệt;
+      - bảng dự báo có đủ 7 bước;
+      - trang 404;
+      - không có lỗi JavaScript.
+
+      Tiếp theo G2 dừng backend: trang phải trả 500, và sau khi JS chạy, `error.tsx`
+      phải hiện "Không tải được dữ liệu" kèm mã lỗi.
+    - **Tương thích rollback:** rollback chỉ đổi image, không đổi DB. Vì vậy
+      **bản production đang chạy** (lấy qua `/api/release`; đó chính là đích
+      rollback) được chạy lại trên DB mà bản mới vừa migrate, kiểm bằng
+      `smoke.mjs` và `check-pages.mjs` **của commit cũ** (`git show`). Nhờ vậy
+      quy tắc "migration phải tương thích với bản trước" trở thành một cổng kiểm
+      tra. Site không trả lời thì G2 in `WARNING` và bỏ qua bước này, để vẫn deploy
+      được bản sửa trong lúc có sự cố.
+  - *Nâng cấp từ V1:* tạo DB ở Flyway target V1, nạp `scripts/fixtures/upgrade-v1.sql`,
     rồi chạy cùng image ở target mới nhất; `assert-upgrade.sql` kiểm dữ liệu cũ
     còn nguyên, smoke và các trang phải đạt lại.
+  - *Nâng cấp từ backup production:* lấy bản `goldcast-backup-*` mới nhất trong
+    volume `goldcast-private-backups` mà `backup.py` đã kiểm (`verification.json`
+    khôi phục đạt, SHA-256 của `database.dump` khớp). G2 chỉ đọc volume này và
+    chỉ đọc `database.dump`, không đọc `runtime.env` hay `production.env`.
+    `pg_restore` bản dump vào DB tạm, rồi bản mới migrate lên; smoke và các trang
+    phải đạt. Ingest vẫn bật với mọi nguồn ngoài tắt, nên chỉ chuỗi còn rỗng được
+    nạp dữ liệu mô phỏng (ví dụ dữ liệu vĩ mô mà bản backup trước V4 chưa có). Máy
+    chưa có backup nào thì G2 in `WARNING` và bỏ qua ca này.
 
-  Cả hai ca kiểm mô hình `ARX_MACRO` trên dữ liệu vĩ mô mô phỏng (FRED tắt trong
+  Mọi ca đều kiểm mô hình `ARX_MACRO` trên dữ liệu vĩ mô mô phỏng (FRED tắt trong
   G2, mục 6.6), kiểm feed giá phút bằng nguồn HTTP giả lập (mục 8) và đối chiếu
   `RELEASE_ID` frontend/backend qua `/api/release`. PostgreSQL/Caddy ghim digest
   như production. Container, mạng và dữ liệu tạm được dọn khi kết thúc.
@@ -1137,13 +1163,16 @@ khi nối lại Jenkins.
   VPS, dữ liệu, backup...) tạm ngừng. Chưa có log tập trung, tracing hay SLO/error budget.
 - **Một máy chủ, không dự phòng:** máy chết là dịch vụ chết; mỗi lần deploy gián
   đoạn vài giây.
-- **Rollback không phục hồi DB:** migration phải tương thích với bản trước.
-- **G2 nâng cấp từ baseline V1 và dữ liệu mẫu:** chưa bao phủ mọi phiên bản cũ
-  hay hình dạng dữ liệu production. Khi schema phát triển, bổ sung fixture.
+- **Rollback không phục hồi DB:** migration phải tương thích với bản trước. G2
+  kiểm điều này bằng cách chạy bản production hiện tại trên schema mới. Khi site
+  không trả lời được, bước này bị bỏ qua (có `WARNING`).
+- **G2 nâng cấp từ V1, dữ liệu mẫu và bản backup production mới nhất:** dữ liệu
+  backup chỉ mới như lần backup cuối, và ca này bị bỏ qua trên máy chưa có backup.
 - **Rollback tự động sang digest khác** mới được diễn tập trong môi trường riêng
   (mục 6.5), chưa xảy ra trên VPS production.
-- **Chưa kiểm trình duyệt tự động:** G2/G3 kiểm HTML từ server, chưa kiểm tương
-  tác JavaScript.
+- **Kiểm trình duyệt chỉ có ở G2:** G3 trên production vẫn chỉ đọc HTML từ server.
+  G2 cần mạng để cài `playwright-core`, và image Playwright chiếm khoảng 2 GB
+  trên máy Jenkins.
 - **Lịch giao dịch** chỉ bỏ thứ Bảy/Chủ nhật, chưa có ngày lễ Việt Nam.
 - **Khoá deploy của Jenkins không passphrase** và Jenkins gắn
   `/var/run/docker.sock` (quyền tương đương quản trị trên máy Jenkins).
