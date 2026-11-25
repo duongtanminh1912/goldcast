@@ -83,7 +83,7 @@ goldcast/
 ├── .github/workflows/external-probe.yml     Probe HTTPS từ bên ngoài mỗi 10 phút
 ├── docker-compose{,.ci,.prod}.yml           Dev · G2 · production
 ├── scripts/         G2, smoke, release/rollback, bootstrap, backup, probe ngoài và test của chúng
-├── deploy/          Caddyfile, host key VPS đã ghim, script dựng máy chủ, script siết SSH
+├── deploy/          Caddyfile, host key VPS đã ghim, cổng SSH của khoá Jenkins, script dựng máy chủ, script siết SSH
 ├── jenkins/         Image Jenkins, job backup và diễn tập rollback
 ├── monitoring/      Prometheus, Alertmanager, Grafana, luật cảnh báo, Watchdog
 └── docs/huong-dan.md
@@ -352,7 +352,7 @@ Cách dựng và vận hành từng phần: [docs/huong-dan.md](docs/huong-dan.m
 | Một máy chủ, không dự phòng | Máy chết là dịch vụ chết; mỗi lần deploy gián đoạn vài giây |
 | Rollback không phục hồi DB | Migration phải tương thích với bản ứng dụng trước |
 | G2 nâng cấp từ baseline V1 và dữ liệu mẫu | Chưa bao phủ mọi phiên bản cũ và dữ liệu production |
-| Khoá deploy không passphrase, Jenkins gắn `docker.sock` | Máy Jenkins bị chiếm là production bị chiếm |
+| Khoá deploy không passphrase, Jenkins gắn `docker.sock` | Trên VPS khoá chỉ chạy được cổng SSH, cấu hình phải khớp GitHub `main`; nhưng image Jenkins đẩy lên GHCR chưa được ký ngoài máy Jenkins |
 | Chưa kiểm trình duyệt tự động | G2/G3 kiểm HTML từ server, chưa kiểm tương tác JavaScript |
 
 Đây không phải lời khuyên đầu tư và không thay thế giá niêm yết chính thức tại quầy.

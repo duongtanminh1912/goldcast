@@ -58,7 +58,7 @@ class ReleaseBudgetsTest(unittest.TestCase):
         jenkins = read('Jenkinsfile')
         post = jenkins[jenkins.index('unsuccessful {'):]
         minutes = int(re.search(r"timeout\(time: (\d+), unit: 'MINUTES'\)", post).group(1))
-        self.assertIn('remote-release.sh\\\' rollback', post)
+        self.assertIn('$GATE rollback', post)  # cong chay remote-release.sh rollback
         slowest = self.lock_wait + self.budget['rollback'] + self.kill_after + 15
         self.assertGreater(minutes * 60, slowest)
 
