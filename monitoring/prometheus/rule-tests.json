@@ -1,6 +1,7 @@
 {
   "rule_files": [
-    "alerts.yml"
+    "alerts.yml",
+    "slo.yml"
   ],
   "evaluation_interval": "1m",
   "tests": [
@@ -556,6 +557,312 @@
                 "description": "Giá trị mới nhất trễ hơn app.macro.max-lag-days so với giá vàng gần nhất, nên AUTO không còn xét ARX_MACRO. Kiểm provider fred trong trạng thái ingest và lịch phát hành của FRED (DTWEXBGS cập nhật theo tuần).",
                 "runbook": "https://github.com/duongtanminh1912/goldcast/blob/main/docs/huong-dan.md#runbook"
               }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "slo: sustained outage burns availability budget fast, pages, then clears",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{job=\"public\",instance=\"https://goldcast.click/api/release\"}",
+          "values": "1x359 0x9 1x40"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastSLOAvailabilityFastBurn\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "362m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "ALERTS{alertname=\"GoldcastSLOAvailabilityFastBurn\",alertstate=\"firing\"}",
+          "eval_time": "369m",
+          "exp_samples": [
+            {
+              "labels": "ALERTS{alertname=\"GoldcastSLOAvailabilityFastBurn\",alertstate=\"firing\",severity=\"critical\",site=\"goldcast\",slo=\"availability\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastSLOAvailabilityFastBurn\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "380m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "slo: two-minute blip after a healthy day trips only the short window and stays silent",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{job=\"public\",instance=\"https://goldcast.click/api/release\"}",
+          "values": "1x1440 0 0 1x120"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(goldcast:slo_errors:ratio_rate5m{slo=\"availability\"} > 0.3)",
+          "eval_time": "1443m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastSLOAvailabilityFastBurn\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "1446m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastSLOAvailabilitySlowBurn\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "1530m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "slo: one failed minute every hour warns about availability without paging",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{job=\"public\",instance=\"https://goldcast.click/api/release\"}",
+          "values": "1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0 1x58 0"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastSLOAvailabilitySlowBurn\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "1500m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastSLOAvailabilityFastBurn\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "1500m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "slo: api 40 percent 5xx after a healthy morning pages through the one-hour tier despite actuator traffic",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "http_server_requests_seconds_count{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",method=\"GET\",status=\"500\",uri=\"/api/v1/forecast/{code}\"}",
+          "values": "0x360 0+24x40"
+        },
+        {
+          "series": "http_server_requests_seconds_count{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",method=\"GET\",status=\"200\",uri=\"/api/v1/forecast/{code}\"}",
+          "values": "0+60x360 21600+36x40"
+        },
+        {
+          "series": "http_server_requests_seconds_count{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",method=\"GET\",status=\"200\",uri=\"/actuator/prometheus\"}",
+          "values": "0+10000x400"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "ALERTS{alertname=\"GoldcastSLOAPIFastBurn\",alertstate=\"firing\"}",
+          "eval_time": "400m",
+          "exp_samples": [
+            {
+              "labels": "ALERTS{alertname=\"GoldcastSLOAPIFastBurn\",alertstate=\"firing\",severity=\"critical\",site=\"goldcast\",slo=\"api\"}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "slo: api 8 percent 5xx for hours pages through the six-hour tier",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "http_server_requests_seconds_count{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",method=\"GET\",status=\"500\",uri=\"/api/v1/prices/{code}\"}",
+          "values": "0+8x420"
+        },
+        {
+          "series": "http_server_requests_seconds_count{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",method=\"GET\",status=\"200\",uri=\"/api/v1/prices/{code}\"}",
+          "values": "0+92x420"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastSLOAPIFastBurn\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "400m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "slo: api 4 percent 5xx for a day warns without paging",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "http_server_requests_seconds_count{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",method=\"GET\",status=\"500\",uri=\"/api/v1/market/summary\"}",
+          "values": "0+4x1600"
+        },
+        {
+          "series": "http_server_requests_seconds_count{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",method=\"GET\",status=\"200\",uri=\"/api/v1/market/summary\"}",
+          "values": "0+96x1600"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "goldcast:slo_errors:ratio_rate1h{slo=\"api\"}",
+          "eval_time": "1560m",
+          "exp_samples": [
+            {
+              "labels": "goldcast:slo_errors:ratio_rate1h{slo=\"api\"}",
+              "value": 0.04
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastSLOAPISlowBurn\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "1560m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastSLOAPIFastBurn\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "1560m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "slo: healthy traffic with only admin 5xx and client 4xx stays silent with a full budget",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "probe_success{job=\"public\",instance=\"https://goldcast.click/api/release\"}",
+          "values": "1x4400"
+        },
+        {
+          "series": "http_server_requests_seconds_count{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",method=\"GET\",status=\"200\",uri=\"/api/v1/release\"}",
+          "values": "0+50x4400"
+        },
+        {
+          "series": "http_server_requests_seconds_count{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",method=\"GET\",status=\"404\",uri=\"UNKNOWN\"}",
+          "values": "0+5x4400"
+        },
+        {
+          "series": "http_server_requests_seconds_count{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",method=\"GET\",status=\"500\",uri=\"/api/v1/admin/ingest\"}",
+          "values": "0+5x4400"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "goldcast:slo_errors:ratio_rate5m",
+          "eval_time": "4380m",
+          "exp_samples": [
+            {
+              "labels": "goldcast:slo_errors:ratio_rate5m{slo=\"api\"}",
+              "value": 0
+            },
+            {
+              "labels": "goldcast:slo_errors:ratio_rate5m{slo=\"availability\"}",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "expr": "1 - goldcast:slo_errors:ratio_rate7d / on(slo) (1 - goldcast:slo_objective)",
+          "eval_time": "4380m",
+          "exp_samples": [
+            {
+              "labels": "{slo=\"api\"}",
+              "value": 1
+            },
+            {
+              "labels": "{slo=\"availability\"}",
+              "value": 1
+            }
+          ]
+        },
+        {
+          "expr": "count(ALERTS{alertname=~\"GoldcastSLO.*\"}) or vector(0)",
+          "eval_time": "4380m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "slo: a few api errors below twenty requests per hour do not page",
+      "interval": "1m",
+      "input_series": [
+        {
+          "series": "http_server_requests_seconds_count{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",method=\"GET\",status=\"500\",uri=\"/api/v1/forecast/{code}\"}",
+          "values": "0+0.1x120"
+        },
+        {
+          "series": "http_server_requests_seconds_count{job=\"goldcast-backend\",instance=\"metrics-tunnel:19091\",method=\"GET\",status=\"200\",uri=\"/api/v1/forecast/{code}\"}",
+          "values": "0+0.1x120"
+        }
+      ],
+      "promql_expr_test": [
+        {
+          "expr": "count(ALERTS{alertname=\"GoldcastSLOAPIFastBurn\",alertstate=\"firing\"}) or vector(0)",
+          "eval_time": "90m",
+          "exp_samples": [
+            {
+              "labels": "{}",
+              "value": 0
             }
           ]
         }
