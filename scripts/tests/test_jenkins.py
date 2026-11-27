@@ -65,10 +65,34 @@ class SshHostKeyTest(unittest.TestCase):
     def test_every_ssh_call_uses_the_pinned_options(self):
         text = jenkinsfile()
         calls = re.findall(r'\bssh -i "\$SSH_KEY"([^\n]*)', text)
-        self.assertGreaterEqual(len(calls), 5)
+        self.assertGreaterEqual(len(calls), 4)
         for call in calls:
             self.assertTrue(call.lstrip().startswith('$SSH_OPTS'), call)
         self.assertNotRegex(text, r'StrictHostKeyChecking=(no|accept-new)')
+
+    def test_every_remote_command_goes_through_the_gate(self):
+        # Khoa nay bi VPS gioi han vao goldcast-gate; lenh nao khac se bi tu choi luc deploy.
+        text = jenkinsfile()
+        self.assertIn("GATE = '/usr/local/bin/goldcast-gate'", text)
+        remote = re.findall(r'\$SSH_OPTS "\$VPS" "([^"]*)"', text)
+        self.assertGreaterEqual(len(remote), 4)
+        for command in remote:
+            self.assertRegex(command, r'^\$GATE (receive|deploy|verify|rollback) \$RELEASE_ID( \$BUILD_URL)?$')
+
+    def test_uploaded_release_files_are_exactly_what_the_gate_accepts(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('gate', ROOT / 'deploy/goldcast-gate.py')
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        upload = re.search(r'tar -cf - (release\.env [^|]+)\|\s*\n\s*ssh [^\n]*\$GATE receive', jenkinsfile())
+        self.assertIsNotNone(upload)
+        self.assertEqual(set(upload.group(1).split()), gate.DATA_FILES | gate.CODE_FILES)
+
+    def test_backup_never_sends_a_script_to_run(self):
+        source = (ROOT / 'scripts/backup.py').read_text()
+        self.assertNotIn("'sh -s", source)
+        self.assertEqual(set(re.findall(r"GATE \+ ' (backup \w+)", source)),
+                         {'backup snapshot', 'backup fetch', 'backup confirm'})
 
     def test_pinned_file_has_a_key_for_the_deploy_host(self):
         host = re.search(r"VPS = '[^@']+@([^']+)'", jenkinsfile()).group(1)

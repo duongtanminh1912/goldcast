@@ -6,7 +6,6 @@ import json
 import os
 from pathlib import Path
 import re
-import shlex
 import shutil
 import stat
 import subprocess
@@ -25,6 +24,9 @@ def digest(path):
 def require(condition, message):
     if not condition:
         raise ValueError(message)
+
+
+GATE = '/usr/local/bin/goldcast-gate'
 
 
 def command(args, **kwargs):
@@ -61,14 +63,16 @@ def main():
 
 
     print('Capturing release and database under the deployment lock...', flush=True)
-    remote = command(ssh + ['sh -s'], input=Path(__file__).with_name('backup-remote.sh').read_bytes(), timeout=300)
+    # The VPS restricts this key to goldcast-gate: it runs backup-remote.sh from the
+    # last-good release (verified against GitHub main), never a script sent from here.
+    remote = command(ssh + [GATE + ' backup snapshot'], timeout=300)
     remote_directory = remote.stdout.decode().strip()
     if not re.fullmatch(r'/opt/goldcast/backups/offsite-[0-9TZ]+\.[A-Za-z0-9]+', remote_directory):
         raise RuntimeError('Unexpected remote backup path')
     print(f'Remote backup complete: {remote_directory}', flush=True)
     transfer = output / 'transfer.tar.partial'
     with transfer.open('xb') as stream:
-        copied = subprocess.run(ssh + ['tar -cf - -C ' + shlex.quote(remote_directory) + ' .'],
+        copied = subprocess.run(ssh + [GATE + ' backup fetch ' + remote_directory],
                                 stdout=stream, stderr=subprocess.PIPE, timeout=300)
     if copied.returncode:
         raise RuntimeError('Backup transfer failed; private partial file retained')
@@ -191,8 +195,7 @@ def main():
     print('VERIFIED_BACKUP_DIRECTORY=' + str(output), flush=True)
     if not registry_ok:
         raise SystemExit('Backup and restore verified, but GHCR availability still needs investigation.')
-    command(ssh + ['sh -s -- ' + shlex.quote(remote_directory)],
-            input=Path(__file__).with_name('backup-remote-retention.sh').read_bytes())
+    command(ssh + [GATE + ' backup confirm ' + remote_directory])
 
 if __name__ == '__main__':
     main()

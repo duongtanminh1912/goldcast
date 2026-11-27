@@ -10,6 +10,8 @@ goldcast_thu_muc_ung_dung: /opt/goldcast
 
 # Khoa SSH cho user trien khai. Rong thi sao tu /root/.ssh/authorized_keys nhu
 # script, nhung chi khi file cua user con trong: khong ghi de khoa Jenkins (muc 4.1).
+# Dat bien nay thi file bi ghi lai toan bo: dong khoa Jenkins phai giu nguyen tien to
+# `restrict,command="/usr/local/bin/goldcast-gate"` (muc 4.3), neu khong cong SSH mat tac dung.
 goldcast_khoa_trien_khai: []
 
 # TOI_DA_KIEM_KHOA. Chi dat `-e goldcast_toi_da_kiem_khoa=yes` sau khi da chay

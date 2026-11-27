@@ -83,10 +83,10 @@ goldcast/
 ├── .github/workflows/external-probe.yml     Probe HTTPS từ bên ngoài mỗi 10 phút
 ├── docker-compose{,.ci,.prod}.yml           Dev · G2 · production
 ├── scripts/         G2, smoke, release/rollback, bootstrap, backup, probe ngoài và test của chúng
-├── deploy/          Caddyfile, host key VPS đã ghim, script dựng máy chủ, script siết SSH
+├── deploy/          Caddyfile, host key VPS đã ghim, cổng SSH của khoá Jenkins, script dựng máy chủ, script siết SSH
 ├── ansible/         Playbook khai báo tương đương hai script dựng máy và siết SSH, check.sh của nó
 ├── jenkins/         Image Jenkins, job backup và diễn tập rollback
-├── monitoring/      Prometheus, Alertmanager, Grafana, luật cảnh báo, Watchdog
+├── monitoring/      Prometheus, Alertmanager, Grafana, luật cảnh báo, SLO, Watchdog
 └── docs/huong-dan.md
 ```
 
@@ -337,8 +337,10 @@ Caddy tự cấp HTTPS, chỉ mở 22/80/443, triển khai bằng user `deploy` 
 Backup DB và cấu hình release chạy hằng đêm ra ngoài VPS, có phục hồi thử.
 
 **Giám sát:** Prometheus, Alertmanager, Grafana và Blackbox chạy trên máy Jenkins,
-nối về VPS qua SSH tunnel; 35 luật cảnh báo gửi Telegram (HTTPS, tài nguyên,
-container, API, độ mới dữ liệu kể cả dữ liệu vĩ mô, sai digest, Jenkins, backup) cùng luật `GoldcastWatchdog`. Hai đường độc lập với
+nối về VPS qua SSH tunnel; 35 luật cảnh báo ngưỡng gửi Telegram (HTTPS, tài nguyên,
+container, API, độ mới dữ liệu kể cả dữ liệu vĩ mô, sai digest, Jenkins, backup) cùng luật `GoldcastWatchdog`.
+Thêm hai SLO trong 7 ngày cuốn (HTTPS công khai 99,5%, API backend 99% không 5xx) với 4 luật
+burn rate multi-window và dashboard error budget riêng, chỉ dựng trên metrics đã thu sẵn. Hai đường độc lập với
 máy đó: Watchdog gửi nhịp sống tới healthchecks.io (bộ giám sát chết là có tin báo),
 và một workflow GitHub Actions kiểm site từ bên ngoài mỗi 10 phút.
 
@@ -353,12 +355,12 @@ Cách dựng và vận hành từng phần: [docs/huong-dan.md](docs/huong-dan.m
 | Mô hình chỉ dựa trên dữ liệu đã xảy ra | `ARX_MACRO` có tính lợi suất thực và USD đến phiên trước, nhưng không mô hình nào biết trước quyết định của Fed hay tin địa chính trị, vốn là thứ tạo ra cú sốc giá lớn |
 | Lịch giao dịch chỉ bỏ thứ Bảy/Chủ nhật | Chưa có ngày lễ Việt Nam; nhãn ngày quanh Tết có thể lệch |
 | Monitoring đầy đủ chạy trên máy Mac cá nhân | Mac tắt thì Watchdog báo và probe GitHub vẫn kiểm site, nhưng luật chi tiết (VPS, dữ liệu, backup) tạm ngừng |
-| Chưa có log tập trung, tracing, SLO | Log chỉ nằm trong Docker trên VPS; cảnh báo dựa trên ngưỡng |
+| Chưa có log tập trung, tracing | Log chỉ nằm trong Docker trên VPS; SLO chỉ đo được khi bộ giám sát trên Mac chạy, cửa sổ 7 ngày theo retention |
 | IaC chỉ phủ bên trong máy chủ (Ansible), chưa có Terraform | Thuê VPS, DNS và host key vẫn làm tay; `ufw enable`, `swapon`, `sysctl -w` và reload `sshd` chỉ chạy trên VPS thật, container thử của G1 bỏ qua chúng |
 | Một máy chủ, không dự phòng | Máy chết là dịch vụ chết; mỗi lần deploy gián đoạn vài giây |
 | Rollback không phục hồi DB | Migration phải tương thích với bản ứng dụng trước |
 | G2 nâng cấp từ baseline V1 và dữ liệu mẫu | Chưa bao phủ mọi phiên bản cũ và dữ liệu production |
-| Khoá deploy không passphrase, Jenkins gắn `docker.sock` | Máy Jenkins bị chiếm là production bị chiếm |
+| Khoá deploy không passphrase, Jenkins gắn `docker.sock` | Trên VPS khoá chỉ chạy được cổng SSH, cấu hình phải khớp GitHub `main`; nhưng image Jenkins đẩy lên GHCR chưa được ký ngoài máy Jenkins |
 | Chưa kiểm trình duyệt tự động | G2/G3 kiểm HTML từ server, chưa kiểm tương tác JavaScript |
 
 Đây không phải lời khuyên đầu tư và không thay thế giá niêm yết chính thức tại quầy.
