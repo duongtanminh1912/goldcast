@@ -1,0 +1,16 @@
+# Sao thanh inventory.yml (khong commit) roi sua. Khong co bi mat nao o day:
+# xac thuc chi bang khoa SSH trong ssh-agent hoac ~/.ssh.
+#
+# Lan dau (may moi, chua co user deploy): them `-u root` tren dong lenh.
+# Tu luc siet SSH xong, root khong vao duoc nua: dung user deploy + sudo.
+all:
+  hosts:
+    goldcast-vps:
+      ansible_host: 103.175.248.236
+      ansible_user: deploy
+      ansible_become: true
+      # Host key ghim trong repo, giong SSH_OPTS cua Jenkinsfile: may la tra loi
+      # o cung IP thi ket noi do, khong tu tin. Duong dan tinh tu thu muc ansible/.
+      ansible_ssh_common_args: >-
+        -o StrictHostKeyChecking=yes
+        -o UserKnownHostsFile=../deploy/known_hosts

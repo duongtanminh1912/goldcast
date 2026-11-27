@@ -1,0 +1,110 @@
+---
+# Jenkins SSH vao bang user nay, khong phai root.
+# Luu y trung thuc: thanh vien nhom `docker` tuong duong root, vi ai vao duoc
+# Docker thi mount duoc / cua host. Day khong phai lop cach ly thuc su; no chi
+# giam pham vi loi do go nham lenh va de lai dau vet ro hon trong log.
+- name: Doc nhom docker
+  ansible.builtin.getent:
+    database: group
+    key: docker
+    fail_key: false
+
+# Khong dat mat khau: tai khoan bi khoa mat khau nhu `adduser --disabled-password`,
+# chi vao duoc bang khoa.
+- name: User {{ goldcast_nguoi_trien_khai }}
+  ansible.builtin.user:
+    name: "{{ goldcast_nguoi_trien_khai }}"
+    shell: /bin/bash
+    create_home: true
+    # Nhom docker chi co sau khi cai Docker; --check tren may moi thi chua.
+    groups: "{{ (['docker'] if ansible_facts['getent_group']['docker'] else []) + (['sudo'] if goldcast_sudo_khong_mat_khau else []) }}"
+    append: true
+  register: nguoi_trien_khai_user
+
+- name: Thao tac tren home cua user
+  # --check tren may moi: user chua that su duoc tao nen khong chown duoc.
+  when: not (ansible_check_mode and nguoi_trien_khai_user is changed)
+  block:
+    - name: Thu muc ~/.ssh
+      ansible.builtin.file:
+        path: "{{ nguoi_trien_khai_user.home }}/.ssh"
+        state: directory
+        owner: "{{ goldcast_nguoi_trien_khai }}"
+        group: "{{ goldcast_nguoi_trien_khai }}"
+        mode: "0700"
+
+    - name: Doc khoa hien co cua user
+      ansible.builtin.stat:
+        path: "{{ nguoi_trien_khai_user.home }}/.ssh/authorized_keys"
+        get_checksum: false
+      register: nguoi_trien_khai_khoa_user
+
+    - name: Doc khoa cua root
+      ansible.builtin.stat:
+        path: /root/.ssh/authorized_keys
+        get_checksum: false
+      register: nguoi_trien_khai_khoa_root
+
+    - name: Khoa khai bao trong goldcast_khoa_trien_khai
+      ansible.builtin.copy:
+        dest: "{{ nguoi_trien_khai_user.home }}/.ssh/authorized_keys"
+        content: "{{ goldcast_khoa_trien_khai | join('\n') }}\n"
+        owner: "{{ goldcast_nguoi_trien_khai }}"
+        group: "{{ goldcast_nguoi_trien_khai }}"
+        mode: "0600"
+      when: goldcast_khoa_trien_khai | length > 0
+
+    # Script ghi de moi lan chay; o day chi sao khi file cua user con trong, de
+    # chay lai khong xoa khoa Jenkins da them o muc 4.1.
+    - name: Sao khoa SSH tu root sang {{ goldcast_nguoi_trien_khai }}
+      ansible.builtin.copy:
+        src: /root/.ssh/authorized_keys
+        remote_src: true
+        dest: "{{ nguoi_trien_khai_user.home }}/.ssh/authorized_keys"
+        owner: "{{ goldcast_nguoi_trien_khai }}"
+        group: "{{ goldcast_nguoi_trien_khai }}"
+        mode: "0600"
+      when:
+        - goldcast_khoa_trien_khai | length == 0
+        - nguoi_trien_khai_khoa_root.stat.size | default(0) > 0
+        - nguoi_trien_khai_khoa_user.stat.size | default(0) == 0
+
+    - name: Quyen cua authorized_keys
+      ansible.builtin.file:
+        path: "{{ nguoi_trien_khai_user.home }}/.ssh/authorized_keys"
+        owner: "{{ goldcast_nguoi_trien_khai }}"
+        group: "{{ goldcast_nguoi_trien_khai }}"
+        mode: "0600"
+      when: nguoi_trien_khai_khoa_user.stat.exists
+
+    - name: Canh bao khi chua co khoa nao
+      ansible.builtin.debug:
+        msg: >-
+          CANH BAO: /root/.ssh/authorized_keys rong hoac khong co, va
+          {{ nguoi_trien_khai_user.home }}/.ssh/authorized_keys cung rong. Phai dan khoa
+          cong khai vao do (hoac dat goldcast_khoa_trien_khai) truoc khi chay siet-ssh.yml.
+      when:
+        - goldcast_khoa_trien_khai | length == 0
+        - nguoi_trien_khai_khoa_root.stat.size | default(0) == 0
+        - nguoi_trien_khai_khoa_user.stat.size | default(0) == 0
+
+# Muc 3.5: Jenkins chay `sudo` khong co terminal de go mat khau.
+- name: Sudo khong mat khau cho {{ goldcast_nguoi_trien_khai }}
+  ansible.builtin.copy:
+    dest: /etc/sudoers.d/{{ goldcast_nguoi_trien_khai }}
+    content: "{{ goldcast_nguoi_trien_khai }} ALL=(ALL) NOPASSWD:ALL\n"
+    owner: root
+    group: root
+    mode: "0440"
+    validate: visudo -cf %s
+  when: goldcast_sudo_khong_mat_khau
+
+# Muc 3.7: chi tao thu muc rong; clone ung dung van lam bang user deploy.
+- name: Thu muc ung dung {{ goldcast_thu_muc_ung_dung }}
+  ansible.builtin.file:
+    path: "{{ goldcast_thu_muc_ung_dung }}"
+    state: directory
+    owner: "{{ goldcast_nguoi_trien_khai }}"
+    group: "{{ goldcast_nguoi_trien_khai }}"
+    mode: "0755"
+  when: not (ansible_check_mode and nguoi_trien_khai_user is changed)

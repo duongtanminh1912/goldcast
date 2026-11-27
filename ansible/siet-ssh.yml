@@ -1,0 +1,9 @@
+---
+# Tuong duong deploy/siet-ssh.sh: tat dang nhap root, tat mat khau, chi con khoa.
+# Tu choi chay neu thieu -e goldcast_toi_da_kiem_khoa=yes hoac user trien khai
+# chua co khoa. Giu mot phien SSH dang mo trong luc chay.
+- name: Siet SSH
+  hosts: all
+  become: true
+  roles:
+    - role: siet_ssh

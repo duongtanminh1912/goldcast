@@ -1,0 +1,13 @@
+---
+# Handler chay theo thu tu khai bao: kiem toan bo cau hinh truoc, reload sau.
+- name: Kiem cu phap sshd
+  ansible.builtin.command: /usr/sbin/sshd -t
+  changed_when: false
+
+# reload giu cac phien dang mo. restart cat het, va neu cau hinh sai thi mat
+# luon duong ve. Container thu khong co systemd: check.sh tu gui SIGHUP.
+- name: Reload sshd
+  ansible.builtin.systemd_service:
+    name: ssh
+    state: reloaded
+  when: not goldcast_trong_container

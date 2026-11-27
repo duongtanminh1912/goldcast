@@ -1,0 +1,10 @@
+# Chi cho ansible/check.sh: container thu tren mot mang Docker rieng.
+all:
+  hosts:
+    may-thu:
+      ansible_host: "{{ lookup('ansible.builtin.env', 'MAY_THU') }}"
+      # Container vua tao, host key moi moi lan: khong co gi de ghim.
+      ansible_ssh_common_args: -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null
+      goldcast_trong_container: true
+      # Swap nho cho nhanh; van di qua cap phat, chmod, mkswap va fstab.
+      goldcast_swap: 64M

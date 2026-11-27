@@ -28,6 +28,8 @@ jobs:
         run: python3 -m unittest discover -s scripts/tests -v
       - name: Validate monitoring configuration and alert behavior
         run: sh monitoring/check.sh
+      - name: Lint and apply the Ansible playbook twice to a disposable container
+        run: sh ansible/check.sh
       - uses: actions/setup-node@v4
         with:
           node-version: '22'

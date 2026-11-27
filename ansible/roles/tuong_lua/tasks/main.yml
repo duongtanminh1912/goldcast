@@ -1,0 +1,60 @@
+---
+# Chi mo 22, 80, 443. Dung lenh ufw thay vi community.general.ufw de khong phu
+# thuoc collection ngoai; moi lenh chi chay khi trang thai doc duoc con khac.
+- name: Tim lenh ufw
+  ansible.builtin.stat:
+    path: /usr/sbin/ufw
+  register: tuong_lua_ufw
+
+# --check tren may moi: goi ufw chua that su duoc cai, khong co gi de doc.
+- name: Cau hinh ufw
+  when: tuong_lua_ufw.stat.exists
+  block:
+    - name: Doc chinh sach mac dinh cua ufw
+      ansible.builtin.slurp:
+        src: /etc/default/ufw
+      register: tuong_lua_mac_dinh
+
+    - name: Chan vao, cho ra theo mac dinh
+      ansible.builtin.command: ufw default {{ item.chinh_sach }} {{ item.huong }}
+      changed_when: true
+      loop:
+        - { huong: incoming, chinh_sach: deny, khoa: DEFAULT_INPUT_POLICY="DROP" }
+        - { huong: outgoing, chinh_sach: allow, khoa: DEFAULT_OUTPUT_POLICY="ACCEPT" }
+      loop_control:
+        label: "{{ item.huong }} {{ item.chinh_sach }}"
+      when: item.khoa not in (tuong_lua_mac_dinh.content | b64decode).splitlines()
+
+    # `ufw show added` doc ca khi ufw chua bat va khong can netfilter.
+    - name: Doc rule da them
+      ansible.builtin.command: ufw show added
+      register: tuong_lua_rule
+      changed_when: false
+      check_mode: false
+
+    - name: Mo cong 22, 80, 443
+      ansible.builtin.command: ufw allow {{ item.cong }} comment '{{ item.ghi_chu }}'
+      changed_when: true
+      loop:
+        - { cong: 22/tcp, ghi_chu: SSH }
+        - { cong: 80/tcp, ghi_chu: HTTP }
+        - { cong: 443/tcp, ghi_chu: HTTPS }
+      loop_control:
+        label: "{{ item.cong }}"
+      when: ("ufw allow " ~ item.cong ~ " comment '" ~ item.ghi_chu ~ "'") not in tuong_lua_rule.stdout_lines
+
+    # Thu tu quan trong: cho phep 22 TRUOC khi bat ufw. Bat truoc roi moi mo SSH
+    # la tu ngat ket noi dang dung. Container thu khong co quyen netfilter.
+    - name: Doc trang thai ufw
+      ansible.builtin.command: ufw status
+      register: tuong_lua_trang_thai
+      changed_when: false
+      check_mode: false
+      when: not goldcast_trong_container
+
+    - name: Bat ufw
+      ansible.builtin.command: ufw --force enable
+      changed_when: true
+      when:
+        - not goldcast_trong_container
+        - "'Status: active' not in tuong_lua_trang_thai.stdout_lines"

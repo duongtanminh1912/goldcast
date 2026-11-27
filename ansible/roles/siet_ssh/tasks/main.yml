@@ -1,0 +1,141 @@
+---
+# Sau buoc nay duong vao duy nhat la user trien khai bang khoa. Khoa khong
+# hoat dong thi chi con console web cua nha cung cap. Hai cong chan duoi day
+# chay TRUOC moi thay doi.
+- name: Dung lai neu chua chung minh dang nhap bang khoa
+  ansible.builtin.assert:
+    that: goldcast_toi_da_kiem_khoa | bool
+    fail_msg: |
+      DUNG LAI. Play nay tat dang nhap root va mat khau tren SSH.
+      Tu MAY CA NHAN (khong phai tu may chu), chay:
+          ssh {{ goldcast_nguoi_trien_khai }}@<ip> 'sudo -n id && echo SUDO_OK'
+      Ra uid=0(root) kem SUDO_OK thi chay lai voi -e goldcast_toi_da_kiem_khoa=yes,
+      va giu phien SSH hien tai MO trong luc chay.
+    quiet: true
+
+- name: Doc user {{ goldcast_nguoi_trien_khai }}
+  ansible.builtin.getent:
+    database: passwd
+    key: "{{ goldcast_nguoi_trien_khai }}"
+    fail_key: false
+
+- name: Doc authorized_keys cua user
+  ansible.builtin.slurp:
+    src: "{{ ansible_facts['getent_passwd'][goldcast_nguoi_trien_khai][4] }}/.ssh/authorized_keys"
+  register: siet_ssh_khoa
+  failed_when: false
+  when: ansible_facts['getent_passwd'][goldcast_nguoi_trien_khai] is not none
+
+- name: User phai co it nhat mot khoa
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['getent_passwd'][goldcast_nguoi_trien_khai] is not none
+      - siet_ssh_khoa.content is defined
+      - siet_ssh_khoa_so_khoa | int > 0
+    fail_msg: >-
+      KHONG CO KHOA cho {{ goldcast_nguoi_trien_khai }}: authorized_keys rong hoac
+      khong ton tai. Day khoa len truoc: ssh-copy-id {{ goldcast_nguoi_trien_khai }}@<ip>
+    success_msg: "{{ siet_ssh_khoa_so_khoa }} khoa cho {{ goldcast_nguoi_trien_khai }}"
+  vars:
+    siet_ssh_khoa_so_khoa: >-
+      {{ (siet_ssh_khoa.content | default('') | b64decode).splitlines()
+         | reject('match', '^\s*(#|$)') | list | length }}
+
+# Include phai nam dong dau. Neu no o cuoi file, cac gia tri trong sshd_config
+# da duoc doc truoc va se thang: cau hinh siet bi vo hieu mot cach im lang.
+- name: Doc sshd_config
+  ansible.builtin.slurp:
+    src: /etc/ssh/sshd_config
+  register: siet_ssh_goc
+
+- name: Dua Include len dong 1 cua sshd_config
+  vars:
+    siet_ssh_dong: "{{ (siet_ssh_goc.content | b64decode).splitlines() }}"
+    siet_ssh_giu: "{{ siet_ssh_dong | reject('match', 'Include /etc/ssh/sshd_config.d') | list }}"
+  when: (siet_ssh_dong | first | default('')) is not match('Include /etc/ssh/sshd_config.d')
+  block:
+    - name: Giu ban goc o sshd_config.truoc-goldcast
+      ansible.builtin.copy:
+        src: /etc/ssh/sshd_config
+        remote_src: true
+        dest: /etc/ssh/sshd_config.truoc-goldcast
+        force: false
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Ghi sshd_config voi Include o dong 1
+      ansible.builtin.copy:
+        dest: /etc/ssh/sshd_config
+        # Bo moi dong Include cu roi dat mot dong o dau, nhu sed + cat cua script.
+        content: "{{ (['Include /etc/ssh/sshd_config.d/*.conf'] + siet_ssh_giu) | join('\n') }}\n"
+        owner: root
+        group: root
+        mode: "0644"
+        validate: /usr/sbin/sshd -t -f %s
+      notify:
+        - Kiem cu phap sshd
+        - Reload sshd
+
+- name: Thu muc sshd_config.d
+  ansible.builtin.file:
+    path: /etc/ssh/sshd_config.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+# Tien to 01 chu khong phai 99. File trong sshd_config.d doc theo thu tu ten, va
+# sshd lay GIA TRI DAU TIEN cho moi tu khoa. Ubuntu co san 50-cloud-init.conf dat
+# PasswordAuthentication yes: file 99 doc sau no nen se thua. Phai doc TRUOC no.
+- name: Ghi /etc/ssh/sshd_config.d/01-goldcast.conf
+  ansible.builtin.copy:
+    dest: /etc/ssh/sshd_config.d/01-goldcast.conf
+    content: |
+      # Do ansible/roles/siet_ssh tao (tuong duong deploy/siet-ssh.sh). Sua o day,
+      # dung sua sshd_config goc.
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      PubkeyAuthentication yes
+    owner: root
+    group: root
+    mode: "0644"
+    validate: /usr/sbin/sshd -t -f %s
+  notify:
+    - Kiem cu phap sshd
+    - Reload sshd
+
+- name: Kiem cu phap va reload truoc khi kiem gia tri
+  ansible.builtin.meta: flush_handlers
+
+# Hoi lai sshd gia tri no doc tu toan bo cau hinh, va fail neu sai.
+- name: Doc gia tri sshd thuc te
+  ansible.builtin.command: /usr/sbin/sshd -T
+  register: siet_ssh_thuc_te
+  changed_when: false
+  check_mode: false
+
+- name: Gia tri sshd phai dung
+  ansible.builtin.assert:
+    that: item in siet_ssh_thuc_te.stdout_lines
+    fail_msg: |
+      SAI {{ item }}. Mot file trong /etc/ssh/sshd_config.d/ doc TRUOC 01-goldcast.conf
+      da dat gia tri khac, hoac Include khong duoc doc. Xem: ls /etc/ssh/sshd_config.d/
+      Hoan tac: rm /etc/ssh/sshd_config.d/01-goldcast.conf && systemctl reload ssh
+    success_msg: ok  {{ item }}
+  loop:
+    - permitrootlogin no
+    - passwordauthentication no
+    - kbdinteractiveauthentication no
+    - pubkeyauthentication yes
+  # --check khong ghi file nen sshd chua thay gia tri moi.
+  when: not ansible_check_mode
+
+- name: CHUA XONG - con mot buoc o may ca nhan
+  ansible.builtin.debug:
+    msg:
+      - Dung dong phien SSH dang mo. Tu may ca nhan, cua so khac, chay
+        ssh {{ goldcast_nguoi_trien_khai }}@<ip> 'echo VAO_DUOC'
+      - Ra VAO_DUOC thi moi dong phien kia. Khong vao duoc thi hoan tac trong phien con mo bang
+        rm /etc/ssh/sshd_config.d/01-goldcast.conf && systemctl reload ssh

@@ -84,6 +84,7 @@ goldcast/
 ├── docker-compose{,.ci,.prod}.yml           Dev · G2 · production
 ├── scripts/         G2, smoke, release/rollback, bootstrap, backup, probe ngoài và test của chúng
 ├── deploy/          Caddyfile, host key VPS đã ghim, cổng SSH của khoá Jenkins, script dựng máy chủ, script siết SSH
+├── ansible/         Playbook khai báo tương đương hai script dựng máy và siết SSH, check.sh của nó
 ├── jenkins/         Image Jenkins, job backup và diễn tập rollback
 ├── monitoring/      Prometheus, Alertmanager, Grafana, luật cảnh báo, SLO, Watchdog
 └── docs/huong-dan.md
@@ -261,6 +262,7 @@ mvn -f backend/pom.xml test                          # một test: -Dtest=Foreca
 python3 -m unittest discover -s scripts/tests -v     # release, rollback, backup, monitoring
 node --test scripts/tests/test_*.mjs                 # probe G3, probe ngoài, snapshot bootstrap
 sh monitoring/check.sh                               # promtool/amtool, định tuyến cảnh báo
+sh ansible/check.sh                                  # ansible-lint, áp dụng playbook hai lần lên container
 (cd frontend && npm ci && npm run typecheck)
 ```
 
@@ -311,7 +313,9 @@ git push
 **G1 — kiểm code.** Ngoài unit test, [`ApiContractTest`](backend/src/test/java/vn/goldcast/api/dto/ApiContractTest.java)
 so tên từng trường của DTO Java với kiểu TypeScript. Kiểu TypeScript bị xoá lúc
 biên dịch, nên thiếu cổng này thì đổi tên một trường ở backend vẫn để `mvn test`
-và `tsc` xanh, còn người dùng thấy ô trống.
+và `tsc` xanh, còn người dùng thấy ô trống. [`ansible/check.sh`](ansible/check.sh)
+áp dụng playbook dựng máy hai lần lên một container Ubuntu dùng một lần và đỏ nếu
+lần hai còn thay đổi gì.
 
 **G2 — kiểm image trước deploy.** Dùng đúng digest sẽ triển khai, dựng Compose riêng
 để kiểm cài mới và nâng cấp từ schema V1 có dữ liệu mẫu: 39 phép thử bất biến API (gồm
@@ -326,7 +330,9 @@ phải dò lỗi qua câu chữ tiếng Việt. Jenkins SSH vào VPS với host 
 [`deploy/known_hosts`](deploy/known_hosts).
 → [`scripts/release.sh`](scripts/release.sh)
 
-**Hạ tầng:** một VPS Ubuntu 24.04 dựng bằng script chạy lại được ([`deploy/`](deploy/)),
+**Hạ tầng:** một VPS Ubuntu 24.04 mô tả bằng playbook Ansible khai báo ([`ansible/`](ansible/),
+xem trước bằng `--check --diff`, G1 áp dụng hai lần lên container và đòi lần hai `changed=0`),
+script shell ở [`deploy/`](deploy/) giữ làm đường dự phòng;
 Caddy tự cấp HTTPS, chỉ mở 22/80/443, triển khai bằng user `deploy` không phải root.
 Backup DB và cấu hình release chạy hằng đêm ra ngoài VPS, có phục hồi thử.
 
@@ -350,7 +356,7 @@ Cách dựng và vận hành từng phần: [docs/huong-dan.md](docs/huong-dan.m
 | Lịch giao dịch chỉ bỏ thứ Bảy/Chủ nhật | Chưa có ngày lễ Việt Nam; nhãn ngày quanh Tết có thể lệch |
 | Monitoring đầy đủ chạy trên máy Mac cá nhân | Mac tắt thì Watchdog báo và probe GitHub vẫn kiểm site, nhưng luật chi tiết (VPS, dữ liệu, backup) tạm ngừng |
 | Chưa có log tập trung, tracing | Log chỉ nằm trong Docker trên VPS; SLO chỉ đo được khi bộ giám sát trên Mac chạy, cửa sổ 7 ngày theo retention |
-| Hạ tầng dựng bằng script shell, chưa có IaC | Dựng lại được nhưng không có trạng thái khai báo như Terraform |
+| IaC chỉ phủ bên trong máy chủ (Ansible), chưa có Terraform | Thuê VPS, DNS và host key vẫn làm tay; `ufw enable`, `swapon`, `sysctl -w` và reload `sshd` chỉ chạy trên VPS thật, container thử của G1 bỏ qua chúng |
 | Một máy chủ, không dự phòng | Máy chết là dịch vụ chết; mỗi lần deploy gián đoạn vài giây |
 | Rollback không phục hồi DB | Migration phải tương thích với bản ứng dụng trước |
 | G2 nâng cấp từ baseline V1 và dữ liệu mẫu | Chưa bao phủ mọi phiên bản cũ và dữ liệu production |
