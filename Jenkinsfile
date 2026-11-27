@@ -10,6 +10,9 @@ pipeline {
         VPS = 'deploy@103.175.248.236'
         // The VPS host key is pinned in the repo: a lost ~/.ssh/known_hosts on the Jenkins
         // machine must fail the deploy, not silently trust whoever answers at that IP.
+        // The VPS restricts this key to goldcast-gate (deploy/goldcast-gate.py): only named
+        // operations, and every script/config must match the same file on GitHub main.
+        GATE = '/usr/local/bin/goldcast-gate'
         SSH_OPTS = '-o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=15 -o ServerAliveCountMax=3 -o StrictHostKeyChecking=yes -o UserKnownHostsFile=deploy/known_hosts'
     }
     stages {
@@ -20,7 +23,6 @@ pipeline {
                     def jobKey = sh(script: 'printf "%s" "$JOB_NAME" | sha256sum | cut -c1-12', returnStdout: true).trim()
                     env.RELEASE_ID = "${env.SHA}-${jobKey}-${env.BUILD_NUMBER}"
                     env.CI_PROJECT = "g2-${env.RELEASE_ID}"
-                    env.RELEASE_DIR = "/opt/goldcast/releases/${env.RELEASE_ID}"
                     // Also works for a single-branch job; never assume missing BRANCH_NAME means main.
                     def branch = env.BRANCH_NAME ?: env.GIT_LOCAL_BRANCH ?: env.GIT_BRANCH ?:
                         sh(script: 'git symbolic-ref --short -q HEAD || git name-rev --name-only HEAD', returnStdout: true).trim()
@@ -102,10 +104,9 @@ pipeline {
                         withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
                             sh '''
                                 set -eu
-                                ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "mkdir -p '$RELEASE_DIR'"
-                                COPYFILE_DISABLE=1 tar -cf - release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs scripts/remote-release.sh scripts/retention.py |
-                                  ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "tar -xf - -C '$RELEASE_DIR'"
-                                ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "sh '$RELEASE_DIR/scripts/remote-release.sh' deploy '$RELEASE_DIR' '$BUILD_URL'"
+                                COPYFILE_DISABLE=1 tar -cf - release.env docker-compose.prod.yml deploy/Caddyfile scripts/release.sh scripts/check-pages.mjs scripts/remote-release.sh scripts/retention.py scripts/backup-remote.sh scripts/backup-remote-retention.sh |
+                                  ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "$GATE receive $RELEASE_ID"
+                                ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "$GATE deploy $RELEASE_ID $BUILD_URL"
                             '''
                         }
                     }
@@ -113,7 +114,7 @@ pipeline {
                 stage('G3 - verify and promote') {
                     steps {
                         withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
-                            sh 'ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "sh \'$RELEASE_DIR/scripts/remote-release.sh\' verify \'$RELEASE_DIR\'"'
+                            sh 'ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "$GATE verify $RELEASE_ID"'
                         }
                     }
                 }
@@ -122,7 +123,8 @@ pipeline {
                 unsuccessful {
                     timeout(time: 16, unit: 'MINUTES') {
                       withCredentials([sshUserPrivateKey(credentialsId: 'vps-deploy', keyFileVariable: 'SSH_KEY')]) {
-                        sh 'ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "test ! -f \'$RELEASE_DIR/scripts/release.sh\' || sh \'$RELEASE_DIR/scripts/remote-release.sh\' rollback \'$RELEASE_DIR\'"'
+                        // The gate treats a release it never received as nothing to roll back.
+                        sh 'ssh -i "$SSH_KEY" $SSH_OPTS "$VPS" "$GATE rollback $RELEASE_ID"'
                       }
                     }
                 }

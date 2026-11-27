@@ -380,6 +380,9 @@ ssh -i ~/.ssh/jenkins_deploy -o IdentitiesOnly=yes deploy@$IP 'docker ps && echo
 khoá trong `~/.ssh` và có thể vào bằng khoá cá nhân, nên phép kiểm báo đạt mà
 không chứng minh gì.
 
+Phép kiểm `docker ps` này chỉ chạy được **trước** khi giới hạn khoá ở mục 4.3.
+Sau đó khoá Jenkins không còn mở được shell.
+
 ### 4.2 Credentials và nhánh
 
 Manage Jenkins → Credentials → System → Global:
@@ -425,6 +428,55 @@ artifact Jenkins.
 
 ---
 
+### 4.3 Giới hạn khoá Jenkins bằng cổng SSH
+
+Khoá `vps-deploy` không có passphrase và nằm trên máy Jenkins. User `deploy`
+thuộc nhóm `docker`, tức là có quyền tương đương root. Nếu khoá được mở shell, ai
+chiếm được máy Jenkins sẽ chiếm luôn production. Vì vậy VPS giới hạn khoá này
+bằng `restrict,command="/usr/local/bin/goldcast-gate"` trong `authorized_keys`.
+Cổng (`deploy/goldcast-gate.py`) chỉ nhận các lệnh có tên:
+
+| Lệnh | Việc làm |
+|---|---|
+| `receive <RELEASE_ID>` | Nhận tar qua stdin. Chỉ chấp nhận đúng các file của một release. Mọi file trừ `release.env` phải **giống từng byte** file cùng tên tại commit trong `RELEASE_ID`, và commit đó phải nằm trên `main` của GitHub (hỏi API `compare`). Không hỏi được GitHub thì từ chối |
+| `deploy` / `verify` / `rollback <RELEASE_ID>` | Chạy `remote-release.sh` của release đã nhận, sau khi kiểm script không bị sửa từ lúc nhận. Rollback một release chưa từng nhận thì bỏ qua |
+| `backup snapshot` / `fetch <thư mục>` / `confirm <thư mục>` | Chạy script backup của last-good release, hoặc trả về đúng một thư mục `offsite-*` |
+
+Không có shell, `sh -s`, port forward hay lệnh nào khác. Máy Jenkins bị chiếm thì
+cũng chỉ deploy được cấu hình đã có trên `main`. **Rủi ro còn lại:** `release.env`
+là dữ liệu, không có trên GitHub. `release.sh` giới hạn image trong hai repo GHCR
+của dự án, nhưng token GHCR cũng nằm trên máy Jenkins, nên kẻ chiếm máy vẫn có thể
+đẩy một image xấu vào hai repo đó. Việc quản trị (`status`, `recover`, `bootstrap`,
+retention, `create-forward-key.py`) dùng **khoá quản trị riêng** của bạn.
+
+Cài theo thứ tự này để deploy không bị gián đoạn:
+
+```bash
+# 0. Có khoá quản trị riêng và đã vào được bằng nó (không phải khoá Jenkins)
+ssh-keygen -t ed25519 -f ~/.ssh/goldcast_admin -C "admin"
+ssh-copy-id -i ~/.ssh/goldcast_admin.pub deploy@$IP
+ssh -i ~/.ssh/goldcast_admin -o IdentitiesOnly=yes deploy@$IP 'sudo -n true && echo ADMIN_OK'
+
+# 1. Cài cổng (khoá Jenkins chưa bị giới hạn; Jenkinsfile mới đã gọi được cổng)
+scp -i ~/.ssh/goldcast_admin deploy/goldcast-gate.py deploy/cai-cong-ssh.sh ~/.ssh/jenkins_deploy.pub deploy@$IP:/tmp/
+ssh -i ~/.ssh/goldcast_admin deploy@$IP 'sudo bash /tmp/cai-cong-ssh.sh cai'
+
+# 2. Merge thay đổi Jenkinsfile, chờ một lần deploy xanh (G3 đạt) qua cổng.
+
+# 3. Giới hạn khoá Jenkins
+ssh -i ~/.ssh/goldcast_admin deploy@$IP 'sudo bash /tmp/cai-cong-ssh.sh khoa /tmp/jenkins_deploy.pub'
+```
+
+**Kiểm:** `ssh -i ~/.ssh/jenkins_deploy -o IdentitiesOnly=yes deploy@$IP id` phải
+in `goldcast-gate: refused: command not allowed: id`. Lệnh với khoá quản trị vẫn
+chạy bình thường. Muốn gỡ giới hạn thì chạy `cai-cong-ssh.sh mo
+/tmp/jenkins_deploy.pub`; script cũng giữ bản sao `authorized_keys.bak-*`.
+
+`khoa` từ chối chạy nếu trong `authorized_keys` không còn khoá nào **khác** chưa bị
+giới hạn, để bạn không tự khoá mình ra ngoài. Cập nhật cổng thì chạy lại `cai`.
+Test: `scripts/tests/test_gate.py` (GitHub giả lập). `test_jenkins.py` đỏ nếu
+Jenkinsfile gửi lệnh SSH không qua cổng, hoặc tải lên tập file khác tập cổng chấp nhận.
+
 ## 5. Pipeline G1 → build → G2 → Deploy → G3
 
 GitHub Actions chạy G1 trong required check `backend-test`. Jenkins chạy toàn
@@ -455,9 +507,11 @@ bộ luồng; nhánh khác `main` (hoặc PR) dừng sau G2.
   G2, mục 6.6), kiểm feed giá phút bằng nguồn HTTP giả lập (mục 8) và đối chiếu
   `RELEASE_ID` frontend/backend qua `/api/release`. PostgreSQL/Caddy ghim digest
   như production. Container, mạng và dữ liệu tạm được dọn khi kết thúc.
-- **Deploy** (chỉ `main`, không phải PR): Jenkins chuyển `release.env`, Compose,
-  Caddyfile và script release qua SSH vào `/opt/goldcast/releases/<RELEASE_ID>/`
-  rồi chạy `scripts/remote-release.sh deploy`. Không `git pull` mã trên VPS.
+- **Deploy** (chỉ `main`, không phải PR): Jenkins gửi `release.env`, Compose,
+  Caddyfile và các script release/backup qua `goldcast-gate receive`. Cổng đối
+  chiếu chúng với GitHub `main` rồi mới ghi vào `/opt/goldcast/releases/<RELEASE_ID>/`;
+  sau đó `goldcast-gate deploy` chạy `scripts/remote-release.sh deploy` (mục 4.3).
+  Không `git pull` mã trên VPS.
 - **G3:** so image ID container với digest, kiểm readiness backend, HTTPS qua
   Caddy tới các trang có nội dung thật, và `/api/release` phải trả
   `releaseId`/`backendReleaseId` bằng `RELEASE_ID`. Đạt thì ghi nguyên tử
@@ -650,7 +704,10 @@ Image vẫn còn trên GHCR, nên rollback hay khôi phục backup chỉ cần p
 
 `scripts/backup.py` chụp release, `runtime.env` và DB dưới khoá deploy, truyền
 về máy khác, kiểm SHA-256 rồi **phục hồi thử** vào PostgreSQL tạm không mạng.
-Không dừng ứng dụng hay ghi vào DB production.
+Không dừng ứng dụng hay ghi vào DB production. Nó đi qua cổng SSH (mục 4.3):
+`backup snapshot` chạy `backup-remote.sh` **của last-good release** (đã đối chiếu
+GitHub khi nhận), chứ không gửi script từ máy Jenkins sang. Vì vậy backup chỉ chạy
+được sau ít nhất một lần deploy qua cổng.
 
 ```bash
 python3 scripts/backup.py \
@@ -799,7 +856,7 @@ Deploy/G3/backup; khoá treo có luật riêng.
 Trên Mac (bí mật được nhập qua prompt ẩn, không đặt trong dòng lệnh):
 
 ```sh
-python3 monitoring/create-forward-key.py --deploy-key "$HOME/.ssh/jenkins_deploy"
+python3 monitoring/create-forward-key.py --deploy-key "$HOME/.ssh/goldcast_admin"  # khoá quản trị, mục 4.3
 python3 monitoring/configure.py --ssh-key "$HOME/.config/goldcast-monitoring/id_ed25519"
 sh monitoring/check.sh
 ```
@@ -1146,4 +1203,7 @@ khi nối lại Jenkins.
   tác JavaScript.
 - **Lịch giao dịch** chỉ bỏ thứ Bảy/Chủ nhật, chưa có ngày lễ Việt Nam.
 - **Khoá deploy của Jenkins không passphrase** và Jenkins gắn
-  `/var/run/docker.sock` (quyền tương đương quản trị trên máy Jenkins).
+  `/var/run/docker.sock` (quyền tương đương quản trị trên máy Jenkins). Trên VPS,
+  khoá này chỉ chạy được cổng SSH (mục 4.3): không có shell, cấu hình phải khớp
+  GitHub `main`. Còn lại một rủi ro: image do Jenkins đẩy lên GHCR không được ký
+  ngoài máy Jenkins.
