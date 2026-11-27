@@ -62,3 +62,12 @@ inhibit_rules:
   - source_matchers: ['alertname=~"GoldcastBackendMetricsUnavailable|GoldcastBackendNotReady"']
     target_matchers: ['alertname=~"GoldcastMarketMetricsStale|GoldcastMacroDataStale"']
     equal: [site]
+  # Burn-rate alerts restate an incident a symptom alert already reports. While that
+  # symptom fires, only it notifies; once it resolves, a burn alert still firing means
+  # budget was really spent (or errors are intermittent) and then it does notify.
+  - source_matchers: ['alertname="GoldcastWebsiteUnavailable"']
+    target_matchers: ['alertname=~"GoldcastSLOAvailabilityFastBurn|GoldcastSLOAvailabilitySlowBurn"']
+    equal: [site]
+  - source_matchers: ['alertname=~"GoldcastBackendNotReady|GoldcastAPIErrors"']
+    target_matchers: ['alertname=~"GoldcastSLOAPIFastBurn|GoldcastSLOAPISlowBurn"']
+    equal: [site]

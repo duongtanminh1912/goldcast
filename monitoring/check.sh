@@ -7,7 +7,7 @@ COPYFILE_DISABLE=1 tar -cf - monitoring |
   docker run --rm -i --entrypoint /bin/sh "$PROMETHEUS_IMAGE" -ec '
     mkdir /tmp/check; cd /tmp/check; tar -xf -;
     promtool check config --syntax-only monitoring/prometheus/prometheus.yml;
-    promtool check rules monitoring/prometheus/alerts.yml;
+    promtool check rules monitoring/prometheus/alerts.yml monitoring/prometheus/slo.yml;
     cd monitoring/prometheus; promtool test rules rule-tests.json'
 COPYFILE_DISABLE=1 tar -cf - monitoring/alertmanager |
   docker run --rm -i --entrypoint /bin/sh "$ALERTMANAGER_IMAGE" -ec '
@@ -18,6 +18,8 @@ COPYFILE_DISABLE=1 tar -cf - monitoring/alertmanager |
     expect() { want=$1; shift; got=$(route "$@" | tr -d " "); [ "$got" = "$want" ] || { echo "Route for $* is $got, want $want" >&2; exit 1; }; }
     expect deadman alertname=GoldcastWatchdog severity=heartbeat site=goldcast;
     expect telegram alertname=GoldcastWebsiteUnavailable severity=critical site=goldcast;
+    expect telegram alertname=GoldcastSLOAPIFastBurn severity=critical site=goldcast slo=api;
+    expect telegram alertname=GoldcastSLOAvailabilitySlowBurn severity=warning site=goldcast slo=availability;
     expect dashboard-only alertname=GoldcastMarketDataSynthetic severity=info site=goldcast;
     echo "Alert routing OK";
     # Inhibition is only evaluated by a running Alertmanager: start one with the real rules
@@ -30,7 +32,8 @@ COPYFILE_DISABLE=1 tar -cf - monitoring/alertmanager |
     i=0; until amtool $am config show > /dev/null 2>&1; do i=$((i+1)); [ $i -lt 50 ] || { cat /tmp/am.log >&2; exit 1; }; sleep 0.2; done;
     notifying() { wget -qO- "http://127.0.0.1:9093/api/v2/alerts?active=true&silenced=false&inhibited=false&unprocessed=false" |
       grep -o "\"alertname\":\"[A-Za-z]*\"" | cut -d\" -f4 | sort | tr "\n" " "; }
-    for name in GoldcastBackendNotReady GoldcastBackendMetricsUnavailable GoldcastMarketMetricsStale GoldcastMacroDataStale GoldcastWebsiteUnavailable; do
+    for name in GoldcastBackendNotReady GoldcastBackendMetricsUnavailable GoldcastMarketMetricsStale GoldcastMacroDataStale GoldcastWebsiteUnavailable \
+      GoldcastSLOAvailabilityFastBurn GoldcastSLOAvailabilitySlowBurn GoldcastSLOAPIFastBurn GoldcastSLOAPISlowBurn; do
       amtool $am alert add alertname=$name site=goldcast severity=warning series=DFII10; done;
     want="GoldcastBackendNotReady GoldcastWebsiteUnavailable ";
     i=0; while got=$(notifying); [ "$got" != "$want" ]; do
